@@ -5,14 +5,17 @@ import logging
 import os
 import re
 from functools import lru_cache
+from typing import List
 
 import fitz
+import numpy as np
 import tiktoken
 from PIL import Image
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain.embeddings import init_embeddings
 from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_text_splitters import (
     Language,
@@ -20,6 +23,7 @@ from langchain_text_splitters import (
     RecursiveJsonSplitter,
     MarkdownHeaderTextSplitter
 )
+from sklearn.cluster import KMeans
 
 from gemini_utils import GeminiInstance
 from openai_utils import OpenAIInstance
@@ -576,3 +580,211 @@ async def unified_llm_stream(model_instance, messages):
                     }
     except Exception as e:
         logger.error(f"LLM streaming error: {e}")
+
+
+def filter_grade_threshold(
+        docs: List[Document],  # 修正类型提示，兼容 Document
+        high_score_threshold: float = 0.7,
+        possible_search_ratio: float = 0.15
+) -> dict:
+    # 1. 提取分数
+    scores = []
+    valid_docs = []
+    for doc in docs:
+        score = doc.metadata.get('rerank_score', 0.0)
+        if isinstance(score, (int, float)):
+            scores.append(float(score))
+            valid_docs.append(doc)
+
+    if not scores:
+        return {
+            "high_ratio": 0,
+            "threshold": 0.0,
+            "documents": []
+        }
+
+    # 2. 降序排序
+    scores = np.array(scores)
+    order = np.argsort(scores)[::-1]
+    sorted_scores = scores[order]
+    sorted_docs = [valid_docs[i] for i in order]
+    n = len(sorted_scores)
+
+    # 3. 数量过少直接返回
+    if n < 2:
+        return {
+            "high_ratio": 1,
+            "threshold": sorted_scores[0],
+            "documents": sorted_docs
+        }
+
+    # 4. 高分直通车
+    if sorted_scores.min() >= high_score_threshold:
+        return {
+            "high_ratio": 1,
+            "threshold": sorted_scores.min(),
+            "documents": sorted_docs
+        }
+
+    # 5. K-Means聚类
+    kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
+    kmeans.fit(sorted_scores.reshape(-1, 1))
+
+    # 获取标签与中心
+    labels = kmeans.labels_
+    centers_raw = kmeans.cluster_centers_.flatten()
+
+    # 按中心值排序 (Low, High)
+    sorted_idx = np.argsort(centers_raw)
+    sorted_centers = centers_raw[sorted_idx]
+    low_center = sorted_centers[0]
+
+    # 计算高分占比
+    sorted_counts = np.array([np.sum(labels == label) for label in sorted_idx])
+    high_ratio = sorted_counts[1] / n
+    high_score_label = sorted_idx[1]
+
+    # 步骤 A: 先获取该簇的所有分数，不要直接 [-1]，防止列表为空
+    high_cluster_subset = sorted_scores[labels == high_score_label]
+    min_high_score = 0.0
+    if len(high_cluster_subset) == 0:
+        # 防御性逻辑：如果高分簇为空（极罕见），降级为低分中心或全保留
+        kmeans_threshold = low_center
+    else:
+        # 步骤 B: 取高分簇的最小值（因为是降序排列，所以是最后一个）
+        min_high_score = high_cluster_subset[-1]
+        # 步骤 C: 计算阈值
+        kmeans_threshold = min_high_score - (min_high_score - low_center) * possible_search_ratio
+
+    # 步骤 D: 安全兜底 防止传入 possible_search_ratio > 1
+    # 防止 buffer 太大导致阈值低于低分中心，这会导致把噪音全放进来
+    kmeans_threshold = max(kmeans_threshold, low_center)
+
+    filtered_docs = [doc for s, doc in zip(sorted_scores, sorted_docs) if s >= kmeans_threshold]
+
+    # 获取低分区的最大边界值
+    low_score_label = sorted_idx[0]
+    low_cluster_subset = sorted_scores[labels == low_score_label]
+    max_low_score = low_cluster_subset[0] if len(low_cluster_subset) > 0 else 0.0
+
+    return {
+        "high_ratio": high_ratio,
+        "min_high_score": min_high_score,
+        "max_low_score": max_low_score,
+        "threshold": kmeans_threshold,
+        "documents": filtered_docs,
+        "kmeans_centers": sorted_centers.tolist()
+    }
+
+
+def merge_consecutive_chunks(
+        docs: list[Document],
+        contain_score: bool = False
+) -> list[Document]:
+    """合并同一文档的连续切片，去除重叠部分"""
+    if not docs:
+        return []
+
+    # 按documentId分组
+    docs_by_id = {}
+    for doc in docs:
+        # 优先使用 metadata 中的 documentId，如果没有则跳过
+        doc_id = doc.metadata.get('documentId')
+        if doc_id not in docs_by_id:
+            docs_by_id[doc_id] = []
+        docs_by_id[doc_id].append(doc)
+
+    merged_results = []
+
+    # 对每组进行排序和合并
+    for doc_id, group in docs_by_id.items():
+        # 区分有chunkIndex和无chunkIndex的文档
+        group_with_index = []
+        group_without_index = []
+        for doc in group:
+            if 'chunkIndex' in doc.metadata and doc.metadata['chunkIndex'] is not None:
+                group_with_index.append(doc)
+            else:
+                group_without_index.append(doc)
+
+        # 无chunkIndex的直接加入结果
+        merged_results.extend(group_without_index)
+
+        if not group_with_index:
+            continue
+
+        # 按 chunkIndex 排序
+        group_with_index.sort(key=lambda x: x.metadata.get('chunkIndex'))
+
+        current_merged_doc = group_with_index[0]
+        # 初始化 last_chunk_index
+        current_merged_doc.metadata['last_chunk_index'] = current_merged_doc.metadata.get('chunkIndex')
+
+        for i in range(1, len(group_with_index)):
+            next_doc = group_with_index[i]
+
+            last_chunk_idx = current_merged_doc.metadata.get('last_chunk_index')
+            curr_chunk_idx = next_doc.metadata.get('chunkIndex')
+
+            if last_chunk_idx is not None and curr_chunk_idx is not None and curr_chunk_idx == last_chunk_idx + 1:
+                # 连续切片，进行合并
+                text1 = current_merged_doc.page_content
+                text2 = next_doc.page_content
+
+                # 尝试去除重叠
+                # 寻找 text1 的后缀与 text2 的前缀的最长匹配
+                overlap_found = False
+                # 限制最大检测长度，提高性能，通常重叠在 100-200 字符
+                max_overlap_check = min(len(text1), len(text2), 500)
+                min_overlap = 10
+
+                if max_overlap_check >= min_overlap:
+                    # 优化算法：使用 find 替代枚举
+                    # 取 text2 的前缀作为种子（长度为 min_overlap）
+                    seed = text2[:min_overlap]
+
+                    # 在 text1 的末尾区域搜索种子
+                    # 搜索范围从 len(text1) - max_overlap_check 开始
+                    start_search = len(text1) - max_overlap_check
+                    search_region = text1[start_search:]
+
+                    # 在区域内查找种子
+                    pos = search_region.find(seed)
+                    while pos != -1:
+                        # 计算在 text1 中的绝对位置
+                        abs_pos = start_search + pos
+                        # 潜在的重叠部分是 text1[abs_pos:]
+                        # 检查 text2 是否以这段文本开头
+                        potential_overlap = text1[abs_pos:]
+                        if text2.startswith(potential_overlap):
+                            current_merged_doc.page_content = text1 + text2[len(potential_overlap):]
+                            overlap_found = True
+                            break
+                        # 继续查找下一个匹配
+                        pos = search_region.find(seed, pos + 1)
+
+                if not overlap_found:
+                    current_merged_doc.page_content = text1 + text2  # 直接拼接
+
+                # 更新元数据
+                current_merged_doc.metadata['last_chunk_index'] = curr_chunk_idx
+                # 更新分数为两者的最大值
+                if contain_score:
+                    current_merged_doc.metadata['rerank_score'] = max(
+                        current_merged_doc.metadata.get('rerank_score', 0),
+                        next_doc.metadata.get('rerank_score', 0)
+                    )
+
+            else:
+                # 不连续，保存当前，开始新的
+                merged_results.append(current_merged_doc)
+                current_merged_doc = next_doc
+                current_merged_doc.metadata['last_chunk_index'] = current_merged_doc.metadata.get('chunkIndex')
+
+        merged_results.append(current_merged_doc)
+
+    # 重新按 rerank_score 排序
+    if contain_score:
+        merged_results.sort(key=lambda x: x.metadata.get('rerank_score', 0), reverse=True)
+
+    return merged_results
