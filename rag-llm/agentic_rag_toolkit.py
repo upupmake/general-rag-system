@@ -107,7 +107,7 @@ class RetrievalToolkit:
             self,
             file_name: str,
             keywords: List[str],
-            match_type: Literal["AND", "OR"] = "AND",
+            match_type: Literal["AND", "OR"] = "OR",
             top_k: int = 5,
             **kwargs
     ) -> Dict[str, Any]:
@@ -149,7 +149,7 @@ class RetrievalToolkit:
     async def search_by_grep_in_database(
             self,
             keywords: List[str],
-            match_type: Literal["AND", "OR"] = "AND",
+            match_type: Literal["AND", "OR"] = "OR",
             top_k: int = 5,
             file_names: Optional[List[str]] = None,
             **kwargs
@@ -511,7 +511,7 @@ TOOL_DEFINE_PROMPT = """## 可用工具
 **参数**: 
   - file_name: str, 必填，目标文件名
   - keywords: List[str], 必填，关键词列表（如["API", "token"]）
-  - match_type: str, 可选，"AND"或"OR"，默认"AND"
+  - match_type: str, 可选，"AND"或"OR"，默认"OR"
     * "AND": 返回包含所有关键词的chunk
     * "OR": 返回包含任一关键词的chunk
   - top_k: int, 可选，默认5
@@ -536,7 +536,7 @@ TOOL_DEFINE_PROMPT = """## 可用工具
 **功能**: 在全库范围内进行关键词精确匹配（grep风格），跨文件精确搜索
 **参数**: 
   - keywords: List[str], 必填，关键词列表
-  - match_type: str, 可选，"AND"或"OR"，默认"AND"
+  - match_type: str, 可选，"AND"或"OR"，默认"OR"
   - top_k: int, 可选，默认5
   - file_names: List[str], 可选，默认[]（空表示全库）。可限制搜索范围到指定文件
 **核心优势**: 全局精确匹配，适合查找：
