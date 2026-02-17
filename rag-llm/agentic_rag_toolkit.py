@@ -286,6 +286,7 @@ class RetrievalToolkit:
             queries: List[str],
             grade_query: str,
             top_k: int = 10,
+            grade_score_threshold: float = 0.4,
             **kwargs
     ) -> Dict[str, Any]:
         """
@@ -295,6 +296,8 @@ class RetrievalToolkit:
             queries: 多语义查询列表（用于向量检索召回）
             grade_query: 专门用于Rerank评分的查询（通常是解除歧义后的用户原始问题）
             top_k: 最终返回条数（在rerank和动态过滤后）
+            grade_score_threshold: Rerank分数阈值（默认0.4），低于此分数的文档将被过滤
+                                   0.3=弱相关，0.5=一般相关，0.7=强相关，由大模型决定
             **kwargs: 额外参数（容错，忽略大模型可能传递的其他参数）
 
         Returns:
@@ -310,7 +313,8 @@ class RetrievalToolkit:
         if kwargs:
             logger.debug(f"⚠️ 工具5收到额外参数（已忽略）: {kwargs}")
 
-        logger.info(f"🔍 [5.全库语义] queries={queries}, grade_query={grade_query}, top_k={top_k}")
+        logger.info(
+            f"🔍 [5.全库语义] queries={queries}, grade_query={grade_query}, top_k={top_k}, threshold={grade_score_threshold}")
 
         all_docs = []
         seen_pks = set()
@@ -344,7 +348,11 @@ class RetrievalToolkit:
         # Rerank
         try:
             doc_contents = [doc.page_content for doc in all_docs]
-            rerank_result = await rerank(grade_query, doc_contents)
+            rerank_result = await rerank(
+                query=grade_query,
+                documents=doc_contents,
+                grade_score_threshold=grade_score_threshold
+            )
 
             # 根据 rerank 结果重新排序文档，并添加 rerank_score
             ranked_docs = []
@@ -582,17 +590,28 @@ TOOL_DEFINE_PROMPT = """## 可用工具
 **参数**: 
   - queries: List[str], 必填，多个查询语句（用于召回阶段，可以是改写、扩展的查询）
   - grade_query: str, 必填，用于Rerank评分的查询（可使用改写后的原始问题）
+  - grade_score_threshold: float, 可选，默认0.4，Rerank分数阈值（斩杀线）
+    * 0.3: 弱相关（宽松模式，召回更多文档）
+    * 0.4: 有些相关（探索模型，用于前期探索）
+    * 0.5: 一般相关（平衡模式）
+    * 0.7: 强相关（严格模式，只保留高度相关文档）
+    * 低于此分数的文档将被过滤，由你根据问题复杂度和召回情况灵活决定
   - top_k: int, 可选，默认10，最终返回的文档数量
 **执行流程**: 
   1. 并行向量检索所有queries（每个query召回top_k*3个候选）
   2. 合并去重
   3. 使用grade_query调用Rerank API进行精排序
-  4. K-Means动态阈值过滤低相关文档
-  5. 按rerank_score排序返回top_k个
+  4. 应用grade_score_threshold过滤低相关文档（斩杀线）
+  5. K-Means动态阈值过滤低相关文档
+  6. 按rerank_score排序返回top_k个
 **适用场景**: 
   - 首轮检索（推荐作为首轮工具）
   - 多角度语义探索
   - 需要高质量排序结果的场景
+**阈值选择建议**:
+  - 简单问题（如"什么是XXX"）→ 0.3~0.4（宽松）
+  - 中等问题（如"如何实现XXX功能"）→ 0.5（默认）
+  - 复杂问题（如"XXX与YYY的区别和联系"）→ 0.6~0.7（严格）
 
 ### 6. list_filename_by_like
 **功能**: 根据文件名模式匹配列出文件，按文件名排序（仅返回元信息，不包含文档内容）

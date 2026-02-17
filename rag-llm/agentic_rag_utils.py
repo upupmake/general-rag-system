@@ -431,6 +431,32 @@ class AgenticRAGService:
 
                 logger.info(f"构建上下文完成，使用 {len(merged_docs)} 个文档")
 
+                # 构建merged_docs表格
+                merged_docs_table_lines = [
+                    "| 文件名 | 最大索引 | 索引范围 |",
+                    "|----------------------|--------|--------|"
+                ]
+                for doc in merged_docs:
+                    file_name = doc.metadata.get("fileName", "未知")
+                    max_chunk_index = doc.metadata.get("maxChunkIndex", 0)
+                    chunk_index = doc.metadata.get("chunkIndex", 0)
+                    last_chunk_index = doc.metadata.get("last_chunk_index", chunk_index)
+                    index_range = f"{chunk_index}-{last_chunk_index}"
+                    merged_docs_table_lines.append(f"| {file_name} | {max_chunk_index} | {index_range} |")
+                
+                merged_docs_table = "\n".join(merged_docs_table_lines)
+
+                yield {
+                    "type": "process",
+                    "payload": {
+                        "step": "context_construction",
+                        "title": "构建上下文",
+                        "description": f"基于检索结果构建了回答上下文，包含 {len(merged_docs)} 个切片",
+                        "content": f"\n{merged_docs_table}\n",
+                        "status": "completed"
+                    }
+                }
+
             else:
                 yield {
                     "type": "process",
