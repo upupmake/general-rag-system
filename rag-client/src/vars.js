@@ -25,6 +25,9 @@ const kbs = ref({
 })
 const selectedKb = ref(null)
 
+// RAG模式选择：'agentic'（Agentic RAG）或 'fast'（Fast RAG）
+const ragMode = ref('agentic')  // 默认使用 Agentic RAG
+
 // 知识库分组配置
 const kbGroupLabels = {
     private: '👤 我创建的',
@@ -51,4 +54,4 @@ const findKbById = (kbId) => {
     return allKbs.find(kb => kb.id === kbId)
 }
 
-export {models, groupedModels, selectedModel, kbs, selectedKb, kbGroupLabels, loadKbs, findKbById}
+export {models, groupedModels, selectedModel, kbs, selectedKb, ragMode, kbGroupLabels, loadKbs, findKbById}

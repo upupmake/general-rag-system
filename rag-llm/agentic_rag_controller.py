@@ -195,7 +195,6 @@ class RetrievalController:
         conversation_context = {
             "current_question": question,
             "history": self._format_history(history),
-            "purpose": "基于对话历史和当前问题，判断已检索到的信息是否足够回答"
         }
 
         # 2. RAG检索信息（按文件聚合并排序）
@@ -255,8 +254,8 @@ class RetrievalController:
 ### 决策规则
 
 **停止检索 (action="stop")**:
+- 对话上下文、已检索文档和工具调用历史这三类信息能完整回答问题
 - 已达到最大轮次 ({max_rounds})
-- 已检索到足够信息能完整回答问题
 
 **继续检索 (action="continue")**:
 - 文档数量不足，信息量明显不够

@@ -578,7 +578,7 @@ TOOL_DEFINE_PROMPT = """## 可用工具
   - 自动使用chunkIndex==0过滤，每个文件只返回第一个chunk（包含完整元信息）
   - 结果按fileName字母序排序
   - ⚠️ 注意：此工具只返回文件元信息（fileName, documentId, maxChunkIndex）
-  - 如果limit和返回数量一致，表示可能还有更多文件，需调整offset和limit进行分页查询
+  - 如果limit和返回数量一致，表示可能还有更多文件，需同步增加offset和增加limit进行快速分页查询
 **返回格式**:
   - {{"type": "file_list", "total_files": x, "files": [{{"fileName": "...", "documentId": x, "maxChunkIndex": x}}]}}
 **适用场景**: 

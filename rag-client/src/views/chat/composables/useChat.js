@@ -5,7 +5,7 @@ import {
     fetchSessionMessages,
     startChatStream
 } from '@/api/chatApi'
-import {models, selectedModel, selectedKb, findKbById, loadKbs} from '@/vars.js'
+import {models, selectedModel, selectedKb, ragMode, findKbById, loadKbs} from '@/vars.js'
 
 export function useChat(
     sessionId,
@@ -295,6 +295,15 @@ export function useChat(
 
         if (currentModel.value?.metadata?.thinking && thinkingEnabled.value) {
             options.thinking = true
+        }
+
+        // 添加RAG模式选项
+        if (selectedKb.value) {
+            if (ragMode.value === 'agentic') {
+                options.agenticRag = true
+            } else if (ragMode.value === 'fast') {
+                options.agenticRag = false  // Fast RAG 模式
+            }
         }
 
         startChatStream(sessionId.value, selectedModel.value, text, isKbSupported.value ? (selectedKb.value || undefined) : undefined, options, onOpen, onMessage, onError, onClose)
