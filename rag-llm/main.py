@@ -7,19 +7,19 @@ import uvicorn
 
 os.environ["NUMEXPR_MAX_THREADS"] = "2"
 
-os.environ["RABBITMQ_HOST"] = "127.0.0.1"
-# os.environ["RABBITMQ_HOST"] = "192.168.188.6"
+# os.environ["RABBITMQ_HOST"] = "127.0.0.1"
+os.environ["RABBITMQ_HOST"] = "192.168.188.6"
 os.environ["RABBITMQ_PORT"] = "5678"
 os.environ["RABBITMQ_USERNAME"] = "make"
 os.environ["RABBITMQ_PASSWORD"] = "make20260101"
 
-os.environ["MINIO_ENDPOINT"] = "127.0.0.1:9002"
-# os.environ["MINIO_ENDPOINT"] = "192.168.188.6:9002"
+# os.environ["MINIO_ENDPOINT"] = "127.0.0.1:9002"
+os.environ["MINIO_ENDPOINT"] = "192.168.188.6:9002"
 os.environ["MINIO_ACCESS_KEY"] = "make"
 os.environ["MINIO_SECRET_KEY"] = "make20260101"
 
-os.environ["MILVUS_URI"] = "http://127.0.0.1:19530"
-# os.environ["MILVUS_URI"] = "http://192.168.188.6:19530"
+# os.environ["MILVUS_URI"] = "http://127.0.0.1:19530"
+os.environ["MILVUS_URI"] = "http://192.168.188.6:19530"
 os.environ["MILVUS_TOKEN"] = "make:make5211314"
 
 logging.basicConfig(

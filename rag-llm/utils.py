@@ -216,12 +216,12 @@ def markdown_split(
     return text_splitter.split_documents(markdown_splits)
 
 
-def json_split(json_data: dict, min_chunk_size: int = 100, max_chunk_size: int = 1000):
+def json_split(json_data: dict, min_chunk_size: int = 100, max_chunk_size: int = 1536):
     json_splitter = RecursiveJsonSplitter(min_chunk_size=min_chunk_size, max_chunk_size=max_chunk_size)
     return json_splitter.split_json(json_data)
 
 
-def code_split(code_text: str, language: str, chunk_size: int = 3072, chunk_overlap: int = 200):
+def code_split(code_text: str, language: str, chunk_size: int = 1536, chunk_overlap: int = 100):
     language = Language(language)
     code_splitter = RecursiveCharacterTextSplitter.from_language(
         language=language, chunk_size=chunk_size, chunk_overlap=chunk_overlap
@@ -292,7 +292,7 @@ def _extract_text_with_ocr(pdf_path: str, language: str = 'chi_sim+eng'):
         page = doc[page_num]
 
         # 将页面转换为图片（使用较高DPI以提高OCR准确率）
-        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))  # 1.5倍放大
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2倍放大
         img_data = pix.tobytes("png")
         img = Image.open(io.BytesIO(img_data))
 
@@ -308,8 +308,8 @@ def _extract_text_with_ocr(pdf_path: str, language: str = 'chi_sim+eng'):
 
 def pdf_split(
         file_path: str,
-        chunk_size: int = 3072,
-        chunk_overlap: int = 200,
+        chunk_size: int = 1536,
+        chunk_overlap: int = 100,
         text_threshold: int = 20,
         ocr_language: str = 'chi_sim+eng',
 ):
@@ -353,7 +353,6 @@ def pdf_split(
         logger.info(f"文本型PDF，直接提取文本（长度: {len(text)}）")
 
     # 切分文本
-    text = text.replace('\n', ' ')
     return plain_text_split(
         plain_text=text,
         chunk_size=chunk_size,
@@ -698,30 +697,15 @@ def merge_consecutive_chunks(
 
     # 对每组进行排序和合并
     for doc_id, group in docs_by_id.items():
-        # 区分有chunkIndex和无chunkIndex的文档
-        group_with_index = []
-        group_without_index = []
-        for doc in group:
-            if 'chunkIndex' in doc.metadata and doc.metadata['chunkIndex'] is not None:
-                group_with_index.append(doc)
-            else:
-                group_without_index.append(doc)
-
-        # 无chunkIndex的直接加入结果
-        merged_results.extend(group_without_index)
-
-        if not group_with_index:
-            continue
-
         # 按 chunkIndex 排序
-        group_with_index.sort(key=lambda x: x.metadata.get('chunkIndex'))
+        group.sort(key=lambda x: x.metadata.get('chunkIndex'))
 
-        current_merged_doc = group_with_index[0]
+        current_merged_doc = group[0]
         # 初始化 last_chunk_index
         current_merged_doc.metadata['last_chunk_index'] = current_merged_doc.metadata.get('chunkIndex')
 
-        for i in range(1, len(group_with_index)):
-            next_doc = group_with_index[i]
+        for i in range(1, len(group)):
+            next_doc = group[i]
 
             last_chunk_idx = current_merged_doc.metadata.get('last_chunk_index')
             curr_chunk_idx = next_doc.metadata.get('chunkIndex')
