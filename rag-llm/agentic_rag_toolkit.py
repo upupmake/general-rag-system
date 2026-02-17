@@ -499,7 +499,7 @@ TOOL_DEFINE_PROMPT = """## 可用工具
 
 (共6个可调用tool)
 ### 1. search_by_grep_in_file
-**功能**: 在指定文件内进行关键词精确匹配（grep风格）
+**功能**: 在指定文件内进行关键词精确匹配（grep风格），适用于代码级精确搜索
 **参数**: 
   - file_name: str, 必填，目标文件名
   - keywords: List[str], 必填，关键词列表（如["API", "token"]）
@@ -507,16 +507,46 @@ TOOL_DEFINE_PROMPT = """## 可用工具
     * "AND": 返回包含所有关键词的chunk
     * "OR": 返回包含任一关键词的chunk
   - top_k: int, 可选，默认5
-**适用场景**: 在已知文件中查找特定关键词、专有名词、代码片段
+**核心优势**: 精确匹配，无歧义，适合查找：
+  - **方法/函数名**: def calculate_price, function handleSubmit, async getUserData
+  - **类名**: class UserService, interface IDatabase, struct Config
+  - **关键变量**: API_KEY, MAX_RETRIES, connectionString, userId
+  - **关键描述/注释**: "配置文件路径", "初始化数据库连接", "TODO: 优化性能"
+  - **错误代码**: ERROR_404, TIMEOUT_EXCEPTION, StatusCode.BadRequest
+  - **配置项**: timeout: 30, max_connections: 100, "port": 8080
+**适用场景**: 
+  - 在已知文件中查找特定方法实现（如"search_by_grep"）
+  - 查找类定义和变量声明（如"class AgenticRAG"）
+  - 查找带特定注释的代码段（如"核心算法"）
+  - 定位配置参数和常量（如"DATABASE_URL"）
+**典型用法**: 
+  - 问题："工具类在哪个文件？" → keywords=["class", "ToolKit"] 或 ["def", "execute_tool"]
+  - 问题："配置文件端口是多少？" → keywords=["port", "8080"] 或 ["PORT", "listen"]
+  - 问题："数据库连接函数叫什么？" → keywords=["def", "connect", "database"] 或 ["async", "init_db"]
 
 ### 2. search_by_grep_in_database
-**功能**: 在全库范围内进行关键词精确匹配（grep风格）
+**功能**: 在全库范围内进行关键词精确匹配（grep风格），跨文件精确搜索
 **参数**: 
   - keywords: List[str], 必填，关键词列表
   - match_type: str, 可选，"AND"或"OR"，默认"AND"
   - top_k: int, 可选，默认5
   - file_names: List[str], 可选，默认[]（空表示全库）。可限制搜索范围到指定文件
-**适用场景**: 跨文件查找专有名词、API名称、错误代码、特定术语
+**核心优势**: 全局精确匹配，适合查找：
+  - **跨文件的方法调用链**: login() → authenticate() → verifyToken()
+  - **全局类/接口**: 所有实现IRepository的类，所有继承BaseService的类
+  - **统一命名变量**: 所有文件中的userId, apiKey, sessionId
+  - **跨模块注释/描述**: "弃用", "已废弃", "实验性功能", "性能瓶颈"
+  - **错误码/状态码**: 所有使用ERROR_TIMEOUT的位置
+  - **API端点**: "/api/users", "POST /login", "GET /data"
+**适用场景**: 
+  - 跨文件查找专有名词、API名称（如"OpenAI API"）
+  - 查找错误代码、异常类型（如"TimeoutException"）
+  - 定位特定术语、技术栈（如"Redis", "PostgreSQL"）
+  - 查找配置项、环境变量（如"DATABASE_URL", "API_KEY"）
+**典型用法**: 
+  - 问题："哪些文件使用了Redis？" → keywords=["Redis"] 或 ["redis", "cache"]
+  - 问题："所有API端点在哪里？" → keywords=["@app.route", "POST"] 或 ["@router", "endpoint"]
+  - 问题："错误处理在哪些地方？" → keywords=["try", "except", "error"] 或 ["catch", "throw"]
 
 ### 3. search_by_document_and_chunk_range
 **功能**: 按文档ID获取连续chunk范围
@@ -594,7 +624,65 @@ TOOL_SELECT_PROMPT = """## 工具选择策略
 
 ### 后续轮次策略（根据检索情况选择）
 
-#### 1. 补全上下文场景
+#### 1. 代码级精确搜索场景 🎯（优先考虑grep）
+**工具**: `search_by_grep_in_file` / `search_by_grep_in_database`
+
+**grep核心优势**: 
+- ✅ 精确匹配，无歧义
+- ✅ 适合结构化内容（代码、配置、参数）
+- ✅ 速度快，无向量化延迟
+
+**使用时机**（强烈推荐grep的场景）:
+1. **查找方法/函数定义**:
+   - "calculate_price方法在哪？" → keywords=["def calculate_price"] 或 ["function calculatePrice"]
+   - "getUserData实现在哪个文件？" → keywords=["async getUserData", "function"] 或 ["def get_user_data"]
+   
+2. **查找类/接口定义**:
+   - "UserService类在哪？" → keywords=["class UserService"] 或 ["interface IUserService"]
+   - "所有继承BaseModel的类" → keywords=["BaseModel", "class"] 全库grep
+   
+3. **查找关键变量/常量**:
+   - "API_KEY在哪配置？" → keywords=["API_KEY", "="] 或 ["apiKey:", "config"]
+   - "数据库连接字符串" → keywords=["DATABASE_URL", "connection_string"] 或 ["db_uri"]
+   
+4. **查找带特定注释/描述的代码**:
+   - "TODO项在哪里？" → keywords=["TODO:", "fixme"] 或 ["# TODO"]
+   - "标注为核心算法的部分" → keywords=["核心算法", "core algorithm"] 或 ["关键逻辑"]
+   
+5. **查找错误码/异常类型**:
+   - "TimeoutException在哪处理？" → keywords=["TimeoutException", "catch"] 或 ["except TimeoutError"]
+   - "ERROR_404定义在哪？" → keywords=["ERROR_404", "="] 或 ["404", "Not Found"]
+   
+6. **查找配置项/环境变量**:
+   - "端口配置在哪？" → keywords=["port", "8080"] 或 ["PORT", "listen"]
+   - "Redis配置" → keywords=["redis", "host"] 或 ["REDIS_URL"]
+
+7. **查找API端点/路由**:
+   - "登录接口在哪？" → keywords=["/login", "POST"] 或 ["@app.route", "login"]
+   - "所有GET接口" → keywords=["@app.get", "GET"] 全库grep
+
+**使用指南**:
+- **优先in_file**: 如果已知相关文件，先用search_by_grep_in_file（更快更准）
+- **再用in_database**: 不确定位置或需要跨文件查找时用search_by_grep_in_database
+- **match_type="AND"**: 精确查找（如查找"def calculate_price"用["def", "calculate_price"]）
+- **match_type="OR"**: 广泛探索（如查找所有错误处理用["try", "catch", "except", "error"]）
+- **组合策略**: 先grep定位文件/chunk，再用chunk_range获取完整上下文
+
+**典型工作流**:
+```
+问题: "UserService类的login方法实现"
+↓
+第1步: search_by_grep_in_database(keywords=["class UserService"]) 
+       → 找到UserService在user_service.py
+↓
+第2步: search_by_grep_in_file(file_name="user_service.py", keywords=["def login", "async login"])
+       → 找到login方法在chunk 5
+↓
+第3步: search_by_filename_and_chunk_range(file_name="user_service.py", start=4, end=7)
+       → 获取完整方法实现
+```
+
+#### 2. 补全上下文场景
 **工具**: `search_by_document_and_chunk_range` / `search_by_filename_and_chunk_range`
 
 **使用时机**:
@@ -607,19 +695,6 @@ TOOL_SELECT_PROMPT = """## 工具选择策略
 - 按文档ID或文件名灵活选择工具
 - 注意chunk索引从0开始（如maxChunkIndex=29表示有30个chunk，范围0-29）
 
-#### 2. 精确匹配场景
-**工具**: `search_by_grep_in_file` / `search_by_grep_in_database`
-
-**使用时机**:
-- 发现文档中提到专有名词、API名称、错误代码 → 精确查找这些术语
-- 需要在已知文件中查找特定关键词
-- 跨文件查找技术关键词、术语、代码片段
-
-**使用指南**:
-- match_type="AND": 精确查找（必须包含所有关键词）
-- match_type="OR": 广泛探索（包含任一关键词即可）
-- 优先在已知相关文件中搜索（search_by_grep_in_file）
-
 #### 3. 多角度语义场景
 **工具**: `search_by_multi_queries_in_database`
 
@@ -627,6 +702,7 @@ TOOL_SELECT_PROMPT = """## 工具选择策略
 - 首轮结果不理想，需要换角度重新检索
 - 问题有多个方面，需要从不同角度探索
 - 需要高质量语义匹配和Rerank排序
+- 概念性、描述性问题（grep不适用的场景）
 
 #### 4. 文件探索场景
 **工具**: `list_filename_by_like`
