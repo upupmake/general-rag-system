@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage
 
 from agentic_rag_utils import AgenticRAGService
+from rag_gateway import get_rag_gateway
 from rag_utils import rag_service
 from utils import get_official_llm, cut_history, get_token_count, unified_llm_stream
 
@@ -312,8 +313,30 @@ async def chat_stream(
             media_type="text/event-stream"
         )
 
-    # 如果有知识库ID，使用RAG模式
+    # 如果有知识库ID，先使用RAG Gateway判断是否需要检索
+    use_rag = False  # 标记是否使用RAG
     if kb_id and user_id:
+        # 调用RAG Gateway进行判断
+        try:
+            gateway = await get_rag_gateway()
+            decision = await gateway.decide(
+                current_question=current_question,
+                history=history[:-1]  # 不包含当前问题
+            )
+            logger.info(f"RAG Gateway决策: {decision.action} - {decision.reason}")
+            # 根据决策结果设置是否使用RAG
+            if decision.action == "use_rag":
+                use_rag = True
+            else:
+                logger.info(f"跳过RAG检索，直接使用LLM回答。原因: {decision.reason}")
+                use_rag = False
+        except Exception as e:
+            logger.error(f"RAG Gateway判断失败: {e}，默认使用RAG检索")
+            use_rag = True  # 默认使用RAG
+
+    # 根据判断结果选择模式
+    if use_rag and kb_id and user_id:
+        # 使用RAG模式
         # 检查是否使用 Agentic RAG 模式
         use_agentic_rag = options.get('agenticRag', True)  # 默认使用Agentic RAG模式，除非明确设置为False
         max_rounds = options.get('maxRounds', 20)  # Agentic RAG的最大轮次
