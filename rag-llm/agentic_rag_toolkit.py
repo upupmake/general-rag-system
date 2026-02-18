@@ -705,9 +705,9 @@ TOOL_SELECT_PROMPT = """## 工具选择策略
 问题："RAG系统中的Rerank是如何工作的？"
 这类问题关键词不明确，需要语义理解
 → search_by_multi_queries_in_database(
-    queries=["Rerank重排序机制", "文档相关性评分", "检索结果精排"],
-    grade_query="RAG系统中的Rerank是如何工作的",
-    grade_score_threshold=0.5,
+    queries=["Rerank 重排序机制", "文档 相关性评分", "检索结果 精排"],
+    grade_query="RAG系统中的Rerank的工作机制和处理流程",
+    grade_score_threshold=0.4,
     top_k=10
   )
 通过多角度语义检索 + Rerank精排，找到高质量相关文档
