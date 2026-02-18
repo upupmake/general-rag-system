@@ -93,8 +93,14 @@ class RetrievalToolkit:
     ) -> List[Document]:
         """底层向量检索封装"""
         try:
+            # 向量检索
             search_kwargs = {"k": top_k}
             docs = await self.retriever.ainvoke(query, search_kwargs=search_kwargs)
+            # 尝试将query切分为多个keywords进行过滤（如果query中包含空格）
+            keywords = query.split(" ")
+            if len(keywords) > 1:
+                expr_filter = " OR ".join([f'text like "%{self._escape(kw)}%"' for kw in keywords])
+                docs.extend(await self._milvus_filter(filter_expr=expr_filter, limit=top_k))
             return docs
 
         except Exception as e:
@@ -663,11 +669,26 @@ TOOL_SELECT_PROMPT = """## 工具选择策略
 - 发现chunks不连续（如1,5,9）→ 补齐中间部分（如获取2-8）
 - 扩展现有chunk的前后文（如只有chunk 5）→ 获取3-7形成完整段落
 - 从文件列表中获取到documentId/fileName和maxChunkIndex → 按需获取指定chunk范围
+- **语义搜索/关键词搜索检索不到**：当知道目标文档的文件名或documentId，但语义检索和grep都无法命中时，可直接通过chunk范围获取文档局部内容
 
 **使用指南**:
 - 结合已检索文档的maxChunkIndex字段确定有效范围
 - 按文档ID或文件名灵活选择工具
 - 注意chunk索引从0开始（如maxChunkIndex=29表示有30个chunk，范围0-29）
+- **绕过检索失败**：当其他检索工具失效时，可通过已知的文件名或documentId直接获取文档局部内容
+
+**典型场景**:
+```
+场景1: 补全不连续chunk
+已检索到chunk [1, 5, 9]，需要完整上下文
+→ search_by_document_and_chunk_range(document_id=123, start=1, end=9)
+
+场景2: 基于已知信息扩展获取（检索失效时）
+通过list_filename_by_like找到目标文档：README.md (documentId=456, maxChunkIndex=20)
+语义检索和grep都无法命中，但推测文档开头可能有相关信息
+→ search_by_filename_and_chunk_range(file_name="README.md", start=0, end=5)
+   先获取前几个chunk，根据内容决定是否继续扩展
+```
 
 #### 3. 多角度语义场景
 **工具**: `search_by_multi_queries_in_database`
