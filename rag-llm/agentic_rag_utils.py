@@ -5,6 +5,7 @@
 - LangChain仅提供辅助(LLM调用、Embedding、文档处理)
 - 全程可追踪、可调试
 """
+import json
 import logging
 import os
 from typing import List, Dict, Any, Optional
@@ -307,7 +308,7 @@ class AgenticRAGService:
             content_parts.append(f"工具: {decision.tool}")
 
             # 4. 调用参数
-            params_str = ", ".join([f"{k}={v}" for k, v in decision.params.items()])
+            params_str = json.dumps(decision.params, ensure_ascii=False, indent=2)
             content_parts.append(f"参数: {params_str}")
 
             # 5. 执行结果（根据工具类型格式化）
@@ -443,7 +444,7 @@ class AgenticRAGService:
                     last_chunk_index = doc.metadata.get("last_chunk_index", chunk_index)
                     index_range = f"{chunk_index}-{last_chunk_index}"
                     merged_docs_table_lines.append(f"| {file_name} | {max_chunk_index} | {index_range} |")
-                
+
                 merged_docs_table = "\n".join(merged_docs_table_lines)
 
                 yield {

@@ -437,7 +437,6 @@ class RetrievalToolkit:
             {"results": List[Document], "total_hits": int}
         """
         logger.info(f"🔧 执行工具: {tool}, 参数: {params}")
-
         try:
             if tool == "search_by_grep":
                 return await self.search_by_grep(**params)
@@ -526,7 +525,7 @@ TOOL_DEFINE_PROMPT = """## 可用工具
 - 多query语义召回 + rerank精排 + 过滤，返回高质量语义结果。
 
 适用场景:
-- 初期探索，无明确思路时；
+- 初期按照模糊语义搜索；
 - 概念性/描述性问题；
 - 需要多角度探索；
 - grep结果不理想时。
@@ -554,8 +553,8 @@ TOOL_DEFINE_PROMPT = """## 可用工具
 - 直接获取正文内容（此工具做不到）。
 
 参数:
-- pattern: str，必填（SQL LIKE语法，如"%report%"、"docs/%"、"%%"）
-- offset: int，可选，默认0
+- pattern: str，必填（SQL LIKE语法，如"%report%"、"dir/../%"、"%dir/%"）
+- offset: int，可选，默认0，用于分页，多次调用相同pattern时必填，避免重复
 - limit: int，可选，默认30
 
 ====================
@@ -606,7 +605,7 @@ C. 已知 document_id 且需要连续上下文
 D. 文件名不确定，需要先找文件
    -> list_filename_by_like
 
-E. 概念性/描述性问题，或grep效果差
+E. 概念性/描述性问题，语义层面的探索
    -> search_by_multi_queries_in_database
 
 ====================
