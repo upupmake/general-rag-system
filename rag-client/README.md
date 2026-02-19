@@ -1,241 +1,327 @@
-# RAG Client - 前端项目
+# RAG Client - 前端应用
 
-基于 Vue 3 + Vite + Ant Design Vue 构建的现代化 RAG 系统前端界面。
+前端界面模块，基于 Vue 3 + Vite + Ant Design Vue 构建。
 
-## 技术栈
+## 核心技术
 
-- **Vue 3.5+** - 渐进式 JavaScript 框架（Composition API）
-- **Vite 7.x** - 下一代前端构建工具（使用 rolldown-vite）
-- **Ant Design Vue 4.2+** - 企业级 UI 组件库
-- **Ant Design X Vue** - AI 增强组件库
-- **Pinia 3.x** - Vue 官方状态管理库
-- **Vue Router 4.x** - 官方路由管理器
-- **Axios 1.13+** - HTTP 请求库
-- **Markdown-it** - Markdown 渲染引擎
-- **Highlight.js** - 代码语法高亮
-- **MathJax3** - 数学公式渲染
-- **Day.js** - 轻量级时间处理库
-
-## 功能特性
-
-- 📝 **智能对话** - 基于 RAG 的问答交互，支持流式响应
-- 📚 **文档管理** - 支持上传、查看、删除多种格式文档
-- 👥 **工作空间** - 多租户隔离，成员权限管理
-- 🗂️ **知识库** - 灵活的知识库组织和管理
-- 🎨 **Markdown 渲染** - 支持代码高亮、数学公式、任务列表、Emoji
-- 🌓 **主题切换** - 深色/浅色模式
-- 📱 **响应式设计** - 适配桌面和移动端
-- 🔐 **安全认证** - JWT Token 认证，Session 管理
-
-## 快速开始
-
-### 前置要求
-
-- Node.js 18+ 
-- npm 或 pnpm
-
-### 安装依赖
-
-```bash
-npm install
-# 或使用 pnpm（更快）
-pnpm install
-```
-
-### 启动开发服务器
-
-```bash
-npm run dev
-```
-
-访问 http://localhost:5173
-
-### 构建生产版本
-
-```bash
-npm run build
-```
-
-构建产物在 `dist` 目录
-
-### 预览生产构建
-
-```bash
-npm run preview
-```
+- **Vue 3.5.24** - Composition API
+- **Vite 7.2.5** - rolldown-vite 构建工具
+- **Ant Design Vue 4.2.6** + **Ant Design X Vue 1.5.0** - UI 组件库
+- **Pinia 3.0.4** - 状态管理（支持 localStorage 持久化）
+- **Vue Router 4.6.4** - 路由管理（Hash 模式）
+- **Axios 1.13.2** - HTTP 客户端（Bearer Token 拦截器）
+- **@microsoft/fetch-event-source** - SSE 流式响应
+- **markdown-it** - Markdown 渲染引擎
+  - highlight.js - 代码高亮
+  - MathJax3 - 数学公式
+  - markdown-it-task-lists - 任务列表
+  - markdown-it-emoji - Emoji 支持
 
 ## 项目结构
 
 ```
-rag-client/
-├── src/
-│   ├── api/               # API 接口封装
-│   │   ├── request.js     # Axios 实例配置
-│   │   └── ...            # 各模块 API
-│   ├── components/        # 公共组件
-│   │   ├── ChatMessage.vue
-│   │   ├── DocumentList.vue
+src/
+├── api/                    # API 接口封装
+│   ├── request.js          # Axios 实例（Bearer Token拦截器）
+│   ├── chatApi.js          # 对话相关 API
+│   ├── kbApi.js            # 知识库 API
+│   ├── workspaceApi.js     # 工作空间 API
+│   ├── documentApi.js      # 文档管理 API
+│   └── ...
+│
+├── stores/                 # Pinia 状态管理
+│   ├── user.js             # 用户状态（登录信息、Token）
+│   ├── theme.js            # 主题状态（深色/浅色模式）
+│   ├── search.js           # 搜索状态
+│   └── ...
+│
+├── router/                 # 路由配置
+│   └── index.js            # 路由定义（beforeEach 认证守卫）
+│
+├── views/                  # 页面组件
+│   ├── Login.vue           # 登录页面
+│   ├── Dashboard.vue       # 仪表盘
+│   ├── chat/               # 对话相关页面
+│   │   ├── ChatPage.vue    # 对话主页面
 │   │   └── ...
-│   ├── views/             # 页面视图
-│   │   ├── Login.vue
-│   │   ├── Chat.vue
-│   │   ├── Workspace.vue
-│   │   └── ...
-│   ├── layouts/           # 布局组件
-│   │   └── MainLayout.vue
-│   ├── router/            # 路由配置
-│   │   └── index.js
-│   ├── stores/            # Pinia 状态管理
-│   │   ├── user.js
-│   │   ├── workspace.js
-│   │   └── ...
-│   ├── utils/             # 工具函数
-│   │   ├── auth.js        # 认证工具
-│   │   ├── markdown.js    # Markdown 处理
-│   │   └── ...
-│   ├── assets/            # 静态资源
-│   ├── consts.js          # 常量定义
-│   ├── events.js          # 事件总线（mitt）
-│   ├── vars.js            # 全局变量
-│   ├── style.css          # 全局样式
-│   ├── App.vue            # 根组件
-│   └── main.js            # 应用入口
-├── public/                # 公共静态文件
-├── index.html             # HTML 入口
-├── vite.config.js         # Vite 配置
-├── package.json           # 项目依赖
-└── README.md              # 项目文档
+│   ├── kb/                 # 知识库相关页面
+│   ├── workspace/          # 工作空间相关页面
+│   └── ...
+│
+├── components/             # 公共组件
+│   ├── ChatMessage.vue     # 消息组件（支持Markdown渲染）
+│   ├── DocumentList.vue    # 文档列表
+│   └── ...
+│
+├── layouts/                # 布局组件
+│   └── MainLayout.vue      # 主布局（侧边栏+顶栏）
+│
+├── utils/                  # 工具函数
+│   ├── auth.js             # 认证工具（Token管理）
+│   ├── markdown.js         # Markdown 渲染配置
+│   └── ...
+│
+├── consts.js               # 常量定义（API_BASE_URL等）
+├── events.js               # 事件总线（mitt）
+├── vars.js                 # 全局变量
+├── style.css               # 全局样式
+├── App.vue                 # 根组件
+└── main.js                 # 应用入口
 ```
 
-## 环境配置
+## 快速开始
 
-创建 `.env.local` 文件配置后端地址：
-
-```env
-# 后端 API 地址
-VITE_API_BASE_URL=http://localhost:8080
-
-# LLM 服务地址（如需直连）
-VITE_LLM_API_BASE_URL=http://localhost:8888
-
-# 其他配置
-VITE_APP_TITLE=General RAG System
-```
-
-### 环境变量说明
-
-- `VITE_API_BASE_URL` - 后端 API 基础 URL（rag-server）
-- `VITE_LLM_API_BASE_URL` - LLM 服务 URL（可选，通常通过 rag-server 转发）
-- `VITE_APP_TITLE` - 应用标题
-
-## 部署
-
-### 静态部署
-
-将 `dist` 目录部署到 Nginx、Apache 或云存储（OSS/S3）。
-
-#### Nginx 配置示例
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    
-    # Gzip 压缩
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
-    
-    # 前端静态资源
-    location / {
-        root /var/www/rag-client/dist;
-        try_files $uri $uri/ /index.html;
-        
-        # 缓存策略
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-    }
-    
-    # 后端 API 代理
-    location /api/ {
-        proxy_pass http://localhost:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # WebSocket 支持（如有流式响应）
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
-
-### Docker 部署
-
-```dockerfile
-# Dockerfile
-FROM node:18-alpine as builder
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-
-COPY . .
-RUN npm run build
-
-# 生产阶段
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-```
-
-构建和运行：
-
+### 安装依赖
 ```bash
-docker build -t rag-client:1.0.0 .
-docker run -d -p 80:80 rag-client:1.0.0
+npm install
+```
+
+### 启动开发服务器
+```bash
+npm run dev
+```
+默认端口：`5173`，访问 http://localhost:5173
+
+### 构建生产版本
+```bash
+npm run build
+```
+构建产物在 `dist/` 目录
+
+### 预览生产构建
+```bash
+npm run preview
+```
+
+## 核心技术实现
+
+### 1. 状态管理（Pinia）
+
+所有 Store 默认持久化到 localStorage：
+
+**user.js** - 用户认证
+```javascript
+const userStore = useUserStore()
+userStore.token      // JWT Token
+userStore.userInfo   // 用户信息（id, username, email）
+userStore.login()    // 登录
+userStore.logout()   // 登出
+```
+
+**theme.js** - 主题切换
+```javascript
+const themeStore = useThemeStore()
+themeStore.isDark    // 是否深色模式
+themeStore.toggleTheme()
+```
+
+**search.js** - 搜索状态
+```javascript
+const searchStore = useSearchStore()
+searchStore.keyword  // 搜索关键词
+searchStore.results  // 搜索结果
+```
+
+### 2. 路由守卫（Vue Router）
+
+**认证守卫** (`router/index.js`)
+```javascript
+router.beforeEach((to, from, next) => {
+  const userStore = useUserStore()
+  
+  // 公开路由：登录、注册
+  if (to.path === '/login' || to.path === '/register') {
+    return next()
+  }
+  
+  // 检查 Token
+  if (!userStore.token) {
+    return next('/login')
+  }
+  
+  next()
+})
+```
+
+**路由模式**：Hash 模式（避免后端配置 history fallback）
+
+### 3. API 通信
+
+**Axios 实例配置** (`api/request.js`)
+```javascript
+const request = axios.create({
+  baseURL: API_BASE_URL,  // https://www.forwardforever.top:5616/api
+  timeout: 30000
+})
+
+// 请求拦截器：自动添加 Bearer Token
+request.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// 响应拦截器：401 自动跳转登录
+request.interceptors.response.use(
+  response => response.data,
+  error => {
+    if (error.response?.status === 401) {
+      userStore.logout()
+      router.push('/login')
+    }
+    return Promise.reject(error)
+  }
+)
+```
+
+**SSE 流式响应** (`@microsoft/fetch-event-source`)
+```javascript
+import { fetchEventSource } from '@microsoft/fetch-event-source'
+
+fetchEventSource('/chat/stream', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ query: '...' }),
+  onmessage(event) {
+    const data = JSON.parse(event.data)
+    // 处理流式消息
+  },
+  onerror(err) {
+    // 自动重连
+  }
+})
+```
+
+### 4. Markdown 渲染引擎
+
+**配置** (`utils/markdown.js`)
+```javascript
+const md = markdownIt({
+  html: true,           // 允许 HTML
+  linkify: true,        // 自动转链接
+  typographer: true,    // 智能排版
+  highlight: (str, lang) => {
+    if (lang && hljs.getLanguage(lang)) {
+      return hljs.highlight(str, { language: lang }).value
+    }
+    return ''
+  }
+})
+  .use(markdownItTaskLists)  // [ ] [x] 任务列表
+  .use(markdownItEmoji)      // :smile: Emoji
+  .use(mathjaxPlugin)        // $...$ 数学公式
+```
+
+**使用示例**
+```vue
+<template>
+  <div v-html="renderedContent" class="markdown-body"></div>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import { renderMarkdown } from '@/utils/markdown'
+
+const props = defineProps({
+  content: String
+})
+
+const renderedContent = computed(() => renderMarkdown(props.content))
+</script>
+```
+
+### 5. API 模块化封装
+
+**示例：chatApi.js**
+```javascript
+import request from './request'
+
+export default {
+  // 流式对话（SSE）
+  streamChat(sessionId, query, kbIds) {
+    return fetchEventSource(`${API_BASE_URL}/chat/stream`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ sessionId, query, kbIds })
+    })
+  },
+  
+  // Agentic RAG 对话
+  agenticChat(sessionId, query, kbIds) {
+    return request.post('/chat/agentic', { sessionId, query, kbIds })
+  },
+  
+  // 获取会话列表
+  getSessions(workspaceId) {
+    return request.get('/chat/sessions', { params: { workspaceId } })
+  }
+}
 ```
 
 ## 开发指南
 
-### 代码规范
+**代码规范**
+- Composition API：`<script setup>` 语法
+- 组件命名：PascalCase（`ChatMessage.vue`）
+- 事件命名：kebab-case（`@message-sent`）
+- Props 类型检查：使用 `defineProps` 定义类型
 
-- 使用 ESLint 进行代码检查
-- 遵循 Vue 3 Composition API 风格指南
-- 组件命名使用 PascalCase
-- 文件命名使用 kebab-case
+**调试技巧**
+- Vue DevTools：查看组件树、Pinia 状态
+- Network 面板：查看 API 请求（EventStream 类型）
+- 热重载失效：删除 `node_modules/.vite` 缓存
 
-### 调试技巧
+**常用命令**
+```bash
+rm -rf node_modules/.vite           # 清理缓存
+npm run build -- --report           # 依赖分析
+rm -rf node_modules && npm install  # 重新安装
+```
 
-1. **Vue DevTools** - 安装 Vue 浏览器扩展
-2. **网络请求** - 使用浏览器开发者工具 Network 面板
-3. **状态管理** - Pinia DevTools 查看状态变化
-4. **日志输出** - 控制台查看 `console.log` 输出
+## 配置说明
 
-### 常见问题
+**API 地址配置** (`consts.js`)
+```javascript
+export const API_BASE_URL = 'https://www.forwardforever.top:5616/api'
+```
 
-**Q: Vite 启动失败？**
-A: 检查 Node.js 版本是否 >= 18，清除 node_modules 后重新安装。
+**Vite 配置** (`vite.config.js`)
+```javascript
+export default defineConfig({
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': { target: 'http://localhost:8080', changeOrigin: true }
+    }
+  }
+})
+```
 
-**Q: API 请求跨域？**
-A: 在 `vite.config.js` 中配置代理或在后端启用 CORS。
+## 注意事项
 
-**Q: Markdown 渲染异常？**
-A: 检查 markdown-it 及其插件版本是否兼容。
+⚠️ **关键约束**
+1. Token 存储：localStorage，注意 XSS 风险
+2. 路由模式：Hash 模式（带 `#/`），避免后端配置
+3. API Base URL：硬编码在 `consts.js`，部署时修改
+4. SSE 兼容性：需现代浏览器（不支持 IE）
+5. Token 有效期：24 小时，过期需重新登录
 
-## 相关文档
+## 常见问题
 
-- [Vue 3 官方文档](https://vuejs.org/)
-- [Vite 官方文档](https://vitejs.dev/)
-- [Ant Design Vue 文档](https://antdv.com/)
-- [Pinia 官方文档](https://pinia.vuejs.org/)
+**Q: 开发服务器启动失败？**  
+A: 检查 Node.js 版本（需 18+），删除 `node_modules` 重新安装
 
-## 返回主文档
+**Q: API 请求 401 错误？**  
+A: Token 过期，拦截器会自动跳转登录页
 
-查看完整系统文档：[../README.md](../README.md)
+**Q: 如何切换后端地址？**  
+A: 修改 `src/consts.js` 中的 `API_BASE_URL`
+
+---
+
+**返回主文档**：[../README.md](../README.md)
