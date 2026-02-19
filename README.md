@@ -12,7 +12,7 @@
 
 支持多用户、多工作空间、智能代理检索、文档向量化等功能
 
-[功能特性](#-功能特性) • [快速开始](#-快速开始) • [系统架构](#-系统架构) • [配置指南](#-配置指南) • [部署文档](#-部署)
+[功能特性](#-功能特性) • [快速开始](#-快速开始) • [系统架构](#-系统架构) • [配置指南](#-配置指南) • [Agentic RAG](#-agentic-rag-智能代理检索)
 
 </div>
 
@@ -406,101 +406,6 @@ openssl rand -base64 32
 openssl rand -base64 16
 ```
 
-## 🐳 部署
-
-### 本地向量化服务部署
-
-`embedding_rerank` 模块提供了本地向量化和重排序能力，适合对数据隐私有高要求或希望降低API调用成本的场景。
-
-#### 部署架构
-
-```
-┌─────────────────────────────────────────┐
-│  General RAG System                     │
-├─────────────────────────────────────────┤
-│                                         │
-│  rag-llm (8888)                        │
-│    │                                    │
-│    ├──► External LLM APIs              │
-│    │    (OpenAI, DeepSeek, Qwen...)   │
-│    │                                    │
-│    └──► Local Services (Optional)      │
-│         ├─► Embedding (8890)           │
-│         │   Qwen3-Embedding-0.6B       │
-│         └─► Rerank (8891)              │
-│             Qwen3-Reranker-0.6B        │
-└─────────────────────────────────────────┘
-```
-
-#### 快速部署
-
-1. **确保GPU环境**
-
-```bash
-# 检查NVIDIA GPU
-nvidia-smi
-
-# 确认CUDA版本 (需要11.8+)
-nvcc --version
-```
-
-2. **安装依赖**
-
-```bash
-cd embedding_rerank
-
-# 安装核心依赖
-pip install vllm>=0.8.5
-pip install fastapi uvicorn[standard]
-pip install pydantic pydantic-settings
-```
-
-3. **启动服务**
-
-```bash
-# 方式1：分别启动（推荐）
-python embedding_start.py    # Terminal 1
-python rerank_start.py        # Terminal 2
-
-# 方式2：后台运行
-nohup python embedding_start.py > embedding.log 2>&1 &
-nohup python rerank_start.py > rerank.log 2>&1 &
-```
-
-4. **验证服务**
-
-```bash
-# 测试 Embedding 服务
-curl http://localhost:8890/health
-
-# 测试 Rerank 服务
-curl http://localhost:8891/health
-```
-
-#### 配置说明
-
-服务支持环境变量和配置文件两种方式：
-
-```bash
-# Embedding 服务配置
-export EMBEDDING_MODEL_NAME="Qwen/Qwen3-Embedding-0.6B"
-export EMBEDDING_PORT=8890
-export EMBEDDING_GPU_MEMORY_UTILIZATION=0.4
-export EMBEDDING_MAX_MODEL_LEN=3072
-
-# Rerank 服务配置
-export RERANK_MODEL_NAME="Qwen/Qwen3-Reranker-0.6B"
-export RERANK_PORT=8891
-export RERANK_GPU_MEMORY_UTILIZATION=0.4
-export RERANK_MAX_MODEL_LEN=3072
-```
-
-详细文档：
-- 📖 [Embedding服务完整指南](./embedding_rerank/EmbeddingREADME.md)
-- 📖 [Rerank服务完整指南](./embedding_rerank/RerankREADME.md)
-- 🚀 [快速开始](./embedding_rerank/EmbeddingQUICKSTART.md)
-- 📡 [API文档](./embedding_rerank/EmbeddingAPI.md)
-
 ## 🧠 Agentic RAG 智能代理检索
 
 ### 什么是 Agentic RAG？
@@ -633,74 +538,6 @@ search_by_filename_and_chunk_range(file_name="config.yaml", start=0, end=5)
 - `max_rounds`: 最大检索轮次（默认5）
 - `grade_score_threshold`: Rerank分数阈值（默认0.4）
 - `top_k`: 每轮检索返回数量（默认10）
-
-
-### Docker Compose 一键部署
-
-基础设施服务Docker部署配置：
-
-```yaml
-version: '3.8'
-services:
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: your_password
-      MYSQL_DATABASE: general_rag
-    volumes:
-      - mysql_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
-
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass your_password
-    ports:
-      - "6379:6379"
-
-  milvus:
-    image: milvusdb/milvus:v2.3.0
-    environment:
-      ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
-    ports:
-      - "19530:19530"
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: your_password
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: your_password
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-
-volumes:
-  mysql_data:
-```
-
-启动命令：
-```bash
-docker-compose up -d
-```
-
-### 生产部署建议
-
-1. **反向代理**：使用 Nginx 作为前端服务器和 API 网关
-2. **负载均衡**：后端服务多实例部署
-3. **数据备份**：定期备份 MySQL 和 Milvus 数据
-4. **监控告警**：接入 Prometheus + Grafana
-5. **日志收集**：ELK Stack 或云服务日志平台
 
 ## 📚 文档链接
 
