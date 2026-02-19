@@ -22,52 +22,78 @@
 ```
 src/
 ├── api/                    # API 接口封装
-│   ├── request.js          # Axios 实例（Bearer Token拦截器）
+│   ├── request.js          # Axios 实例（Bearer Token 拦截器）
 │   ├── chatApi.js          # 对话相关 API
 │   ├── kbApi.js            # 知识库 API
 │   ├── workspaceApi.js     # 工作空间 API
 │   ├── documentApi.js      # 文档管理 API
-│   └── ...
+│   ├── modelApi.js         # 模型管理 API
+│   ├── auditApi.js         # 审计日志 API
+│   └── dashboardApi.js     # 仪表盘 API
 │
 ├── stores/                 # Pinia 状态管理
 │   ├── user.js             # 用户状态（登录信息、Token）
 │   ├── theme.js            # 主题状态（深色/浅色模式）
 │   ├── search.js           # 搜索状态
-│   └── ...
+│   ├── workspace.js        # 工作空间状态
+│   └── kb.js               # 知识库状态
 │
 ├── router/                 # 路由配置
 │   └── index.js            # 路由定义（beforeEach 认证守卫）
 │
-├── views/                  # 页面组件
+├── views/                  # 页面组件（详见下方页面列表）
 │   ├── Login.vue           # 登录页面
+│   ├── Register.vue        # 注册页面
 │   ├── Dashboard.vue       # 仪表盘
+│   ├── SearchSessions.vue  # 搜索会话页面
 │   ├── chat/               # 对话相关页面
-│   │   ├── ChatPage.vue    # 对话主页面
-│   │   └── ...
+│   │   ├── NewChat.vue     # 新建对话
+│   │   └── ChatSession.vue # 对话会话页面
 │   ├── kb/                 # 知识库相关页面
-│   ├── workspace/          # 工作空间相关页面
-│   └── ...
+│   │   ├── KnowledgeBases.vue   # 知识库列表
+│   │   └── KnowledgeDetails.vue # 知识库详情
+│   └── workspace/          # 工作空间相关页面
+│       ├── WorkspaceManagement.vue  # 工作空间管理
+│       └── WorkspaceCard.vue        # 工作空间卡片组件
 │
 ├── components/             # 公共组件
-│   ├── ChatMessage.vue     # 消息组件（支持Markdown渲染）
+│   ├── ChatMessage.vue     # 消息组件（支持 Markdown 渲染）
 │   ├── DocumentList.vue    # 文档列表
+│   ├── SessionList.vue     # 会话列表
+│   ├── KbSelector.vue      # 知识库选择器
 │   └── ...
 │
 ├── layouts/                # 布局组件
-│   └── MainLayout.vue      # 主布局（侧边栏+顶栏）
+│   └── MainLayout.vue      # 主布局（侧边栏+顶栏+内容区）
 │
 ├── utils/                  # 工具函数
-│   ├── auth.js             # 认证工具（Token管理）
+│   ├── auth.js             # 认证工具（Token 管理）
 │   ├── markdown.js         # Markdown 渲染配置
-│   └── ...
+│   └── format.js           # 格式化工具（时间、文件大小等）
 │
-├── consts.js               # 常量定义（API_BASE_URL等）
+├── consts.js               # 常量定义（API_BASE_URL 等）
 ├── events.js               # 事件总线（mitt）
 ├── vars.js                 # 全局变量
 ├── style.css               # 全局样式
 ├── App.vue                 # 根组件
 └── main.js                 # 应用入口
 ```
+
+## 页面路由
+
+| 路由路径 | 页面组件 | 功能说明 |
+|---------|---------|---------|
+| `/login` | Login.vue | 用户登录（公开） |
+| `/register` | Register.vue | 用户注册（公开） |
+| `/dashboard` | Dashboard.vue | 系统仪表盘（工作空间、知识库、会话统计） |
+| `/kb` | KnowledgeBases.vue | 知识库列表（创建、编辑、删除） |
+| `/kb/:kbId` | KnowledgeDetails.vue | 知识库详情（文档管理、配置） |
+| `/chat/new` | NewChat.vue | 新建对话（选择知识库、模型） |
+| `/chat/:sessionId` | ChatSession.vue | 对话会话（流式/Agentic RAG） |
+| `/search` | SearchSessions.vue | 搜索会话历史 |
+| `/workspaces` | WorkspaceManagement.vue | 工作空间管理（成员、权限） |
+
+**路由守卫**：所有路由（除 `/login`, `/register`）需认证，未登录自动跳转登录页。
 
 ## 快速开始
 
@@ -305,11 +331,12 @@ export default defineConfig({
 ## 注意事项
 
 ⚠️ **关键约束**
-1. Token 存储：localStorage，注意 XSS 风险
-2. 路由模式：Hash 模式（带 `#/`），避免后端配置
-3. API Base URL：硬编码在 `consts.js`，部署时修改
-4. SSE 兼容性：需现代浏览器（不支持 IE）
-5. Token 有效期：24 小时，过期需重新登录
+1. **Token 存储**：使用 localStorage，注意 XSS 风险
+2. **路由模式**：History 模式（生产环境需后端配置 history fallback）
+3. **API Base URL**：硬编码在 `consts.js`（`https://www.forwardforever.top:5616/api`）
+4. **SSE 兼容性**：需现代浏览器（Chrome/Firefox/Safari/Edge），不支持 IE
+5. **Token 有效期**：24 小时，过期需重新登录（无自动刷新）
+6. **文件上传**：使用 FormData，后端限制 50MB
 
 ## 常见问题
 

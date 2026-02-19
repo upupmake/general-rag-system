@@ -19,24 +19,155 @@
 
 ```
 com.rag.ragserver/
-├── controller/        # 9 个 REST 控制器（User, Workspace, Kb, Chat等）
-├── service/           # 业务逻辑（接口 + impl/）
-├── mapper/            # MyBatis 接口（15 个 Mapper）
-├── domain/            # 实体类 + VO 包
-├── dto/               # 请求/响应 DTO
-├── configuration/     # Spring 配置类
-├── interceptor/       # JWT 拦截器（excludes /users/*）
-├── rabbit/            # RabbitMQ 消费者
-├── exception/         # 全局异常处理
-├── aspect/            # AOP 切面（审计日志）
-└── utils/             # 工具类
+├── controller/                        # REST 控制器层（9 个）
+│   ├── UserController.java            # 用户管理（登录、注册、信息）
+│   ├── WorkspaceController.java       # 工作空间管理
+│   ├── KbController.java              # 知识库管理
+│   ├── ChatController.java            # 对话管理（流式/Agentic RAG）
+│   ├── QuerySessionController.java    # 会话查询
+│   ├── DashboardController.java       # 仪表盘统计
+│   ├── ModelsController.java          # 模型管理
+│   ├── AuditLogsController.java       # 审计日志查询
+│   └── NotificationsController.java   # 通知管理
+│
+├── service/                           # 业务逻辑层
+│   ├── impl/                          # 实现类
+│   ├── UserService.java
+│   ├── WorkspaceService.java
+│   ├── KbService.java
+│   ├── DocumentService.java
+│   ├── ChatService.java
+│   └── ...
+│
+├── mapper/                            # MyBatis 数据访问层（15 个）
+│   ├── UserMapper.java
+│   ├── WorkspaceMapper.java
+│   ├── KbMapper.java
+│   ├── DocumentMapper.java
+│   ├── QuerySessionMapper.java
+│   ├── ModelMapper.java
+│   ├── AuditLogMapper.java
+│   └── ...
+│
+├── domain/                            # 实体类
+│   ├── User.java
+│   ├── Workspace.java
+│   ├── Knowledgebase.java
+│   ├── Document.java
+│   ├── QuerySession.java
+│   ├── vo/                            # VO（视图对象）
+│   └── ...
+│
+├── dto/                               # 数据传输对象
+│   ├── LoginDTO.java
+│   ├── CreateWorkspaceDTO.java
+│   ├── CreateKbDTO.java
+│   ├── ChatRequestDTO.java
+│   └── ...
+│
+├── configuration/                     # Spring 配置类
+│   ├── CorsConfig.java                # CORS 跨域配置
+│   ├── JwtConfig.java                 # JWT 配置
+│   ├── MyBatisPlusConfig.java         # MyBatis Plus 配置
+│   ├── MilvusConfig.java              # Milvus 客户端配置
+│   ├── MinioConfig.java               # MinIO 客户端配置
+│   ├── RabbitConfig.java              # RabbitMQ 配置
+│   └── RedisConfig.java               # Redis 配置
+│
+├── interceptor/                       # 拦截器
+│   └── JwtInterceptor.java            # JWT Token 验证（excludes /users/*）
+│
+├── aspect/                            # AOP 切面
+│   └── AuditLogAspect.java            # 审计日志切面（@AuditLog）
+│
+├── exception/                         # 异常处理
+│   ├── GlobalExceptionHandler.java    # 全局异常处理器
+│   ├── UnauthorizedException.java
+│   └── BusinessException.java
+│
+├── rabbit/                            # RabbitMQ 消费者
+│   ├── SessionNameConsumer.java       # 会话名称生成消费者
+│   └── DocumentEmbeddingConsumer.java # 文档向量化消费者
+│
+├── assembler/                         # 对象转换器（Entity <-> VO/DTO）
+├── common/                            # 公共类（Result、Constants 等）
+└── utils/                             # 工具类（JWT、加密、文件处理等）
 
 src/main/resources/
-├── application.yml                 # 主配置（profile, port 8080, /api context）
-├── application-dev.yml             # 开发环境配置
-├── application-prod.yml            # 生产环境配置
-└── com/rag/ragserver/mapper/       # MyBatis XML 映射文件（⚠️ 关键位置）
+├── application.yml                    # 主配置（profile, port 8080, /api context）
+├── application-dev.yml                # 开发环境配置
+├── application-prod.yml               # 生产环境配置
+└── com/rag/ragserver/mapper/          # MyBatis XML 映射文件（⚠️ 关键位置）
+    ├── UserMapper.xml
+    ├── WorkspaceMapper.xml
+    ├── KbMapper.xml
+    ├── DocumentMapper.xml
+    └── ...（15 个 XML 文件）
 ```
+
+## API 路由
+
+### 用户管理 (`/api/users`)
+| 方法 | 路径 | 功能 | 认证 |
+|------|-----|------|------|
+| POST | `/users/login` | 用户登录 | 否 |
+| POST | `/users/register` | 用户注册 | 否 |
+| GET | `/users/me` | 获取当前用户信息 | 是 |
+| PUT | `/users/me` | 更新用户信息 | 是 |
+| PUT | `/users/password` | 修改密码 | 是 |
+
+### 工作空间管理 (`/api/workspaces`)
+| 方法 | 路径 | 功能 | 认证 |
+|------|-----|------|------|
+| GET | `/workspaces` | 工作空间列表 | 是 |
+| POST | `/workspaces` | 创建工作空间 | 是 |
+| GET | `/workspaces/{id}` | 工作空间详情 | 是 |
+| PUT | `/workspaces/{id}` | 更新工作空间 | 是 |
+| DELETE | `/workspaces/{id}` | 删除工作空间 | 是 |
+| GET | `/workspaces/{id}/members` | 成员列表 | 是 |
+| POST | `/workspaces/{id}/members` | 添加成员 | 是 |
+| DELETE | `/workspaces/{id}/members/{userId}` | 移除成员 | 是 |
+
+### 知识库管理 (`/api/knowledgebases`)
+| 方法 | 路径 | 功能 | 认证 |
+|------|-----|------|------|
+| GET | `/knowledgebases` | 知识库列表 | 是 |
+| POST | `/knowledgebases` | 创建知识库 | 是 |
+| GET | `/knowledgebases/{id}` | 知识库详情 | 是 |
+| PUT | `/knowledgebases/{id}` | 更新知识库 | 是 |
+| DELETE | `/knowledgebases/{id}` | 删除知识库 | 是 |
+| GET | `/knowledgebases/{id}/documents` | 文档列表 | 是 |
+| POST | `/knowledgebases/{id}/documents` | 上传文档 | 是 |
+| DELETE | `/knowledgebases/{kbId}/documents/{docId}` | 删除文档 | 是 |
+
+### 对话管理 (`/api/chat`)
+| 方法 | 路径 | 功能 | 认证 |
+|------|-----|------|------|
+| POST | `/chat/stream` | 流式对话（SSE） | 是 |
+| POST | `/chat/agentic` | Agentic RAG 对话 | 是 |
+| GET | `/chat/sessions` | 会话列表 | 是 |
+| GET | `/chat/sessions/{id}` | 会话详情 | 是 |
+| DELETE | `/chat/sessions/{id}` | 删除会话 | 是 |
+| GET | `/chat/sessions/{id}/messages` | 消息历史 | 是 |
+
+### 仪表盘统计 (`/api/dashboard`)
+| 方法 | 路径 | 功能 | 认证 |
+|------|-----|------|------|
+| GET | `/dashboard/stats` | 系统统计（工作空间、知识库、会话数） | 是 |
+| GET | `/dashboard/recent-sessions` | 最近会话 | 是 |
+
+### 模型管理 (`/api/models`)
+| 方法 | 路径 | 功能 | 认证 |
+|------|-----|------|------|
+| GET | `/models` | 可用模型列表 | 是 |
+| GET | `/models/permissions` | 用户模型权限 | 是 |
+
+### 审计日志 (`/api/audit-logs`)
+| 方法 | 路径 | 功能 | 认证 |
+|------|-----|------|------|
+| GET | `/audit-logs` | 审计日志查询（分页） | 是 |
+
+**认证方式**：所有需要认证的接口，请求头携带 `Authorization: Bearer <token>`
 
 ## 快速开始
 
@@ -200,8 +331,10 @@ public void handleMessage(SessionNameMessage message) {
    - 命名空间必须与接口全限定名一致
 3. **JWT Secret**：最少 32 字符，使用环境变量或强密钥
 4. **Context Path**：所有接口前缀为 `/api`（配置在 `application.yml`）
-5. **CORS**：已配置全局 CORS（允许所有来源）
-6. **软删除**：实体使用 `is_deleted` 标记，不使用硬删除
+5. **认证排除**：`/users/login` 和 `/users/register` 不需要 Token
+6. **CORS**：已配置全局 CORS（允许所有来源）
+7. **软删除**：实体使用 `is_deleted` 标记，不使用硬删除
+8. **文件上传大小**：默认限制 50MB（`spring.servlet.multipart.max-file-size`）
 
 ## 常见问题
 
