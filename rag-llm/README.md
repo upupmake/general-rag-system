@@ -1,31 +1,41 @@
-# RAG LLM Service - AI 服务
+# RAG LLM Service - AI 服务模块
 
-基于 FastAPI + LangChain + LangGraph 的大语言模型服务，提供文档解析、向量化、RAG问答和流式响应等功能。
+LLM 服务层，负责文档解析、向量化、智能检索和问答生成。基于 FastAPI + LangChain + LangGraph 实现。
+
+## 核心模块
+
+### Agentic RAG 智能代理检索
+- `agentic_rag_controller.py` - LangGraph 状态机控制器
+- `agentic_rag_toolkit.py` - 5种检索工具实现
+- `agentic_rag_utils.py` - Agentic RAG 核心服务
+
+### 文档处理
+- `rag_utils.py` - 文档解析、分块、向量化
+- `minio_utils.py` - 对象存储操作
+
+### 数据库与检索
+- `milvus_utils.py` - 向量数据库操作
+- 支持语义检索、关键词过滤、Rerank重排序
+
+### LLM 集成
+- `openai_utils.py` - OpenAI API 封装
+- `gemini_utils.py` - Gemini API 封装
+- `utils.py` - 通用LLM工具
+
+### 异步任务
+- `mq/` - RabbitMQ 消息队列处理
+  - 文档向量化任务
+  - 会话名称生成任务
 
 ## 技术栈
 
-- **Python 3.8+** - 编程语言
-- **FastAPI** - 现代化异步 Web 框架
-- **LangChain** - LLM 应用开发框架
-- **LangGraph** - 工作流编排引擎
-- **Milvus** - 向量数据库客户端
-- **MinIO** - 对象存储客户端
-- **RabbitMQ (pika)** - 消息队列
-- **PyMuPDF (fitz)** - PDF 文档解析
-- **pdfplumber** - PDF 表格提取
-- **aiohttp** - 异步 HTTP 客户端
+- **FastAPI** - 异步 Web 框架
+- **LangChain + LangGraph** - LLM 应用框架和工作流编排
+- **Pydantic** - 数据验证和结构化输出
+- **aio_pika** - 异步 RabbitMQ 客户端
+- **miniopy_async** - 异步 MinIO 客户端
+- **PyMuPDF + pdfplumber** - PDF 解析
 - **Uvicorn** - ASGI 服务器
-
-## 功能特性
-
-- 📄 **多格式文档解析** - 支持 PDF、TXT、Markdown 等格式
-- 🔤 **文本向量化** - 集成多种 Embedding 模型（OpenAI、本地模型等）
-- 🔍 **向量相似度检索** - 基于 Milvus 的高效检索
-- 🤖 **RAG 问答生成** - 结合检索和生成的智能问答
-- 📨 **异步任务处理** - 通过 RabbitMQ 处理文档向量化任务
-- 🌊 **流式响应** - Server-Sent Events (SSE) 实时输出
-- 🔗 **多 LLM 支持** - OpenAI、DeepSeek、通义千问、Gemini 等
-- 📊 **文档重排序** - 提升检索质量
 
 ## 快速开始
 
@@ -229,16 +239,20 @@ rag-llm/
 ├── requirements.txt                 # Python 依赖
 ├── model_config.json                # 模型配置（需创建，已在 .gitignore）
 ├── model_config.json.example        # 配置模板
-├── run.log                          # 运行日志
+├── dependencies.py                  # FastAPI 生命周期管理
+│
+├── agentic_rag_controller.py        # Agentic RAG 控制器（LangGraph状态机）
+├── agentic_rag_toolkit.py           # Agentic RAG 工具集（5种检索工具）
+├── agentic_rag_utils.py             # Agentic RAG 核心服务
 │
 ├── services/                        # 业务服务
-│   ├── chat/                        # 聊天服务模块
-│   │   └── chat_service.py          # 聊天路由和逻辑
-│   └── __pycache__/
+│   └── chat/                        # 聊天服务模块
+│       └── chat_service.py          # 聊天路由和逻辑
 │
 ├── mq/                              # 消息队列
-│   ├── consumer.py                  # RabbitMQ 消费者
-│   └── producer.py                  # RabbitMQ 生产者
+│   ├── connection.py                # RabbitMQ 连接管理
+│   ├── document_embedding.py        # 文档向量化消费者
+│   └── session_name.py              # 会话名称生成消费者
 │
 ├── rag_utils.py                     # RAG 工具函数
 │   ├── 文档解析（PDF、TXT）
@@ -246,25 +260,16 @@ rag-llm/
 │   ├── 向量化（Embedding）
 │   └── 检索增强生成
 │
+├── rag_gateway.py                   # RAG 网关（路由分发）
 ├── milvus_utils.py                  # Milvus 向量数据库操作
-│   ├── 集合管理
-│   ├── 向量插入
-│   └── 相似度搜索
-│
 ├── minio_utils.py                   # MinIO 对象存储操作
-│   ├── 文件上传
-│   ├── 文件下载
-│   └── 桶管理
-│
 ├── openai_utils.py                  # OpenAI API 封装
 ├── gemini_utils.py                  # Gemini API 封装
 ├── aiohttp_utils.py                 # 异步 HTTP 工具
-├── utils.py                         # 通用工具函数
+├── utils.py                         # 通用工具函数（LLM初始化等）
 ├── wrapper.py                       # 装饰器和包装器
-├── dependencies.py                  # FastAPI 依赖注入
 │
-├── t.py                             # 测试脚本
-└── __pycache__/                     # Python 缓存
+└── run.log                          # 运行日志
 ```
 
 ## 核心功能说明
