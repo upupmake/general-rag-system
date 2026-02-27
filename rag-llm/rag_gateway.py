@@ -37,8 +37,8 @@ class RAGGateway:
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "qwen3-max-2026-01-23",
-            "provider": "qwen"
+            "name": "xiaomi/mimo-v2-flash",
+            "provider": "other"
         }
 
     async def initialize(self):

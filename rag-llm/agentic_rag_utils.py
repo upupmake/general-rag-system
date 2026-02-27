@@ -388,7 +388,7 @@ class AgenticRAGService:
             包含type和payload的字典，type可以是"process"或"content"
         """
 
-        context = "无相关文档"
+        context = "具体内容为空"
         reference_documents = []
         all_documents = []
         all_docs_table = ""
@@ -396,6 +396,15 @@ class AgenticRAGService:
         # 执行Agentic RAG流程
         try:
             logger.info("开始Agentic检索流程...")
+            yield {
+                "type": "process",
+                "payload": {
+                    "step": "begin",
+                    "title": "开始检索",
+                    "description": f"使用知识库进行检索",
+                    "status": "running"
+                }
+            }
             final_item = None
             # 使用 retrieve_with_process 获取检索过程的实时反馈
             async for item in self.retrieve_with_process(

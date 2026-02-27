@@ -41,7 +41,7 @@ if __name__ == '__main__':
         "main:app",
         host="0.0.0.0",
         port=8848,
-        workers=2,
+        workers=1,
         log_level="info",
         reload=False
     )

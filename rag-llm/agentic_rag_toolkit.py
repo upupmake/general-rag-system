@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 class RetrievalDecision(BaseModel):
     """检索决策结构化输出"""
     action: Literal["continue", "stop"] = Field(description="是否继续检索: continue=继续, stop=停止")
-    reason: str = Field(description="本次决策的原因说明")
+    reason: str = Field(
+        description="如果选择工具，需说明选择该工具的理由；如果停止检索，需说明为什么当前信息已足够或无法继续。")
 
     # 如果action=continue, 以下字段必填
     tool: Optional[Literal[
@@ -190,7 +191,7 @@ class RetrievalToolkit:
         filter_expr = f'documentId == {document_id} and chunkIndex >= {start_chunk_index} and chunkIndex <= {end_chunk_index}'
 
         limit = end_chunk_index - start_chunk_index + 1
-        if limit > 20:
+        if limit > 21:
             raise RuntimeError(f"单次chunk范围不能超过20个，当前为{limit}个，请缩小范围或分多次调用")
 
         docs = await self._milvus_filter(
@@ -235,7 +236,7 @@ class RetrievalToolkit:
         filter_expr = f'fileName == "{self._escape(file_name)}" and chunkIndex >= {start_chunk_index} and chunkIndex <= {end_chunk_index}'
 
         limit = end_chunk_index - start_chunk_index + 1
-        if limit > 20:
+        if limit > 21:
             raise RuntimeError(f"单次chunk范围不能超过20个，当前为{limit}个，请缩小范围或分多次调用")
 
         docs = await self._milvus_filter(
