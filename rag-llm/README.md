@@ -204,8 +204,8 @@ curl http://localhost:8888/rag/
 
 **5 种检索工具**（`agentic_rag_toolkit.py`）
 1. **search_by_grep** - 关键词精确匹配（全库/单文件/多文件）
-2. **search_by_document_and_chunk_range** - 通过 documentId 获取指定 chunk
-3. **search_by_filename_and_chunk_range** - 通过文件名获取指定 chunk
+2. **search_by_filename_and_chunk_range** - 通过文件名获取指定 chunk
+3. **extend_file_chunk_windows** - 快速扩展 chunk 上下文窗口
 4. **search_by_multi_queries_in_database** - 多角度语义检索 + Rerank
 5. **list_filename_by_like** - 文件名模糊匹配（SQL LIKE 语法）
 

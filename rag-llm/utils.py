@@ -760,7 +760,7 @@ def merge_consecutive_chunks(
 
             else:
                 # 不连续，保存当前，开始新的
-                merged_results.append(current_merged_docuc)
+                merged_results.append(current_merged_doc)
                 current_merged_doc = next_doc
                 current_merged_doc.metadata['last_chunk_index'] = current_merged_doc.metadata.get('chunkIndex')
 

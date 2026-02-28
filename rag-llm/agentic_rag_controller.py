@@ -8,7 +8,7 @@ from typing import List, Dict, Any
 
 from langchain_core.documents import Document
 
-from agentic_rag_toolkit import RetrievalDecision, TOOL_DEFINE_PROMPT, TOOL_SELECT_PROMPT
+from agentic_rag_toolkit import RetrievalDecision, TOOL_DEFINE_PROMPT, TOOL_SELECT_PROMPT, CONTROLLER_SYSTEM_PROMPT
 from utils import get_langchain_llm
 
 logger = logging.getLogger(__name__)
@@ -203,39 +203,21 @@ class RetrievalController:
         tool_history = self._format_tool_call_history(trace)
 
         # 构建决策提示词
-        prompt = f"""你是RAG检索决策专家。请基于以下信息决定下一步行动。
+        prompt = f"""{CONTROLLER_SYSTEM_PROMPT}
 
-## 一、对话上下文（用于判断能否回答问题）
+---
+
+## 一、对话上下文
 
 {json.dumps(conversation_context, ensure_ascii=False, indent=2)}
-
 
 ## 二、已检索文档（按文件聚合，按chunkIndex排序）
 
 {json.dumps(docs_info, ensure_ascii=False, indent=2)}
 
-
-说明:
-- total_files: 共检索到几个文件
-- total_chunks: 共检索到几个chunk
-- 每个文件显示:
-  * fileName: 文件名
-  * documentId: 文档ID
-  * maxChunkIndex: 该文件总共有多少个chunk（0-based，如maxChunkIndex=29表示有30个chunk，索引范围0-29）
-  * chunk_count: 检索到该文件的几个chunk
-  * chunks: 按chunkIndex排序的chunk列表，每个chunk包含:
-    - chunkIndex: chunk索引
-    - content: chunk完整内容
-
-## 三、工具调用历史（含参数和结果）
+## 三、工具调用历史
 
 {json.dumps(tool_history, ensure_ascii=False, indent=2)}
-
-
-说明:
-- 每次调用包含: 轮次、工具名、参数、结果
-- 文档检索类工具的结果格式: {{"type": "document_retrieval", "retrieved": x, "new_added": x, "accumulated": x, "description": "..."}}
-- 文件列表类工具的结果格式: {{"type": "file_list", "total_files": x, "files_table": "Markdown表格"}}
 
 ---
 
@@ -243,27 +225,11 @@ class RetrievalController:
 
 {TOOL_DEFINE_PROMPT}
 
-## 决策策略
-
-### 信息使用指南
-1. **对话上下文**: 理解用户问题的意图、范围和所需信息类型
-2. **已检索文档**: 评估信息完整性、覆盖范围、chunk连续性、文件分布
-3. **工具调用历史**: 避免重复尝试、基于已有结果调整策略、分析失败原因
-
-### 决策规则
-
 {TOOL_SELECT_PROMPT}
 
-### 决策输出要求
-- 严格遵守 RetrievalDecision schema
-- params 必须是完整的JSON对象，包含所有必填参数
-- reason 要清晰说明决策依据（基于哪些信息、为什么选择该工具）
-- existing_info 简要总结已检索到的有用信息，必须是信息列表 List[str]
-- missing_info 列出当前缺失的具体信息点，必须是信息列表 List[str]
 ---
 
-请基于以上三类信息和决策策略，输出结构化决策。
-"""
+请基于以上三类信息和决策策略，输出结构化决策（仅JSON对象）。"""
 
         try:
             decision = await self.llm.ainvoke(prompt)

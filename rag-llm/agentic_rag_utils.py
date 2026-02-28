@@ -42,7 +42,7 @@ class AgenticRAGService:
 
         # 默认模型配置
         self.model_info = {
-            "name": "qwen3-max-2026-01-23",
+            "name": "qwen3.5-plus",
             "provider": "qwen"
         }
 
