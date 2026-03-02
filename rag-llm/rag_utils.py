@@ -52,10 +52,6 @@ class RAGService:
         Returns:
             (多角度查询列表, 评分用查询)
         """
-        model_info = {
-            'name': 'qwen3-max-2026-01-23',
-            'provider': 'other'
-        }
         # 构建对话历史（最近4轮，即8条消息）
         history_context = ""
         if history:
@@ -146,7 +142,18 @@ class RAGService:
 **当前问题**：{question}
 
 **请输出**：严格JSON格式，包含 queries（6-10个）、grade_query、reasoning"""
-        llm = get_langchain_llm(model_info)
+        model_info = {
+            'name': 'doubao-seed-2.0-pro',
+            'provider': 'other'
+        }
+        generate_config = {
+            "extra_body": {
+                "thinking": {
+                    "type": "disabled"
+                }
+            }
+        }
+        llm = get_langchain_llm(model_info, **generate_config)
         structured_agent = get_structured_data_agent(llm, MultiQueryList)
         # 使用异步调用
         result = await structured_agent.ainvoke({"messages": [{"role": "user", "content": system_prompt}]})

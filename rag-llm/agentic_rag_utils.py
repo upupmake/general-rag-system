@@ -40,12 +40,6 @@ class AgenticRAGService:
         self.user_id = user_id
         self.kb_id = kb_id
 
-        # 默认模型配置
-        self.model_info = {
-            "name": "qwen3-max-2026-01-23",
-            "provider": "other"
-        }
-
         # Milvus配置
         self.milvus_uri = os.environ.get("MILVUS_URI")
         self.milvus_token = os.environ.get("MILVUS_TOKEN")
@@ -89,7 +83,7 @@ class AgenticRAGService:
         self.toolkit = RetrievalToolkit(self.vector_store, retriever)
 
         # 初始化决策控制器
-        self.controller = RetrievalController(self.model_info)
+        self.controller = RetrievalController()
 
         logger.info("✅ AgenticRAG初始化完成")
 

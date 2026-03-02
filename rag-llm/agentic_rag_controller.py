@@ -18,8 +18,19 @@ logger = logging.getLogger(__name__)
 class RetrievalController:
     """检索决策控制器 - 调用LLM但完全可控"""
 
-    def __init__(self, model_info: Dict[str, str]):
-        self.llm = get_langchain_llm(model_info)
+    def __init__(self):
+        model_info = {
+            "name": "doubao-seed-2.0-pro",
+            "provider": "other"
+        }
+        generate_config = {
+            "extra_body": {
+                "thinking": {
+                    "type": "disabled"
+                }
+            }
+        }
+        self.llm = get_langchain_llm(model_info, **generate_config)
         self.llm = self.llm.with_structured_output(RetrievalDecision)
 
     @staticmethod
