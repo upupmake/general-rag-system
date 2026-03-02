@@ -42,8 +42,8 @@ class AgenticRAGService:
 
         # 默认模型配置
         self.model_info = {
-            "name": "qwen3.5-plus",
-            "provider": "qwen"
+            "name": "deepseek/deepseek-v3.2-251201",
+            "provider": "other"
         }
 
         # Milvus配置

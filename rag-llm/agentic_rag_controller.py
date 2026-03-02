@@ -191,6 +191,11 @@ class RetrievalController:
         """
 
         # 1. 对话上下文（用于判断能否回答）
+        history = history.copy()
+        history.extend({
+            "role": "user",
+            "content": question
+        })
         conversation_context = {
             "current_question": question,
             "history": self._format_history(history),

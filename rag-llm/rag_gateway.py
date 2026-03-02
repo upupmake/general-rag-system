@@ -37,7 +37,7 @@ class RAGGateway:
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "qwen3-max-2026-01-23",
+            "name": "deepseek/deepseek-v3.2-251201",
             "provider": "other"
         }
 

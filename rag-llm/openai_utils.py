@@ -102,9 +102,11 @@ class OpenAIInstance:
         elif "codex" in self.model_name:
             # 配置思考
             if self.enable_thinking:
-                reasoning['effort'] = "high"
+                reasoning['effort'] = "medium"
                 reasoning['summary'] = 'detailed'
-
+            else:
+                reasoning['effort'] = "low"
+                reasoning['summary'] = 'detailed'
             # 配置网页搜索
             if self.enable_web_search:
                 tools.append({"type": "web_search"})

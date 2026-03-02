@@ -52,10 +52,9 @@ class RAGService:
         Returns:
             (多角度查询列表, 评分用查询)
         """
-        # 这里暂时全部使用qwen3-max-2026-01-23模型
         model_info = {
-            'name': 'qwen3-max-2026-01-23',
-            'provider': 'qwen'
+            'name': 'deepseek/deepseek-v3.2-251201',
+            'provider': 'other'
         }
         # 构建对话历史（最近4轮，即8条消息）
         history_context = ""

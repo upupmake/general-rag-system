@@ -17,7 +17,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -83,7 +85,17 @@ public class UserController {
         user.setUsername(request.getUsername());
         user.setPwd(request.getPassword()); // In real app, password should be encrypted
         user.setEmail(email);
-        user.setStatus("active");
+        // Check if email domain is allowed; disable account if not
+        List<String> allowedDomains = Arrays.asList(
+                "qq.com", "foxmail.com", "163.com", "126.com", "yeah.net",
+                "sina.com", "sina.cn", "sohu.com", "139.com", "189.cn",
+                "gmail.com", "outlook.com", "hotmail.com", "live.com", "msn.com",
+                "yahoo.com", "icloud.com", "aol.com", "gmx.com", "proton.me"
+        );
+        String emailLower = email.toLowerCase();
+        boolean domainAllowed = allowedDomains.stream().anyMatch(domain -> emailLower.endsWith("@" + domain))
+                || emailLower.endsWith(".edu.cn") || emailLower.endsWith(".edu");
+        user.setStatus(domainAllowed ? "active" : "disabled");
         user.setRoleId(2); // Default role, assuming 2 is user
 
         usersService.save(user);
