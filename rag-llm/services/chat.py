@@ -181,7 +181,7 @@ async def agentic_rag_stream_generator(
         model_info: dict,
         kb_id: Optional[int] = None,
         user_id: Optional[int] = None,
-        max_rounds: int = 15,
+        max_rounds: int = 10,
         system_prompt: Optional[str] = None,
         prompt_tokens: int = 0,
         options: dict = None,
@@ -339,7 +339,7 @@ async def chat_stream(
         # 使用RAG模式
         # 检查是否使用 Agentic RAG 模式
         use_agentic_rag = options.get('agenticRag', True)  # 默认使用Agentic RAG模式，除非明确设置为False
-        max_rounds = options.get('maxRounds', 15)  # Agentic RAG的最大轮次
+        max_rounds = options.get('maxRounds', 10)  # Agentic RAG的最大轮次
 
         if use_agentic_rag:
             logger.info(f"使用Agentic RAG模式，知识库ID: {kb_id}, 用户ID: {user_id}, 最大轮次: {max_rounds}")

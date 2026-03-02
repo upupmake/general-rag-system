@@ -26,7 +26,7 @@ class RetrievalDecision(BaseModel):
     tool: Optional[Literal[
         "search_by_grep",  # 1. 关键词检索（grep），支持全库/单文件/多文件
         "search_by_filename_and_chunk_range",  # 2. 按文件名获取连续chunk范围
-        "extend_file_chunk_windows",  # 3. 快速扩展chunk上下文窗口
+        "extend_file_chunk_context_window",  # 3. 快速扩展chunk上下文窗口
         "search_by_multi_queries_in_database",  # 4. 全库语义检索(多query+rerank)
         "list_filename_by_like"  # 5. 根据模式匹配列出文件
     ]] = Field(default=None, description="下一步要使用的检索工具")
@@ -117,7 +117,7 @@ class RetrievalToolkit:
             self,
             keywords: List[str],
             match_type: Literal["AND", "OR"] = "OR",
-            top_k: int = 5,
+            top_k: int = 15,
             file_names: Optional[List[str]] = None,
             **kwargs
     ) -> Dict[str, Any]:
@@ -209,7 +209,7 @@ class RetrievalToolkit:
         }
 
     # ============= 工具3: 快速扩展chunk上下文窗口 =============
-    async def extend_file_chunk_windows(
+    async def extend_file_chunk_context_window(
             self,
             file_name: str,
             chunk_index: int,
@@ -440,8 +440,8 @@ class RetrievalToolkit:
                 return await self.search_by_grep(**params)
             elif tool == "search_by_filename_and_chunk_range":
                 return await self.search_by_filename_and_chunk_range(**params)
-            elif tool == "extend_file_chunk_windows":
-                return await self.extend_file_chunk_windows(**params)
+            elif tool == "extend_file_chunk_context_window":
+                return await self.extend_file_chunk_context_window(**params)
             elif tool == "search_by_multi_queries_in_database":
                 return await self.search_by_multi_queries_in_database(**params)
 
@@ -479,12 +479,12 @@ TOOL_DEFINE_PROMPT = """## Agentic RAG 检索工具集（5 个原子化工具）
 ├─────────────────┼──────────┼────────────────────────────────────────┤
 │ keywords        │ List[str]│ 必填，非空；优先使用精确短语          │
 │ match_type      │ "AND"/"OR"│ 可选，默认"OR"；精确收敛用 AND         │
-│ top_k           │ int      │ 可选，默认 5；建议 5~20                 │
+│ top_k           │ int      │ 可选，默认 15；建议 5~20                 │
 │ file_names      │ List[str]│ 可选；null/空列表=全库；1 个=单文件    │
 └─────────────────┴──────────┴────────────────────────────────────────┘
 
 示例：
-{"tool": "search_by_grep", "params": {"keywords": ["ValueError"], "match_type": "OR", "top_k": 10}}
+{"tool": "search_by_grep", "params": {"keywords": ["ValueError"], "match_type": "OR", "top_k": 15}}
 
 ================================================================================
 [工具 2] search_by_filename_and_chunk_range - 按文件名获取连续 chunk
@@ -517,7 +517,7 @@ TOOL_DEFINE_PROMPT = """## Agentic RAG 检索工具集（5 个原子化工具）
 {"tool": "search_by_filename_and_chunk_range", "params": {"file_name": "src/utils.py", "start_chunk_index": 0, "end_chunk_index": 19}}
 
 ================================================================================
-[工具 3] extend_file_chunk_windows - 快速扩展 chunk 上下文窗口
+[工具 3] extend_file_chunk_context_window - 快速扩展 chunk 上下文窗口
 ================================================================================
 功能：以指定 chunk 为中心，快速获取前后 window_size 个 chunk（上下文窗口扩展）
 
@@ -541,7 +541,7 @@ TOOL_DEFINE_PROMPT = """## Agentic RAG 检索工具集（5 个原子化工具）
 - 总 chunk 数 = window_size * 2 + 1（不超过 20 个）
 
 示例：
-{"tool": "extend_file_chunk_windows", "params": {"file_name": "src/utils.py", "chunk_index": 10, "window_size": 3}}
+{"tool": "extend_file_chunk_context_window", "params": {"file_name": "src/utils.py", "chunk_index": 10, "window_size": 3}}
 // 将返回 chunk 索引 [7, 8, 9, 10, 11, 12, 13] 共 7 个 chunk
 
 ================================================================================
@@ -629,7 +629,7 @@ LIKE 语法示例：
 ⚠️ 关键说明：
 - 使用 chunkIndex == 0 获取每个文件的首个 chunk（含完整元信息）
 - 若返回数 < limit，说明该 pattern 的文件已基本列举完毕
-- 获取正文需再用工具 2（search_by_filename_and_chunk_range）或工具 3（extend_file_chunk_windows）
+- 获取正文需再用工具 2（search_by_filename_and_chunk_range）或工具 3（extend_file_chunk_context_window）
 
 示例：
 {"tool": "list_filename_by_like", "params": {"pattern": "src/auth/%", "offset": 0, "limit": 30}}
@@ -685,7 +685,7 @@ TOOL_SELECT_PROMPT = """## 检索决策输出规范
 │ 首轮 (1-2)  │ 概念性/描述性问题，无明确关键词    │ search_by_multi_queries_in_database           │
 │ 首轮 (1-2)  │ 有明确关键词/函数名/错误码         │ search_by_grep                                │
 │ 中期 (3-4)  │ 已知 fileName，需读取连续 chunk      │ search_by_filename_and_chunk_range            │
-│ 中期 (3-4)  │ 已定位关键 chunk，需查看前后上下文  │ extend_file_chunk_windows                     │
+│ 中期 (3-4)  │ 已定位关键 chunk，需查看前后上下文  │ extend_file_chunk_context_window                     │
 │ 任意轮次   │ 文件名不确定，需先探索文件列表     │ list_filename_by_like                         │
 │ 后期 (5+)   │ 信息缺口明确，针对性补充           │ 根据缺口选择最匹配工具                        │
 └────────────┴────────────────────────────────────┴─────────────────────────────────────────────────┘
@@ -700,7 +700,7 @@ TOOL_SELECT_PROMPT = """## 检索决策输出规范
 
 2. 利用 fileName + chunkIndex 快速扩展上下文（推荐）：
    - 从已检索文档的 metadata 中获取 fileName 和 chunkIndex
-   - 优先使用 extend_file_chunk_windows 快速获取前后内容
+   - 优先使用 extend_file_chunk_context_window 快速获取前后内容
    - 比手动计算范围更高效，自动处理边界
 
 3. 利用 fileName 调用文件级范围检索：
@@ -724,7 +724,7 @@ TOOL_SELECT_PROMPT = """## 检索决策输出规范
 2. 同工具重试时，至少改变一个关键参数：
    - search_by_grep：换关键词、改 match_type、调整 file_names
    - search_by_filename_and_chunk_range：移动窗口位置、缩小范围
-   - extend_file_chunk_windows：换 chunk_index、调整 window_size
+   - extend_file_chunk_context_window：换 chunk_index、调整 window_size
    - search_by_multi_queries_in_database：换 queries 表述、调整 threshold
    - list_filename_by_like：改 pattern、用 offset 分页
 3. 连续 2 次检索结果<3 条 → 考虑换工具或 stop
@@ -740,7 +740,7 @@ TOOL_SELECT_PROMPT = """## 检索决策输出规范
   - 范围 ≤ 20 个 chunk（end - start + 1 ≤ 20）
   - 检查 maxChunkIndex 边界
 
-□ extend_file_chunk_windows：
+□ extend_file_chunk_context_window：
   - file_name 精确匹配（从已检索文档 meta 获取）
   - chunk_index 是已检索到的有效 chunk 索引
   - window_size 建议 1-5（默认 2，返回 5 个 chunk）
@@ -759,7 +759,7 @@ TOOL_SELECT_PROMPT = """## 检索决策输出规范
 [工具 2 vs 工具 3 选择指南]
 ================================================================================
 ┌────────────────────────────────────────────────────┬────────────────────────────────────────────────────┐
-│ 使用 search_by_filename_and_chunk_range            │ 使用 extend_file_chunk_windows                     │
+│ 使用 search_by_filename_and_chunk_range            │ 使用 extend_file_chunk_context_window                     │
 ├────────────────────────────────────────────────────┼────────────────────────────────────────────────────┤
 │ 需要精确控制 start/end 索引                          │ 以某 chunk 为中心，快速获取前后内容                  │
 │ 需要读取大范围连续 chunk(>10)                       │ 只需查看局部上下文 (3-11 个 chunk)                    │
@@ -768,7 +768,7 @@ TOOL_SELECT_PROMPT = """## 检索决策输出规范
 └────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
 
 简单规则：
-- "我想看 chunk 10 前后的内容" → extend_file_chunk_windows (chunk_index=10, window_size=2)
+- "我想看 chunk 10 前后的内容" → extend_file_chunk_context_window (chunk_index=10, window_size=2)
 - "我想读取 chunk 0 到 19 的完整内容" → search_by_filename_and_chunk_range (start=0, end=19)
 - "我想补全 chunk 5 到 15 之间的内容" → search_by_filename_and_chunk_range (start=5, end=15)
 
@@ -789,7 +789,7 @@ TOOL_SELECT_PROMPT = """## 检索决策输出规范
 {"action": "continue", "reason": "首轮检索，问题为概念性描述，需语义召回探索", "tool": "search_by_multi_queries_in_database", "params": {"queries": ["API 认证流程", "token 验证方法", "如何鉴权"], "grade_query": "API 请求的认证和鉴权流程", "top_k": 10, "grade_score_threshold": 0.4}, "existing_info": [], "missing_info": ["认证流程步骤", "所需参数", "返回格式"]}
 
 示例 2（中期 - 快速扩展上下文）：
-{"action": "continue", "reason": "已定位关键 chunk，需查看前后上下文理解完整逻辑", "tool": "extend_file_chunk_windows", "params": {"file_name": "src/auth.py", "chunk_index": 10, "window_size": 3}, "existing_info": ["auth.py 第 10 个 chunk 包含 authenticate 函数定义"], "missing_info": ["函数完整实现", "调用示例"]}
+{"action": "continue", "reason": "已定位关键 chunk，需查看前后上下文理解完整逻辑", "tool": "extend_file_chunk_context_window", "params": {"file_name": "src/auth.py", "chunk_index": 10, "window_size": 3}, "existing_info": ["auth.py 第 10 个 chunk 包含 authenticate 函数定义"], "missing_info": ["函数完整实现", "调用示例"]}
 
 示例 3（中期 - 范围读取）：
 {"action": "continue", "reason": "已知文件名，需读取文件开头部分内容", "tool": "search_by_filename_and_chunk_range", "params": {"file_name": "src/auth.py", "start_chunk_index": 0, "end_chunk_index": 19}, "existing_info": ["auth.py 文件存在，共 30 个 chunk"], "missing_info": ["认证函数实现细节", "参数说明"]}
@@ -820,7 +820,7 @@ CONTROLLER_SYSTEM_PROMPT = """你是 RAG 检索决策专家，负责基于三类
 |------|-------------------------------------|--------------------------|
 | 1    | search_by_grep                      | 关键词精确匹配检索       |
 | 2    | search_by_filename_and_chunk_range  | 按文件名获取连续 chunk 范围 |
-| 3    | extend_file_chunk_windows           | 快速扩展 chunk 上下文窗口  |
+| 3    | extend_file_chunk_context_window           | 快速扩展 chunk 上下文窗口  |
 | 4    | search_by_multi_queries_in_database | 全库语义检索+rerank 精排  |
 | 5    | list_filename_by_like               | 文件名模式匹配列表       |
 
@@ -831,7 +831,7 @@ CONTROLLER_SYSTEM_PROMPT = """你是 RAG 检索决策专家，负责基于三类
 3. **防循环**：不重复相同调用，连续失败及时止损
 4. **效率优先**：
    - 能用 search_by_grep 不用 search_by_multi_queries_in_database
-   - 能用 extend_file_chunk_windows 不用 search_by_filename_and_chunk_range（小范围上下文）
+   - 能用 extend_file_chunk_context_window 不用 search_by_filename_and_chunk_range（小范围上下文）
    - 能用范围检索不用全库扫描
 
 ## 输出要求

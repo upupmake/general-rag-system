@@ -20,14 +20,14 @@ class RetrievalController:
 
     def __init__(self):
         model_info = {
-            "name": "doubao-seed-2.0-pro",
+            "name": "qwen3-max-2026-01-23",
             "provider": "other"
         }
         generate_config = {
             "extra_body": {
                 "thinking": {
                     "type": "disabled"
-                }
+                },
             }
         }
         self.llm = get_langchain_llm(model_info, **generate_config)

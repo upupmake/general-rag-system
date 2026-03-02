@@ -143,20 +143,22 @@ class RAGService:
 
 **请输出**：严格JSON格式，包含 queries（6-10个）、grade_query、reasoning"""
         model_info = {
-            'name': 'doubao-seed-2.0-pro',
+            'name': 'qwen3-max-2026-01-23',
             'provider': 'other'
         }
         generate_config = {
             "extra_body": {
                 "thinking": {
                     "type": "disabled"
-                }
+                },
             }
         }
         llm = get_langchain_llm(model_info, **generate_config)
         structured_agent = get_structured_data_agent(llm, MultiQueryList)
         # 使用异步调用
-        result = await structured_agent.ainvoke({"messages": [{"role": "user", "content": system_prompt}]})
+        result = await structured_agent.ainvoke({"messages":
+                                                     [{"role": "user", "content": system_prompt}]
+                                                 })
 
         logger.info(f"生成的多角度查询: {result['structured_response'].queries}")
         logger.info(f"生成的评分查询(grade_query): {result['structured_response'].grade_query}")

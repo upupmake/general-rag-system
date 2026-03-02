@@ -80,10 +80,12 @@ class OpenAIInstance:
             # 配置网页搜索
             if self.enable_web_search:
                 extra_body['enable_search'] = True
+        elif self.provider == "minimax":
+            extra_body["reasoning_split"] = True
         elif (
                 self.provider == "deepseek"
                 or self.provider == "z-ai"
-                or self.provider == "minimax"
+                or self.provider == "moonshotai"
                 or self.provider == "xiaomi"
         ):
             # 配置思考
