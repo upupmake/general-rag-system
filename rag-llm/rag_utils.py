@@ -53,7 +53,7 @@ class RAGService:
             (多角度查询列表, 评分用查询)
         """
         model_info = {
-            'name': 'deepseek/deepseek-v3.2-251201',
+            'name': 'qwen3-max-2026-01-23',
             'provider': 'other'
         }
         # 构建对话历史（最近4轮，即8条消息）

@@ -58,7 +58,7 @@ class SessionNameGenerator:
                 model = data.get(
                     "model")  # {'id': 7, 'name': 'gemini-2.5-flash', 'provider': 'gemini', 'metadata': '{}'}
                 model = {
-                    'name': 'deepseek/deepseek-v3.2-251201',
+                    'name': 'qwen3-max-2026-01-23',
                     'provider': 'other'
                 }
                 llm = get_langchain_llm(model)
