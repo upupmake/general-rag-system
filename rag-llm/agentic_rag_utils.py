@@ -143,9 +143,9 @@ class AgenticRAGService:
         Args:
             tool: 工具名称
             tool_result: 工具原始返回结果
-            retrieved: 本轮检索到的文档数
-            new_added: 去重后新增的文档数
-            accumulated: 累计文档总数
+            retrieved: 本轮检索到的文档切片数
+            new_added: 去重后新增的文档切片数
+            accumulated: 累计文档切片总数
             
         Returns:
             格式化后的结果描述（dict）
@@ -171,7 +171,7 @@ class AgenticRAGService:
                 "retrieved": retrieved,
                 "new_added": new_added,
                 "accumulated": accumulated,
-                "description": f"使用工具检索到了{retrieved}个文档，去重后新增{new_added}个文档，当前累计{accumulated}个文档"
+                "description": f"使用工具检索到了 {retrieved} 个文档切片，去重后新增 {new_added} 个文档切片，当前累计 {accumulated} 个文档切片"
             }
 
     async def retrieve_with_process(
@@ -435,8 +435,6 @@ class AgenticRAGService:
                 ])
 
                 all_docs_table = self._format_all_docs_table(all_documents)
-
-                logger.info(f"构建上下文完成，使用 {len(merged_docs)} 个文档")
 
                 # 构建merged_docs表格
                 merged_docs_table_lines = [

@@ -227,7 +227,7 @@ class RetrievalController:
 
 {json.dumps(conversation_context, ensure_ascii=False, indent=2)}
 
-## 二、已检索文档（按文件聚合，按chunkIndex排序）
+## 二、已检索的文档和对应切片（按文件聚合，按chunkIndex排序）
 
 {json.dumps(docs_info, ensure_ascii=False, indent=2)}
 
