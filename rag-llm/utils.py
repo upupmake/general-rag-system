@@ -471,23 +471,26 @@ def cut_history(history: list, model: dict):
 
     base_token = 10240  # 10k
 
-    max_tokens = base_token * 10
-    if (
-            model_name.startswith("gemini-3-flash")
-            or model_name.startswith("gemini-3.1-flash")
-            or model_name == "grok-4.1-fast"
-            or "codex" in model_name
-            or "haiku" in model_name.lower()
-    ):
-        max_tokens = base_token * 8
-    elif "sonnet" in model_name.lower():
-        max_tokens = base_token * 6
-    elif (
-            model_name.startswith("gpt-5.2-chat")
-            or model_name.startswith("gemini-3-pro")
-            or model_name.startswith("gemini-3.1-pro")
-    ):
-        max_tokens = base_token * 4
+    max_tokens = base_token * 8
+    if model_name.startswith("gpt-"):
+        if "codex" in model_name.lower():
+            max_tokens = base_token * 6
+        else:
+            max_tokens = base_token * 4
+
+    elif model_name.startswith("gemini-"):
+        if "flash" in model_name.lower():
+            max_tokens = base_token * 6
+        elif "pro" in model_name.lower():
+            max_tokens = base_token * 4
+
+    elif model_name.startswith("claude-"):
+        if "haiku" in model_name.lower():
+            max_tokens = base_token * 6
+        elif "sonnet" in model_name.lower():
+            max_tokens = base_token * 4
+        elif "opus" in model_name.lower():
+            max_tokens = base_token * 2
 
     for i in range(n, 1, -2):
         pair = previous_msgs[i - 2: i]

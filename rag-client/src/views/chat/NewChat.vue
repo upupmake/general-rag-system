@@ -31,9 +31,7 @@ const isUserUncheckedWebSearch = ref(false)
 
 // 工具配置映射
 const toolConfigs = {
-  'webSearch': {icon: GlobalOutlined, label: '联网搜索', desc: '开启联网搜索能力，获取实时信息'},
-  'web_extractor': {icon: FileSearchOutlined, label: '网页提取', desc: '读取并分析指定网页内容'},
-  'code_interpreter': {icon: CodeOutlined, label: '代码解释器', desc: '执行代码进行计算或分析'},
+  'webSearch': {icon: GlobalOutlined, label: '联网搜索', desc: '开启联网搜索能力，获取实时信息'}
 }
 
 onMounted(async () => {
@@ -41,7 +39,7 @@ onMounted(async () => {
   models.value = await fetchAvailableModels().then()
 
   if (!selectedModel.value) {
-    const priorityNames = ["qwen3-max-2026-01-23", "gpt-5.2-chat-latest", "gemini-3-pro-preview", "z-ai/glm-4.7", "claude-4.5-sonnet"]
+    const priorityNames = ["qwen3.5-plus", "gpt-5.2-chat-latest"]
     let foundModel = null
 
     // 按优先级查找

@@ -71,7 +71,7 @@ class OpenAIInstance:
         reasoning = {}
         reasoning_effort = {}
 
-        if self.model_name.startswith("qwen3"):
+        if self.model_name.startswith("qwen"):
             # 配置思考
             if self.enable_thinking:
                 extra_body['enable_thinking'] = True
@@ -93,26 +93,14 @@ class OpenAIInstance:
                 extra_body['thinking'] = {"type": "enabled"}
             else:
                 extra_body['thinking'] = {"type": "disabled"}
-        elif self.model_name.startswith("gpt-5.2-chat"):
+        elif self.model_name.startswith("gpt-"):
             # 配置思考
             if self.enable_thinking:
                 reasoning['effort'] = "medium"
-                reasoning['summary'] = 'detailed'
-            # 配置网页搜索
-            if self.enable_web_search:
-                tools.append({"type": "web_search_preview"})
-        elif "codex" in self.model_name:
-            # 配置思考
-            if self.enable_thinking:
-                reasoning['effort'] = "medium"
-                reasoning['summary'] = 'detailed'
-            else:
-                reasoning['effort'] = "low"
                 reasoning['summary'] = 'detailed'
             # 配置网页搜索
             if self.enable_web_search:
                 tools.append({"type": "web_search"})
-
         elif self.model_name.startswith("doubao-seed"):
             # 配置网页搜索
             if self.enable_web_search:
