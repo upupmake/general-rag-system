@@ -480,7 +480,7 @@ def cut_history(history: list, model: dict):
 
     elif model_name.startswith("gemini-"):
         if "flash" in model_name.lower():
-            max_tokens = base_token * 4
+            max_tokens = base_token * 6
         elif "pro" in model_name.lower():
             max_tokens = base_token * 3
 

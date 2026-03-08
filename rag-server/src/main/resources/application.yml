@@ -4,29 +4,62 @@ server:
     context-path: /api
   reactive:
     session:
-      timeout: -1
+      timeout: 15m
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
+    accept-count: 100
+    max-connections: 8192
+    connection-timeout: 20000
+
 spring:
+
   servlet:
     multipart:
-      max-file-size: 100MB
-      max-request-size: 100MB
+      max-file-size: 20MB
+      max-request-size: 20MB
+
   profiles:
     active: dev
+
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: com.mysql.cj.jdbc.Driver
     druid:
-      password: ${mysql.password}
+      url: jdbc:mysql://${mysql.host}:${mysql.port}/${mysql.database}?serverTimezone=Asia/Shanghai&connectTimeout=3000&socketTimeout=10000&tcpKeepAlive=true
       username: ${mysql.username}
-      url: jdbc:mysql://${mysql.host}:${mysql.port}/${mysql.database}?serverTimezone=Asia/Shanghai
+      password: ${mysql.password}
+
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 30000
+
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      max-evictable-idle-time-millis: 900000
+
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+
+      keep-alive: true
+      phy-timeout-millis: 1800000
+
+      remove-abandoned: true
+      remove-abandoned-timeout: 120
+      log-abandoned: true
+
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
   mvc:
     async:
-      request-timeout: -1
+      request-timeout: 60000
 jwt:
-  # 随便写一串复杂的字符串，长度至少32位
+  # 长度至少32位
   secret: ${jwt.secret}
   # 过期时间，例如 86400000 毫秒 (24小时)
   expiration: 86400000
