@@ -111,6 +111,7 @@ public class AuditLogAspect {
         // 6. Generate Display Message
         auditLog.setDisplayMessage(generateDisplayMessage(methodName));
 
+        log.info("[{}] {} - {}ms", request.getMethod(), request.getRequestURI(), duration);
         auditLogsService.save(auditLog);
     }
 

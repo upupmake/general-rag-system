@@ -113,8 +113,22 @@ def get_official_llm(
     )
 
 
+def get_local_embedding_instance(embedding_info: dict):
+    base_url = embedding_info.get("base_url", "http://192.168.188.6:8890")
+    model_name = embedding_info.get("name", "Qwen/Qwen3-Embedding-0.6B")
+    return init_embeddings(
+        model=model_name,
+        api_key="local",
+        base_url=base_url,
+        provider="openai",
+        check_embedding_ctx_length=False
+    )
+
+
 def get_embedding_instance(embedding_info: dict):
-    """根据嵌入模型信息加载配置并初始化 Embedding"""
+    # 当前默认走本地部署的embedding服务，后续可以根据配置切换不同的embedding提供商
+    return get_local_embedding_instance(embedding_info)
+
     provider = embedding_info.get("provider")
     model_name = embedding_info.get("name")
 
@@ -359,8 +373,8 @@ def pdf_split(
 
 async def image_split(
         file_input,
-        chunk_size: int = 4096,
-        chunk_overlap: int = 150,
+        chunk_size: int = 2048,
+        chunk_overlap: int = 100,
 ):
     # 1. 读取图片数据并转Base64
     image_data = None
