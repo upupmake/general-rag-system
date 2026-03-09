@@ -81,9 +81,20 @@ class RetrievalController:
         return file_docs
 
     @staticmethod
-    def _format_docs_by_file(docs: List[Document]) -> Dict[str, Any]:
+    def _compress_old_content(content: str) -> str:
+        """旧 chunk 内容压缩：保留前25%和后25%，中间50%替换为省略号"""
+        length = len(content)
+        if length <= 200:
+            return content
+        quarter = length // 4
+        return content[:quarter] + "......" + content[-quarter:]
+
+    @staticmethod
+    def _format_docs_by_file(docs: List[Document], current_round: int) -> Dict[str, Any]:
         """
-        格式化文档：按文件聚合并显示完整信息（包含内容）
+        格式化文档：按文件聚合并显示内容。
+        当前轮次检索到的 chunk 显示完整内容，历史轮次的 chunk 仅显示首尾各25%，
+        中间50%以 "......" 代替以节省 token，详细内容可参考 tool_history 中的 existing_info。
         
         Returns:
             {
@@ -98,6 +109,7 @@ class RetrievalController:
                         "chunks": [
                             {
                                 "chunkIndex": int,
+                                "retrieved_round": int,
                                 "content": str
                             }
                         ]
@@ -124,10 +136,16 @@ class RetrievalController:
 
             chunks_data = []
             for chunk in sorted_chunks:
+                retrieved_round = chunk.metadata.get("retrieved_round")
+                is_old = retrieved_round is not None and retrieved_round < current_round
+                content = (
+                    RetrievalController._compress_old_content(chunk.page_content)
+                    if is_old else chunk.page_content
+                )
                 chunks_data.append({
                     "chunkIndex": chunk.metadata.get("chunkIndex", 0),
-                    "retrieved_round": chunk.metadata.get("retrieved_round"),
-                    "content": chunk.page_content
+                    "retrieved_round": retrieved_round,
+                    "content": content
                 })
 
             file_info = {
@@ -219,8 +237,8 @@ class RetrievalController:
             "history": self._format_history(history),
         }
 
-        # 2. RAG检索信息（按文件聚合并排序）
-        docs_info = self._format_docs_by_file(reference_docs)
+        # 2. RAG检索信息（按文件聚合并排序，旧chunk内容压缩）
+        docs_info = self._format_docs_by_file(reference_docs, current_round)
 
         # 3. 工具调用历史（包含参数和结果）
         tool_history = self._format_tool_call_history(trace)
