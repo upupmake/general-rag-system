@@ -58,7 +58,7 @@ function streamRequest(url, body, onOpen, onMessage, onError, onClose, logTag = 
                 if (onOpen) onOpen(response)
                 return
             }
-            message.error("今日Token使用已达上限，请明天再试或联系管理员升级").then()
+            message.error("今日Token使用已达上限 或 网络发生错误").then()
             throw new Error(`${logTag} SSE Connection failed`)
         },
         onmessage(ev) {

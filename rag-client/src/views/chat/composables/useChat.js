@@ -143,7 +143,8 @@ export function useChat(
             if (lastMsg.modelId && models.value.find(m => m.modelId === lastMsg.modelId)) {
                 selectedModel.value = lastMsg.modelId
             } else {
-                selectedModel.value = selectedModel.value || null
+                let len = models.value.length
+                selectedModel.value = len > 0 ? models.value[len - 1].modelId : null
             }
             // 恢复知识库选择
             if (isKbSupported.value && lastMsg.kbId && findKbById(lastMsg.kbId)) {
