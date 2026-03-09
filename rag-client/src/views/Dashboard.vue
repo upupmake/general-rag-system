@@ -136,7 +136,7 @@ onMounted(() => {
         </a-card>
       </a-col>
 
-      <a-col :xs="24" :sm="24" :md="6">
+      <a-col :xs="24" :sm="12" :md="6">
         <a-card>
           <div class="stat">
             <div class="label">今日消耗 Token</div>
