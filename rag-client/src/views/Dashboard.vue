@@ -109,8 +109,8 @@ onMounted(() => {
 
     <!-- 核心统计卡片 -->
     <a-row :gutter="[16, 16]">
-      <a-col :xs="12" :sm="12" :md="6">
-        <a-card>
+      <a-col :xs="12" :sm="12" :md="6" class="stat-col">
+        <a-card class="stat-card">
           <div class="stat">
             <div class="label">知识库</div>
             <div class="value">{{ stats.kbCount }}</div>
@@ -118,8 +118,8 @@ onMounted(() => {
         </a-card>
       </a-col>
 
-      <a-col :xs="12" :sm="12" :md="6">
-        <a-card>
+      <a-col :xs="12" :sm="12" :md="6" class="stat-col">
+        <a-card class="stat-card">
           <div class="stat">
             <div class="label">文档数</div>
             <div class="value">{{ stats.documentCount }}</div>
@@ -127,8 +127,8 @@ onMounted(() => {
         </a-card>
       </a-col>
 
-      <a-col :xs="12" :sm="12" :md="6">
-        <a-card>
+      <a-col :xs="12" :sm="12" :md="6" class="stat-col">
+        <a-card class="stat-card">
           <div class="stat">
             <div class="label">对话数</div>
             <div class="value">{{ stats.sessionCount }}</div>
@@ -136,8 +136,8 @@ onMounted(() => {
         </a-card>
       </a-col>
 
-      <a-col :xs="24" :sm="12" :md="6">
-        <a-card>
+      <a-col :xs="12" :sm="12" :md="6" class="stat-col">
+        <a-card class="stat-card">
           <div class="stat">
             <div class="label">今日消耗 Token</div>
             <div class="value">{{ stats.todayTokenUsage.toLocaleString() }}</div>
@@ -210,6 +210,27 @@ onMounted(() => {
   color: #aaa;
   font-size: 12px;
   margin-top: 4px;
+}
+
+.stat-col {
+  display: flex;
+}
+
+.stat-col :deep(.stat-card) {
+  width: 100%;
+}
+
+.stat-col :deep(.ant-card) {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-col :deep(.ant-card-body) {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media screen and (max-width: 576px) {
