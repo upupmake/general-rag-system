@@ -251,6 +251,7 @@ class AgenticRAGService:
                     for doc in new_docs:
                         pk = doc.metadata.get("pk")
                         if pk and pk not in reference_docs:
+                            doc.metadata["retrieved_round"] = round_no
                             reference_docs[pk] = doc
                 # 无论是否加入reference_docs，都记录所有遇到的文档信息（直接存Document对象）
                 for doc in new_docs:

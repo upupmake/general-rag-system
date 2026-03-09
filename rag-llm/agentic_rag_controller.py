@@ -126,6 +126,7 @@ class RetrievalController:
             for chunk in sorted_chunks:
                 chunks_data.append({
                     "chunkIndex": chunk.metadata.get("chunkIndex", 0),
+                    "retrieved_round": chunk.metadata.get("retrieved_round"),
                     "content": chunk.page_content
                 })
 
