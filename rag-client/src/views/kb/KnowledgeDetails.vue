@@ -947,8 +947,7 @@ onUnmounted(() => {
         title="知识库设置"
         :confirm-loading="settingsSubmitting"
         @ok="handleSettingsSubmit"
-        width="600px"
-    >
+        width="600px">
       <a-form :model="settingsForm" layout="vertical">
         <a-form-item label="知识库名称" required>
           <a-input v-model:value="settingsForm.name" placeholder="请输入知识库名称"/>
