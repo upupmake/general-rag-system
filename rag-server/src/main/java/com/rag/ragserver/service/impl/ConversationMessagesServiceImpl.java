@@ -1,6 +1,8 @@
 package com.rag.ragserver.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.rag.ragserver.domain.ConversationMessages;
 import com.rag.ragserver.exception.BusinessException;
@@ -15,13 +17,13 @@ import java.util.Date;
 import java.util.List;
 
 /**
-* @author make
-* @description 针对表【conversation_messages(RAG 对话消息历史表)】的数据库操作Service实现
-* @createDate 2026-01-02 23:06:15
-*/
+ * @author make
+ * @description 针对表【conversation_messages(RAG 对话消息历史表)】的数据库操作Service实现
+ * @createDate 2026-01-02 23:06:15
+ */
 @Service
 public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMessagesMapper, ConversationMessages>
-    implements ConversationMessagesService{
+        implements ConversationMessagesService {
 
     @Override
     public Long countTodayTokens() {
@@ -37,6 +39,18 @@ public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMes
         Date startOfDay = Date.from(today.atStartOfDay(ZoneId.systemDefault()).toInstant());
         Long total = this.baseMapper.sumUserTotalTokensSince(startOfDay, userId);
         return total != null ? total : 0L;
+    }
+
+    @Override
+    public List<ConversationMessages> getLastNRagContextMessages(Long sessionId, int n) {
+        LambdaQueryWrapper<ConversationMessages> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.select(ConversationMessages::getId, ConversationMessages::getRagContext)
+                .eq(ConversationMessages::getSessionId, sessionId)
+                .eq(ConversationMessages::getRole, "assistant")
+                .orderByDesc(ConversationMessages::getCreatedAt);
+        IPage<ConversationMessages> pageWrapper = new Page<>(1, n);
+        IPage<ConversationMessages> page = this.page(pageWrapper, queryWrapper);
+        return page.getRecords();
     }
 
     @Override

@@ -189,6 +189,16 @@ public class KnowledgeBasesServiceImpl extends ServiceImpl<KnowledgeBasesMapper,
             );
             indexParams.add(
                     IndexParam.builder()
+                            .fieldName("text")
+                            .indexType(IndexParam.IndexType.NGRAM)
+                            .extraParams(Map.of(
+                                    "min_gram", 2,
+                                    "max_gram", 3
+                            ))
+                            .build()
+            );
+            indexParams.add(
+                    IndexParam.builder()
                             .fieldName("fileName")
                             .indexType(IndexParam.IndexType.INVERTED)
                             .build()

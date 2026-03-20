@@ -3,6 +3,8 @@ package com.rag.ragserver.service;
 import com.rag.ragserver.domain.ConversationMessages;
 import com.baomidou.mybatisplus.extension.service.IService;
 
+import java.util.List;
+
 /**
 * @author make
 * @description 针对表【conversation_messages(RAG 对话消息历史表)】的数据库操作Service
@@ -32,4 +34,5 @@ public interface ConversationMessagesService extends IService<ConversationMessag
     Long countTodayTokens();
 
     Long countTodayTokens(Long userId);
+    List<ConversationMessages> getLastNRagContextMessages(Long sessionId, int n);
 }

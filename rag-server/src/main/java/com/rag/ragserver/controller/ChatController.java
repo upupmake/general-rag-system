@@ -121,19 +121,26 @@ public class ChatController {
                 .orderByAsc(ConversationMessages::getCreatedAt);
         List<ConversationMessages> messages = conversationMessagesService.list(messageQueryWrapper);
 
-        // 单独查询最后一条消息的 rag_context，避免加载历史消息的大字段
-        if (!messages.isEmpty()) {
-            ConversationMessages lastMsg = messages.get(messages.size() - 1);
-            ConversationMessages fullLastMsg = conversationMessagesService.getOne(
-                    new LambdaQueryWrapper<ConversationMessages>()
-                            .select(ConversationMessages::getRagContext)
-                            .eq(ConversationMessages::getId, lastMsg.getId())
-            );
-            if (fullLastMsg != null) {
-                lastMsg.setRagContext(fullLastMsg.getRagContext());
+        // 3. 单独查询最后5条assistant消息的 rag_context，避免加载历史消息的大字段
+        List<ConversationMessages> lastNRagMessages = conversationMessagesService.getLastNRagContextMessages(sessionId, 5);
+        // 注意last是倒序的
+        if (!lastNRagMessages.isEmpty()) {
+            int a = messages.size() - 1;
+            int b = 0;
+
+            while (b < lastNRagMessages.size()) {
+                long currentMessageId = lastNRagMessages.get(b).getId();
+                while (a >= 0 && !messages.get(a).getId().equals(currentMessageId)) {
+                    a--;
+                }
+                if (a >= 0) {
+                    messages.get(a).setRagContext(lastNRagMessages.get(b).getRagContext());
+                } else {
+                    break;
+                }
+                b++;
             }
         }
-
         return R.success(messages);
     }
 
