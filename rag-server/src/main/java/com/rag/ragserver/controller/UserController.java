@@ -125,7 +125,7 @@ public class UserController {
         String code = String.valueOf((int) ((Math.random() * 9 + 1) * 100000));
         redisTemplate.opsForValue().set("reset:code:" + email, code, 5, TimeUnit.MINUTES);
 
-        emailService.sendVerificationCode(email, code);
+        emailService.sendResetPasswordCode(email, code);
         return R.success("重置验证码已发送");
     }
 
