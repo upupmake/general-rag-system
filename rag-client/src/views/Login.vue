@@ -63,8 +63,9 @@ const onLogin = async () => {
   <AuthLayout>
     <div class="login-wrapper">
       <div class="auth-header">
-        <h2 class="title">欢迎回来</h2>
-        <p class="subtitle">登录您的账号以继续</p>
+        <div class="scene-tag">账号登录</div>
+        <h2 class="title">登录账号</h2>
+        <p class="subtitle">登录您的 RAG 账号，继续智能检索与对话。</p>
       </div>
 
       <a-form
@@ -124,13 +125,29 @@ const onLogin = async () => {
 <style scoped>
 .login-wrapper {
   width: 100%;
-  max-width: 388px;
-  padding: 0 24px;
+  max-width: 416px;
+  padding: 28px 28px 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #e8eefb;
+  box-shadow: 0 14px 36px rgba(16, 49, 110, 0.12);
 }
 
 .auth-header {
-  margin-bottom: 26px;
+  margin-bottom: 24px;
   text-align: center;
+}
+
+.scene-tag {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #3f6fd9;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
 }
 
 .title {
@@ -161,11 +178,18 @@ const onLogin = async () => {
 .auth-form :deep(.ant-input) {
   border-radius: 12px;
   border-color: #d7deec;
+  transition: all 0.25s ease;
 }
 
 .auth-form :deep(.ant-input-affix-wrapper:hover),
 .auth-form :deep(.ant-input:hover) {
   border-color: #8fb3ff;
+}
+
+.auth-form :deep(.ant-input-affix-wrapper-focused),
+.auth-form :deep(.ant-input:focus) {
+  border-color: #7ba6ff;
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
 }
 
 .auth-form :deep(.ant-btn-primary) {
@@ -218,6 +242,10 @@ const onLogin = async () => {
   .login-wrapper {
     max-width: 100%;
     padding: 26px 18px 20px;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    background: transparent;
   }
 
   .auth-header {

@@ -81,8 +81,9 @@ const goToLogin = () => {
   <AuthLayout>
     <div class="register-wrapper">
       <div class="auth-header">
-        <h2 class="title">创建账号</h2>
-        <p class="subtitle">注册 RAG 系统，开启智能知识库之旅</p>
+        <div class="scene-tag">快速注册</div>
+        <h2 class="title">注册账号</h2>
+        <p class="subtitle">创建您的 RAG 账号，立即开始智能检索与对话。</p>
       </div>
 
       <a-form
@@ -160,12 +161,28 @@ const goToLogin = () => {
 .register-wrapper {
   width: 100%;
   max-width: 416px;
-  padding: 0 24px;
+  padding: 28px 28px 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #e8eefb;
+  box-shadow: 0 14px 36px rgba(16, 49, 110, 0.12);
 }
 
 .auth-header {
-  margin-bottom: 22px;
+  margin-bottom: 24px;
   text-align: center;
+}
+
+.scene-tag {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #3f6fd9;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
 }
 
 .title {
@@ -196,11 +213,18 @@ const goToLogin = () => {
 .auth-form :deep(.ant-input) {
   border-radius: 12px;
   border-color: #d7deec;
+  transition: all 0.25s ease;
 }
 
 .auth-form :deep(.ant-input-affix-wrapper:hover),
 .auth-form :deep(.ant-input:hover) {
   border-color: #8fb3ff;
+}
+
+.auth-form :deep(.ant-input-affix-wrapper-focused),
+.auth-form :deep(.ant-input:focus) {
+  border-color: #7ba6ff;
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
 }
 
 .auth-form :deep(.ant-btn-primary) {
@@ -217,6 +241,17 @@ const goToLogin = () => {
 
 .code-btn {
   width: 120px;
+  border-radius: 12px;
+  border-color: #c9d8f9;
+  color: #315ec7;
+  font-weight: 600;
+}
+
+.code-btn:hover,
+.code-btn:focus {
+  border-color: #8fb3ff;
+  color: #1d4fb8;
+  background: #f4f8ff;
 }
 
 .footer-actions {
@@ -239,6 +274,10 @@ const goToLogin = () => {
   .register-wrapper {
     max-width: 100%;
     padding: 26px 18px 20px;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    background: transparent;
   }
 
   .title {

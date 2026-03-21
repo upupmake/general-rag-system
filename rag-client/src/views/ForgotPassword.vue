@@ -81,8 +81,8 @@ const goToLogin = () => {
     <div class="reset-wrapper">
       <div class="auth-header">
         <div class="scene-tag">邮箱安全验证</div>
-        <h2 class="title">重置密码</h2>
-        <p class="subtitle">通过邮箱验证码重置您的登录密码</p>
+        <h2 class="title">找回密码</h2>
+        <p class="subtitle">通过邮箱验证码重置密码，快速恢复账号访问。</p>
       </div>
 
       <a-form
