@@ -75,7 +75,7 @@ class MilvusClientManager:
         async with wrapper.lock:
             wrapper.last_access = time.time()
             # 确保 collection 已加载
-            res = await wrapper.store.aclient.get_load_state(collection_name)
+            res = wrapper.store.client.get_load_state(collection_name)
             state = res.get('state', LoadState.NotLoad)
             if state == LoadState.NotLoad:
                 try:
@@ -102,7 +102,7 @@ class MilvusClientManager:
         for key, wrapper in release_keys:
             async with wrapper.lock:
                 try:
-                    res = await wrapper.store.aclient.get_load_state(wrapper.store.collection_name)
+                    res = wrapper.store.client.get_load_state(wrapper.store.collection_name)
                     state = res.get('state', LoadState.NotLoad)
                     if state == LoadState.Loaded:
                         logger.info(f"[Milvus] release collection: {key}")
@@ -127,7 +127,7 @@ class MilvusClientManager:
         for key, wrapper in items:
             async with wrapper.lock:
                 try:
-                    res = await wrapper.store.aclient.get_load_state(wrapper.store.collection_name)
+                    res = wrapper.store.client.get_load_state(wrapper.store.collection_name)
                     state = res.get('state', LoadState.NotLoad)
                     if state == LoadState.Loaded:
                         logger.info(f"[Milvus] shutdown release collection: {key}")
