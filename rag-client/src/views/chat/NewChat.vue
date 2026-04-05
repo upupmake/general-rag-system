@@ -35,25 +35,18 @@ const toolConfigs = {
 }
 
 onMounted(async () => {
-  // 默认选第一个模型
+  // 默认选择 provider 为 qwen 的第一个模型
   models.value = await fetchAvailableModels().then()
 
   if (!selectedModel.value) {
-    const priorityNames = ["qwen3.5-plus", "gpt-5.2-chat-latest"]
-    let foundModel = null
+    // 优先选择 provider 为 qwen 的第一个模型
+    const qwenModel = models.value.find(m => m.provider === 'qwen')
 
-    // 按优先级查找
-    for (const name of priorityNames) {
-      foundModel = models.value.find(m => m.modelName === name)
-      if (foundModel) break
-    }
-
-    // 如果找到了优先级列表中的模型，使用它的ID
-    if (foundModel) {
-      selectedModel.value = foundModel.modelId
+    if (qwenModel) {
+      selectedModel.value = qwenModel.modelId
     } else {
-      // 否则回退到第一个可用模型
-      selectedModel.value = models.value[0]?.modelId || null
+      // 否则选择列表的最后一个模型
+      selectedModel.value = models.value[models.value.length - 1]?.modelId || null
     }
   }
 
