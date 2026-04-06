@@ -8,6 +8,7 @@
 # OS
 .DS_Store
 Thumbs.db
+.makecode
 
 # Frontend (rag-client)
 rag-client/node_modules/
