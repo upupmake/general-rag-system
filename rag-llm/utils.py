@@ -23,7 +23,6 @@ from langchain_text_splitters import (
 from sklearn.cluster import KMeans
 
 from gemini_utils import GeminiInstance
-from claude_utils import ClaudeInstance
 from openai_utils import OpenAIInstance
 
 logger = logging.getLogger(__name__)
@@ -88,16 +87,6 @@ def get_official_llm(
             base_url=base_url,
             enable_web_search=enable_web_search,
             enable_thinking=True,
-            timeout=timeout,
-            max_retries=max_retries,
-        )
-    elif provider == "anthropic":
-        return ClaudeInstance(
-            model_name=model_name,
-            api_key=api_key,
-            base_url=base_url,
-            enable_web_search=enable_web_search,
-            enable_thinking=enable_thinking,
             timeout=timeout,
             max_retries=max_retries,
         )
