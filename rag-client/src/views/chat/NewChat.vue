@@ -35,15 +35,15 @@ const toolConfigs = {
 }
 
 onMounted(async () => {
-  // 默认选择 provider 为 qwen 的第一个模型
+  // 默认选择 provider 为 minimax 的第一个模型
   models.value = await fetchAvailableModels().then()
 
   if (!selectedModel.value) {
-    // 优先选择 provider 为 qwen 的第一个模型
-    const qwenModel = models.value.find(m => m.provider === 'qwen')
+    // 优先选择 provider 为 minimax 的第一个模型
+    const minimaxModel = models.value.find(m => m.provider === 'minimax')
 
-    if (qwenModel) {
-      selectedModel.value = qwenModel.modelId
+    if (minimaxModel) {
+      selectedModel.value = minimaxModel.modelId
     } else {
       // 否则选择列表的最后一个模型
       selectedModel.value = models.value[models.value.length - 1]?.modelId || null
