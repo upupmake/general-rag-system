@@ -203,7 +203,7 @@ class RetrievalToolkit:
     async def _search_by_grep(
             self,
             keywords: List[str],
-            match_type: str = "OR",
+            match_mode: str = "OR",
             top_k: int = 15,
             file_names: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -212,10 +212,10 @@ class RetrievalToolkit:
             file_names = [fn.replace(" ", "") for fn in file_names if fn.strip()]
         scope = "全库" if not file_names else f"{len(file_names)}个文件"
         logger.info(
-            f"🔍 [1.grep检索] keywords={keywords}, type={match_type}, top_k={top_k}, scope={scope}, files={file_names}")
+            f"🔍 [1.grep检索] keywords={keywords}, mode={match_mode}, top_k={top_k}, scope={scope}, files={file_names}")
 
         keyword_conditions = [f'text like "%{self._escape(kw)}%"' for kw in keywords]
-        keyword_expr = f" {match_type} ".join(keyword_conditions)
+        keyword_expr = f" {match_mode} ".join(keyword_conditions)
 
         if file_names:
             file_conditions = [f'fileName == "{self._escape(fn)}"' for fn in file_names]
