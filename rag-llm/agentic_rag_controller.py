@@ -19,36 +19,95 @@ logger = logging.getLogger(__name__)
 
 CONTROLLER_SYSTEM_PROMPT = """你是 Agentic RAG 的检索决策控制器。你的任务不是直接回答用户，而是基于上下文选择最合适的检索工具来收集信息。
 
+## 工具列表
+
+1. **keyword_search** - 关键词精确匹配检索
+2. **read_file_chunks** - 按文件名读取连续chunk范围
+3. **expand_context** - 扩展已命中chunk的上下文
+4. **semantic_search** - 全库语义检索（多query并行+rerank+动态过滤）
+5. **find_files** - 根据文件名模式查找文件
+6. **stop_search** - 停止检索
+
 ## 决策原则
 
-1. **优先低成本工具**
-   - 已知精确文件名时，优先文件级工具（search_by_filename_and_chunk_range / extend_file_chunk_context_window）
-   - 已有明确关键词时，优先 search_by_grep
-   - 只有概念性问题且缺乏明确关键词时，才用 search_by_multi_queries_in_database
+### 1. 根据场景选择工具
+- 已知明确关键词或术语时，使用 keyword_search
+- 已知文件名需要连续阅读时，使用 read_file_chunks
+- 需要探索性检索或缺乏明确关键词时，使用 semantic_search
+- 已找到关键chunk需要上下文时，使用 expand_context
 
-2. **充分利用已检索信息**
-   - 关注文档的 fileName、chunkIndex、maxChunkIndex
-   - 避免重复检索相同内容
-   - 已定位关键 chunk 且只需上下文时，优先 extend_file_chunk_context_window
+### 2. 充分利用已检索信息
+- 关注文档的 fileName、chunkIndex、maxChunkIndex
+- 避免重复检索相同内容
+- 已定位关键 chunk 且只需上下文时，优先 expand_context
 
-3. **防止无效循环**
-   - 不要重复调用完全相同的工具和参数
-   - 连续无增量时应换工具或停止
-   - 同一方向检索连续无增量，应换工具或 stop_search
+### 3. 防止无效循环
+- 不要重复调用完全相同的工具和参数
+- 连续无增量时应换工具或 stop_search
+- 同一方向检索连续无增量，应换工具或 stop_search
 
-4. **停止条件**（调用 stop_search）
-   - 当前信息足以回答问题
-   - 检索结果持续无关
-   - 没有合理的新参数可构造
-   - 达到轮次上限
-   - 继续检索的边际收益极低
+### 4. 停止条件（调用 stop_search）
+- 当前信息足以回答问题
+- 检索结果持续无关
+- 没有合理的新参数可构造
+- 达到轮次上限
+- 继续检索的边际收益极低
 
-5. **参数构造要求**
-   - search_by_grep: keywords 必须具体，避免泛词；收敛用 AND，探索用 OR
-   - search_by_filename_and_chunk_range: 参考 maxChunkIndex 避免越界，单次不超过20个chunk
-   - extend_file_chunk_context_window: chunk_index 必须来自已命中的chunk
-   - search_by_multi_queries_in_database: queries 3~6条，从不同角度描述，grade_query 用核心问题
-   - list_filename_by_like: 使用 SQL LIKE 语法，%为通配符
+## 工具组合策略
+
+### 策略1: 文件定位 → 精确检索
+适用场景：用户问题涉及特定文件
+```
+find_files → 确认文件存在 → keyword_search 或 read_file_chunks
+```
+
+### 策略2: 语义探索 → 上下文扩展
+适用场景：概念性、探索性问题
+```
+semantic_search → 找到关键chunk → expand_context 扩展上下文
+```
+
+### 策略3: 关键词检索 → 失败降级
+适用场景：关键词明确但可能不精确
+```
+keyword_search → 无结果或结果不足 → semantic_search
+```
+
+### 策略4: 范围读取 → 细节补充
+适用场景：需要连续阅读某段内容
+```
+read_file_chunks → 找到关键内容 → expand_context 补充上下文
+```
+
+## 失败处理策略
+
+| 失败情况 | 应对策略 |
+|----------|----------|
+| keyword_search 无结果 | 1. 换关键词 2. 改用 semantic_search |
+| semantic_search 结果少 | 1. 调整 queries 2. 降低 grade_score_threshold |
+| 文件 chunk 越界 | 1. 检查 maxChunkIndex 2. 缩小范围 |
+| 连续无增量 | 1. 换工具 2. stop_search |
+
+## 参数构造要求
+
+### keyword_search
+- keywords 必须具体，避免泛词（如"方法"、"流程"太泛）
+- 收敛用 AND，探索用 OR
+
+### read_file_chunks
+- 参考 maxChunkIndex 避免越界
+- 单次不超过20个chunk
+
+### expand_context
+- chunk_index 必须来自已命中的chunk
+
+### semantic_search
+- queries 建议4~6条，从多角度、多方面生成，可用空格分隔多个关键词
+- grade_query 是用户本次问题或意图的完整改写
+- grade_score_threshold 根据问题类型调整
+
+### find_files
+- 使用 SQL LIKE 语法，%为通配符
 """
 
 
@@ -59,15 +118,17 @@ class RetrievalController:
 
     def __init__(self):
         model_info = {
-            "name": "qwen3.5-397b-a17b",
-            "provider": "other"
+            # "name": "qwen3.5-397b-a17b",
+            # "provider": "other"
+            "name": "MiniMax-M2.7-highspeed",
+            "provider": "minimax"
         }
         generate_config = {
-            "extra_body": {
-                "thinking": {
-                    "type": "disabled"
-                },
-            }
+            # "extra_body": {
+            #     "thinking": {
+            #         "type": "disabled"
+            #     },
+            # }
         }
         self.llm = get_langchain_llm(model_info, **generate_config)
 

@@ -18,46 +18,112 @@ logger = logging.getLogger(__name__)
 
 # ============= 工具参数模型 =============
 
-class GrepSearchInput(BaseModel):
-    """search_by_grep: 基于关键词精确匹配检索"""
-    keywords: List[str] = Field(description="关键词列表，必须具体，避免泛词")
-    match_type: Literal["AND", "OR"] = Field(default="OR", description="匹配模式")
-    top_k: int = Field(default=15, description="返回条数限制")
-    file_names: Optional[List[str]] = Field(default=None, description="文件名列表，为空则全库检索")
+class KeywordSearchInput(BaseModel):
+    """keyword_search: 基于关键词精确匹配检索"""
+    keywords: List[str] = Field(
+        description=(
+            "关键词列表，必须是文档中可能出现的具体术语、函数名、配置项、错误码等。"
+            "示例：['学籍管理', '注册流程', '休学复学', '转专业', '毕业要求', '学位授予'] "
+            "或 ['def train_model', 'learning_rate', 'batch_size', 'optimizer', 'loss_function']"
+        )
+    )
+    match_mode: Literal["AND", "OR"] = Field(
+        default="OR",
+        description=(
+            "匹配模式：OR=任意关键词匹配（扩大范围），AND=所有关键词必须出现（缩小范围）。"
+            "建议：探索性问题用OR，精确查找用AND"
+        )
+    )
+    top_k: int = Field(default=15, description="返回结果数量上限，默认15条")
+    file_names: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "限定检索范围的文件名列表。为空则全库检索。"
+            "示例：['研究生手册.pdf', '学籍管理规定.docx', '学位授予办法.pdf', '培养方案.docx', '课程设置.xlsx']"
+        )
+    )
 
 
-class ChunkRangeInput(BaseModel):
-    """search_by_filename_and_chunk_range: 按文件名获取chunk范围"""
-    file_name: str = Field(description="精确文件名")
-    start_chunk_index: int = Field(description="起始chunk索引，包含")
-    end_chunk_index: int = Field(description="结束chunk索引，包含")
+class ReadFileChunksInput(BaseModel):
+    """read_file_chunks: 按文件名读取连续chunk范围"""
+    file_name: str = Field(
+        description="精确文件名，可通过 find_files 工具获取"
+    )
+    start_chunk_index: int = Field(
+        description="起始chunk索引（包含），从0开始"
+    )
+    end_chunk_index: int = Field(
+        description="结束chunk索引（包含）。注意：单次范围不能超过20个chunk"
+    )
 
 
-class ContextWindowInput(BaseModel):
-    """extend_file_chunk_context_window: 扩展chunk上下文窗口"""
-    file_name: str = Field(description="精确文件名")
-    chunk_index: int = Field(description="中心chunk索引，必须来自已命中的chunk")
-    window_size: int = Field(default=2, description="上下文窗口大小，前后各取window_size个chunk")
+class ExpandContextInput(BaseModel):
+    """expand_context: 扩展已命中chunk的上下文窗口"""
+    file_name: str = Field(
+        description="精确文件名，必须来自已检索到的文档"
+    )
+    chunk_index: int = Field(
+        description="中心chunk索引，必须来自已命中的chunk"
+    )
+    window_size: int = Field(
+        default=2,
+        description=(
+            "上下文窗口大小，前后各取window_size个chunk。"
+            "默认2，即中心chunk前后各取2个，共5个chunk"
+        )
+    )
 
 
 class SemanticSearchInput(BaseModel):
-    """search_by_multi_queries_in_database: 全库语义检索"""
-    queries: List[str] = Field(description="多语义查询列表，建议3~6条，从不同角度描述同一问题")
-    grade_query: str = Field(description="用于rerank的核心问题，通常是用户原始问题")
-    top_k: int = Field(default=10, description="最终返回条数")
-    grade_score_threshold: float = Field(default=0.3, description="Rerank分数阈值，0.3~0.6")
+    """semantic_search: 全库语义检索（多query并行+rerank+动态过滤）"""
+    queries: List[str] = Field(
+        description=(
+            "从多角度、多方面生成的相关查询列表（建议4-6条）。"
+            "每个query可以用空格分隔多个关键词，系统会同时进行语义匹配和关键词匹配。"
+            "示例：用户问'研究生学籍管理规定有哪些' → "
+            "queries=['研究生 学籍管理 规定', '学生 注册 入学流程', '休学 复学 保留学籍', "
+            "'转专业 转学 学籍变动', '毕业要求 学位授予条件', '纪律处分 学籍处理']"
+        )
+    )
+    grade_query: str = Field(
+        description=(
+            "用于对检索结果进行相关性打分的查询，应该是用户本次问题或用户本次意图的完整改写。"
+            "示例：用户问'研究生学籍管理规定有哪些' → grade_query='研究生学籍管理的相关规定和要求'"
+        )
+    )
+    top_k: int = Field(
+        default=10,
+        description="最终返回结果数量，默认10条"
+    )
+    grade_score_threshold: float = Field(
+        default=0.3,
+        description=(
+            "Rerank相关性分数阈值（0.0-1.0）。"
+            "建议：通用问题0.3-0.4，精确问题0.5-0.6，探索性问题0.2-0.3"
+        )
+    )
 
 
-class FileListInput(BaseModel):
-    """list_filename_by_like: 文件名模式匹配"""
-    pattern: str = Field(description="文件名匹配模式，SQL LIKE语法，如 doc% 或 %report%")
-    offset: int = Field(default=0, description="偏移量")
-    limit: int = Field(default=30, description="返回数量限制")
+class FindFilesInput(BaseModel):
+    """find_files: 根据文件名模式查找文件"""
+    pattern: str = Field(
+        description=(
+            "文件名匹配模式，使用 % 作为通配符。"
+            "示例：'研究生%' 匹配以'研究生'开头的文件，'%手册%' 匹配包含'手册'的文件"
+        )
+    )
+    offset: int = Field(default=0, description="分页偏移量")
+    limit: int = Field(default=30, description="单次返回数量上限，默认30")
 
 
 class StopSearchInput(BaseModel):
     """stop_search: 停止检索"""
-    reason: str = Field(description="停止检索的理由")
+    reason: str = Field(
+        description=(
+            "停止检索的理由，必须明确说明。"
+            "示例：'已找到完整的学籍管理规定' 或 '知识库中没有相关内容'"
+        )
+    )
 
 
 # ============= 检索工具集 =============
@@ -375,38 +441,66 @@ class RetrievalToolkit:
     def _build_tools(self) -> List[StructuredTool]:
         return [
             StructuredTool(
-                name="search_by_grep",
-                description="基于关键词精确匹配检索正文内容，支持全库/单文件/多文件范围检索。适合已知明确关键词：函数名、类名、配置项、错误码、术语。",
-                args_schema=GrepSearchInput,
+                name="keyword_search",
+                description=(
+                    "基于关键词精确匹配检索正文内容。"
+                    "【适用场景】已知明确的术语、函数名、配置项、错误码等。"
+                    "【特点】精确匹配，无法处理同义词或近义词。"
+                    "【典型用法】搜索'学籍管理规定'、'def train_model'、'MySQL连接超时'等。"
+                ),
+                args_schema=KeywordSearchInput,
                 coroutine=self._search_by_grep,
             ),
             StructuredTool(
-                name="search_by_filename_and_chunk_range",
-                description="已知精确文件名时，按chunk范围顺序读取正文。单次范围不超过20个chunk。返回结果按chunkIndex升序。",
-                args_schema=ChunkRangeInput,
+                name="read_file_chunks",
+                description=(
+                    "按文件名和chunk范围顺序读取正文内容。"
+                    "【适用场景】已知文件名，需要读取连续段落或章节。"
+                    "【优点】按顺序读取，适合连续阅读。"
+                    "【限制】单次最多20个chunk，超出需分次调用。"
+                    "【典型用法】读取'研究生手册.pdf'的第10-15个chunk。"
+                ),
+                args_schema=ReadFileChunksInput,
                 coroutine=self._search_by_filename_and_chunk_range,
             ),
             StructuredTool(
-                name="extend_file_chunk_context_window",
-                description="围绕某个已命中的chunk，快速查看前后上下文。适合局部扩展，不适合大范围通读。",
-                args_schema=ContextWindowInput,
+                name="expand_context",
+                description=(
+                    "围绕某个已命中的chunk，扩展查看前后上下文。"
+                    "【适用场景】已找到关键chunk，需要查看其上下文。"
+                    "【限制】只能基于已命中的chunk扩展，不适合大范围通读。"
+                    "【典型用法】找到第5个chunk后，扩展查看第3-7个chunk。"
+                ),
+                args_schema=ExpandContextInput,
                 coroutine=self._extend_file_chunk_context_window,
             ),
             StructuredTool(
-                name="search_by_multi_queries_in_database",
-                description="全库语义检索：多query并行召回+rerank+动态阈值过滤。适合概念性探索、缺乏明确关键词的问题。高成本工具。",
+                name="semantic_search",
+                description=(
+                    "全库语义检索：多query并行召回 + rerank重排序 + 动态阈值过滤。"
+                    "【适用场景】概念性、探索性问题，可在无明确关键词时根据问题语义进行检索。"
+                    "【特点】能发现语义相关的内容，覆盖面广。"
+                ),
                 args_schema=SemanticSearchInput,
                 coroutine=self._search_by_multi_queries_in_database,
             ),
             StructuredTool(
-                name="list_filename_by_like",
-                description="按文件名模式查找候选文件，仅返回元信息不返回正文。使用SQL LIKE语法，%为通配符。后续需用文件级工具读取正文。",
-                args_schema=FileListInput,
+                name="find_files",
+                description=(
+                    "根据文件名模式查找文件，仅返回元信息（文件名、文档ID、总chunk数），不返回正文。"
+                    "【适用场景】不确定精确文件名时，先查找文件列表。"
+                    "【后续操作】找到文件后，需用 keyword_search 或 read_file_chunks 读取正文。"
+                    "【典型用法】查找所有包含'手册'的文件：pattern='%手册%'。"
+                ),
+                args_schema=FindFilesInput,
                 coroutine=self._list_filename_by_like,
             ),
             StructuredTool(
                 name="stop_search",
-                description="停止检索，表示已获取足够信息来回答用户问题，或继续检索已无价值。",
+                description=(
+                    "停止检索，表示已获取足够信息来回答用户问题，或继续检索已无价值。"
+                    "【触发条件】信息足够、结果无关、无法构造新查询、达到轮次上限。"
+                ),
                 args_schema=StopSearchInput,
                 coroutine=self._stop_search,
             ),

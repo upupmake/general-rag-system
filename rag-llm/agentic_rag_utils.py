@@ -144,7 +144,7 @@ class AgenticRAGService:
         Returns:
             用于 ToolMessage.content 的字符串
         """
-        if tool_name == "list_filename_by_like":
+        if tool_name == "find_files":
             results = tool_result.get("results", [])
             if not results:
                 return "未找到匹配的文件"
@@ -282,8 +282,8 @@ class AgenticRAGService:
                     new_docs = tool_result["results"]
                     before_count = len(reference_docs)
 
-                    # list_filename_by_like 只返回元信息，不加入reference_docs
-                    if tool_name != "list_filename_by_like":
+                    # find_files 只返回元信息，不加入reference_docs
+                    if tool_name != "find_files":
                         for doc in new_docs:
                             pk = doc.metadata.get("pk")
                             if pk and pk not in reference_docs:
