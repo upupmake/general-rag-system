@@ -103,7 +103,7 @@ read_file_chunks → 找到关键内容 → expand_context 补充上下文
 
 ### semantic_search
 - queries 建议4~6条，从多角度、多方面生成，可用空格分隔多个关键词
-- grade_query 是用户本次问题或意图的完整改写
+- grade_query 是对用户问题核心概念的展开和细化，列举可能涉及的各个方面
 - grade_score_threshold 根据问题类型调整
 
 ### find_files
