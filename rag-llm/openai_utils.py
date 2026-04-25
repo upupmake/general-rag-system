@@ -87,6 +87,7 @@ class OpenAIInstance:
                 or self.provider == "z-ai"
                 or self.provider == "moonshotai"
                 or self.provider == "xiaomi"
+                or self.provider == "bytedance"
         ):
             # 配置思考
             if self.enable_thinking:
@@ -101,18 +102,6 @@ class OpenAIInstance:
             # 配置网页搜索
             if self.enable_web_search:
                 tools.append({"type": "web_search"})
-        elif self.model_name.startswith("doubao-seed"):
-            # 配置网页搜索
-            if self.enable_web_search:
-                tools.append({
-                    "type": "web_search",
-                    "max_keyword": 3,
-                })
-            # 配置思考
-            if self.enable_thinking:
-                reasoning['effort'] = "medium"
-            else:
-                reasoning['effort'] = "minimal"
         elif "grok-4" in self.model_name:
             if self.enable_thinking:
                 reasoning_effort = "high"
@@ -152,6 +141,7 @@ class OpenAIInstance:
                     or "minimax" == self.provider
                     or "xiaomi" == self.provider
                     or "anthropic" == self.provider
+                    or "bytedance" == self.provider
 
             ):
                 # 只支持 chat api
