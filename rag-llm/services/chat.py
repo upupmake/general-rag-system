@@ -314,7 +314,8 @@ async def chat_stream(
             context_multiplier = None
 
     if model.get("provider") == "anthropic":
-        model["name"] = "claude-4.5-haiku"
+        model["provider"] = "qwen"
+        model["name"] = "qwen/qwen3.5-plus"
 
     prompt_tokens = 0
     if history:
