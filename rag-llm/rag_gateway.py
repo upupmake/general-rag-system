@@ -58,11 +58,10 @@ class RAGGateway:
     """
 
     def __init__(self):
-        """初始化RAG网关，使用qwen3-max-2026-01-23模型"""
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "deepseek/deepseek-v3.2-251201",
+            "name": "deepseek/deepseek-v4-flash",
             "provider": "other"
         }
 

@@ -3,8 +3,8 @@ import {ref, onMounted, computed, h, watch, onUnmounted} from 'vue'
 import {useRouter, useRoute} from 'vue-router'
 import {message, Button, Typography} from 'ant-design-vue'
 import {Conversations} from 'ant-design-x-vue'
-import {CommentOutlined, ClockCircleOutlined, DeleteOutlined} from '@ant-design/icons-vue'
-import {deleteSession, fetchSessions} from '@/api/chatApi'
+import {CommentOutlined, ClockCircleOutlined, DeleteOutlined, DownloadOutlined} from '@ant-design/icons-vue'
+import {deleteSession, fetchSessions, fetchSessionMessages} from '@/api/chatApi'
 import {events} from '@/events.js';
 
 const router = useRouter()
@@ -43,8 +43,59 @@ const conversationItems = computed(() =>
         }))
     )
 )
+const exportSession = async (sessionId) => {
+  try {
+    const messages = await fetchSessionMessages(sessionId)
+    if (!messages || messages.length === 0) {
+      message.warning('该会话没有消息可导出')
+      return
+    }
+
+    // 格式化为 Markdown
+    let mdContent = `# 会话 ${sessionId}\n\n`
+    messages.forEach(msg => {
+      const role = msg.role === 'user' ? '用户' : 'AI'
+      const content = msg.content || ''
+      mdContent += `## ${role}\n\n`
+      // 思考内容（引用格式，支持多行）
+      if (msg.thinking) {
+        mdContent += `> 思考内容：\n`
+        const lines = msg.thinking.split('\n')
+        for (const line of lines) {
+          mdContent += `> ${line}\n`
+        }
+        mdContent += '\n'
+      }
+      mdContent += `${content}\n\n---\n\n`
+    })
+
+    // 创建下载链接
+    const blob = new Blob([mdContent], {type: 'text/markdown;charset=utf-8'})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${sessionId}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    message.success('导出成功')
+  } catch (e) {
+    console.error('导出失败:', e)
+    message.error('导出失败，请重试')
+  }
+}
+
 const menu = (conversation) => ({
   items: [
+    {
+      label: '导出 Markdown',
+      key: 'export',
+      icon: h(DownloadOutlined),
+    },
+    {
+      type: 'divider',
+    },
     {
       label: '删除会话',
       key: 'delete',
@@ -67,6 +118,8 @@ const menu = (conversation) => ({
           router.push('/chat/new')
         }
       })
+    } else if (menuInfo.key === 'export') {
+      exportSession(conversation.key)
     }
   },
 });

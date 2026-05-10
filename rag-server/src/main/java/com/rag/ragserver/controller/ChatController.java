@@ -28,6 +28,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import javax.servlet.http.HttpServletRequest;
+import java.time.Duration;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +45,7 @@ public class ChatController {
     private final KnowledgeBasesService knowledgeBasesService;
     private final KbPermissionService kbPermissionService;
     private final RolesService rolesService;
+    private final RequestLimitationsService requestLimitationsService;
     private final WebClient webClient;
 
     @PostMapping("/start")
@@ -373,7 +375,7 @@ public class ChatController {
                 "options", options
         );
 
-        return webClient.post()
+        Flux<String> streamFlux = webClient.post()
                 .uri("/rag/chat/stream")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(info)
@@ -386,6 +388,17 @@ public class ChatController {
                 .doOnCancel(() -> updateMessageStatus(sessionId, currentUserMessageId, "pending"))
                 .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo))
                 .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo));
+
+        RequestLimitations requestLimitations = requestLimitationsService.getOne(
+                new LambdaQueryWrapper<RequestLimitations>()
+                        .eq(RequestLimitations::getUserId, userId)
+                        .last("limit 1")
+        );
+        Integer delaySecond = requestLimitations == null ? null : requestLimitations.getDelaySecond();
+        if (delaySecond != null && delaySecond > 0) {
+            return streamFlux.delaySubscription(Duration.ofSeconds(delaySecond));
+        }
+        return streamFlux;
     }
 
     private Flux<String> processStreamEvent(ServerSentEvent<String> event, StringBuffer sb, StringBuffer thinkingSb,

@@ -18,10 +18,4 @@ class RagServerApplicationTests {
 
     }
 
-    @Test
-    void testGetLastNRagContextMessages(){
-        List<ConversationMessages> lastNRagContextMessages = conversationMessagesService.getLastNRagContextMessages(3278L, 5);
-        System.out.println(lastNRagContextMessages);
-    }
-
 }

@@ -29,7 +29,10 @@ class OpenAIInstance:
             api_key=api_key,
             base_url=base_url,
             timeout=timeout,
-            max_retries=max_retries
+            max_retries=max_retries,
+            default_headers={
+                "User-Agent": "MakeCode Agent",
+            },
         )
 
     def response_api_extract(self, chunk):

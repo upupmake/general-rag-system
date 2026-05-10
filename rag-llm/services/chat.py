@@ -36,7 +36,7 @@ async def get_session_name(body: dict = Body()):
     """根据用户第一条消息生成会话标题"""
     content = body.get("content", "")
     try:
-        model = {"name": "deepseek/deepseek-v3.2-251201", "provider": "other"}
+        model = {"name": "deepseek/deepseek-v4-flash", "provider": "other"}
         llm = get_langchain_llm(model)
         llm = get_structured_data_agent(llm, _SessionTitle)
         messages = [
@@ -314,8 +314,8 @@ async def chat_stream(
             context_multiplier = None
 
     if model.get("provider") == "anthropic":
-        model["provider"] = "qwen"
-        model["name"] = "qwen/qwen3.5-plus"
+        model["provider"] = "xiaomi"
+        model["name"] = "mimo-v2.5-pro"
 
     prompt_tokens = 0
     if history:
