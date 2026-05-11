@@ -147,17 +147,10 @@ class RAGService:
 ## 当前问题
 {question}"""
         model_info = {
-            'name': 'qwen3-max-2026-01-23',
-            'provider': 'other'
+            'name': 'MiniMax-M2.7-highspeed',
+            'provider': 'minimax'
         }
-        generate_config = {
-            "extra_body": {
-                "thinking": {
-                    "type": "disabled"
-                },
-            }
-        }
-        llm = get_langchain_llm(model_info, **generate_config)
+        llm = get_langchain_llm(model_info)
         structured_agent = get_structured_data_agent(llm, MultiQueryList)
         result = await structured_agent.ainvoke({"messages": [
             {"role": "system", "content": system_instruction},

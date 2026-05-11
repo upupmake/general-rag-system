@@ -158,9 +158,15 @@ def get_langchain_llm(
 ):
     # 初始化langchain类型的LLM
     settings = _get_model_setting(model_info)
+    provider = model_info.get("provider")
     model_name = model_info.get("name")
     api_key = settings.get("api_key")
     base_url = settings.get("base_url")
+
+    if provider == "minimax":
+        extra_body = {"reasoning_split": True}
+        extra_body.update(kwargs.pop("extra_body", {}))
+        kwargs["extra_body"] = extra_body
 
     llm = init_chat_model(
         model=model_name,
@@ -181,7 +187,7 @@ def get_structured_data_agent(
     return create_agent(
         model=llm,
         response_format=data_type
-    )
+    ).with_config({"recursion_limit": 5})
 
 
 def markdown_split(
