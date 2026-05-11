@@ -130,7 +130,7 @@ class RetrievalController:
             #     },
             # }
         }
-        self.llm = get_langchain_llm(model_info, **generate_config)
+        self.llm = get_langchain_llm(model_info, max_retries=2, **generate_config)
 
     @staticmethod
     def _format_history(history: list) -> str:

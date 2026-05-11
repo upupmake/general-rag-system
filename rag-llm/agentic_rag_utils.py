@@ -222,15 +222,29 @@ class AgenticRAGService:
             logger.info(f"\n📍 第{round_no}轮")
             total_rounds = round_no
 
-            response: AIMessage = await self.controller.decide_next_action(
-                question=question,
-                history=history,
-                reference_docs=list(reference_docs.values()),
-                tool_messages=tool_messages,
-                tools=self.toolkit.get_tools(),
-                current_round=round_no,
-                max_rounds=max_rounds,
-            )
+            try:
+                response: AIMessage = await self.controller.decide_next_action(
+                    question=question,
+                    history=history,
+                    reference_docs=list(reference_docs.values()),
+                    tool_messages=tool_messages,
+                    tools=self.toolkit.get_tools(),
+                    current_round=round_no,
+                    max_rounds=max_rounds,
+                )
+            except Exception as e:
+                logger.error(f"❌ 第{round_no}轮决策失败，停止检索并基于已有结果生成答案: {e}")
+                yield {
+                    "type": "process",
+                    "payload": {
+                        "step": f"round_{round_no}",
+                        "title": "决策失败",
+                        "description": "检索决策模型调用失败，已停止检索并将基于已有结果生成答案",
+                        "content": f"**决策失败**\n\n错误: {str(e)}\n\n将基于当前已检索到的 {len(reference_docs)} 个文档切片生成答案。",
+                        "status": "error"
+                    }
+                }
+                break
 
             # 无工具调用 = LLM 决定停止
             if not response.tool_calls:
