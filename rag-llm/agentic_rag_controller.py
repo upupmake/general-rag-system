@@ -118,17 +118,10 @@ class RetrievalController:
 
     def __init__(self):
         model_info = {
-            # "name": "qwen3.5-397b-a17b",
-            # "provider": "other"
-            "name": "MiniMax-M2.7-highspeed",
+            "name": "MiniMax-M2.7",
             "provider": "minimax"
         }
         generate_config = {
-            # "extra_body": {
-            #     "thinking": {
-            #         "type": "disabled"
-            #     },
-            # }
         }
         self.llm = get_langchain_llm(model_info, max_retries=2, **generate_config)
 

@@ -103,8 +103,8 @@ def get_official_llm(
 
 
 def get_local_embedding_instance(embedding_info: dict):
-    base_url = embedding_info.get("base_url", "http://192.168.188.6:8890")
-    model_name = embedding_info.get("name", "Qwen/Qwen3-Embedding-0.6B")
+    base_url = "http://192.168.188.6:8890"
+    model_name = "Qwen/Qwen3-Embedding-0.6B"
     return init_embeddings(
         model=model_name,
         api_key="local",
@@ -330,7 +330,7 @@ async def image_split(
 
     # 2. 获取配置
     model_info = {
-        'name': 'qwen3.5-flash',
+        'name': 'qwen3.6-flash',
         'provider': 'qwen'
     }
     config = _load_config_cached()

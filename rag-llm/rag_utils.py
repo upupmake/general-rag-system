@@ -147,7 +147,7 @@ class RAGService:
 ## 当前问题
 {question}"""
         model_info = {
-            'name': 'MiniMax-M2.7-highspeed',
+            'name': 'MiniMax-M2.7',
             'provider': 'minimax'
         }
         llm = get_langchain_llm(model_info)

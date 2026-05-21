@@ -61,7 +61,7 @@ class RAGGateway:
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "MiniMax-M2.7-highspeed",
+            "name": "MiniMax-M2.7",
             "provider": "minimax"
         }
 
