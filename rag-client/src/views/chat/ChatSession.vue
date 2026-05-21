@@ -11,6 +11,7 @@ import {
   BulbOutlined,
   CaretRightOutlined,
   HistoryOutlined,
+  UpOutlined,
 } from '@ant-design/icons-vue'
 import {Bubble, Sender, ThoughtChain} from 'ant-design-x-vue'
 import {useRoute} from 'vue-router'
@@ -116,8 +117,24 @@ const {
 
 // Mobile detection
 const isMobile = ref(false)
+const inputExpanded = ref(false)
 const checkIsMobile = () => {
   isMobile.value = window.innerWidth <= 768
+}
+
+const expandInput = () => {
+  inputExpanded.value = true
+}
+
+const collapseInput = () => {
+  inputExpanded.value = false
+}
+
+const handleSend = (text) => {
+  const value = typeof text === 'string' ? text : question.value
+  if (!value) return
+  onSend(value)
+  inputExpanded.value = false
 }
 
 // Thinking collapse handler
@@ -338,12 +355,22 @@ const confirmContextCustom = () => {
     <!-- 输入区域 -->
     <div class="input-container">
       <div class="input-wrapper">
+        <button
+            v-if="!inputExpanded"
+            type="button"
+            class="input-collapsed-bar"
+            @click="expandInput"
+        >
+          <span class="input-collapsed-text">{{ question ? question : '输入消息，点击展开' }}</span>
+        </button>
+
         <Sender
+            v-else
             v-model:value="question"
             :loading="loading || isGenerating || isLastUserMsgGenerating"
             :actions="false"
             :auto-size="{ minRows: 2, maxRows: 6 }"
-            @submit="onSend"
+            @submit="handleSend"
             class="chat-sender"
             placeholder="输入消息，Shift + Enter 换行，Enter 发送"
         >
@@ -475,9 +502,16 @@ const confirmContextCustom = () => {
                   </template>
                 </a-popover>
 
+                <a-button
+                    type="text"
+                    size="small"
+                    :icon="h(UpOutlined)"
+                    title="收起输入区"
+                    @click="collapseInput"/>
+
                 <component :is="(loading || isGenerating || isLastUserMsgGenerating) ? LoadingButton : SendButton"
                            type="primary" :disabled="loading || isGenerating || isLastUserMsgGenerating || !question"
-                           @click="!loading && !isGenerating && !isLastUserMsgGenerating && onSend(question)"/>
+                           @click="!loading && !isGenerating && !isLastUserMsgGenerating && handleSend(question)"/>
               </div>
             </div>
           </template>

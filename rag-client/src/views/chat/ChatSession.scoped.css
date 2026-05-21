@@ -148,6 +148,41 @@
   transition: all 0.3s ease;
 }
 
+.input-collapsed-bar {
+  width: 100%;
+  height: 48px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  color: #999;
+  font-size: 14px;
+  text-align: left;
+  background: white;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  cursor: text;
+  transition: all 0.3s ease;
+}
+
+.input-collapsed-bar:hover {
+  color: #666;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+.input-collapsed-bar:focus-visible {
+  outline: none;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.25);
+}
+
+.input-collapsed-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .chat-sender:hover {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
 }
@@ -371,6 +406,15 @@
 }
 
 /* ================= 暗色模式 (Scoped部分) ================= */
+.chat-session-container.is-dark .input-collapsed-bar {
+  color: #a6a6a6;
+  background: #1e1e1e;
+}
+
+.chat-session-container.is-dark .input-collapsed-bar:hover {
+  color: #d9d9d9;
+}
+
 /* 工具项暗色适配 */
 .chat-session-container.is-dark .header-tool-item {
   background: rgba(255, 255, 255, 0.05);
