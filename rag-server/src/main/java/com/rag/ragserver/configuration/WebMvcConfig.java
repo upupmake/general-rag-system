@@ -33,7 +33,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 // 2. 放行的接口
                 .excludePathPatterns(
                         "/error",           // Spring Boot 默认的错误处理路径，避免拦截器干扰错误响应
-                        "/users/*"
+                        "/users/test",
+                        "/users/send-code",
+                        "/users/register",
+                        "/users/send-reset-code",
+                        "/users/reset-password",
+                        "/users/login"
                 );
     }
 }

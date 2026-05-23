@@ -3,14 +3,12 @@ import {defineStore} from 'pinia'
 import commonApi from '@/api/commonApi'
 
 const TOKEN_KEY = 'rag_token'
-const USER_KEY = 'rag_user'
+localStorage.removeItem('rag_user')
 
 export const useUserStore = defineStore('user', {
     state: () => ({
         token: localStorage.getItem(TOKEN_KEY) || '',
-        user: localStorage.getItem(USER_KEY)
-            ? JSON.parse(localStorage.getItem(USER_KEY))
-            : null
+        user: null
     }),
 
     getters: {
@@ -61,7 +59,6 @@ export const useUserStore = defineStore('user', {
             this.user = data.user
 
             localStorage.setItem(TOKEN_KEY, this.token)
-            localStorage.setItem(USER_KEY, JSON.stringify(this.user))
         },
 
         /**
@@ -69,7 +66,6 @@ export const useUserStore = defineStore('user', {
          */
         async fetchCurrentUser() {
             this.user = await commonApi.get('/users/me')
-            localStorage.setItem(USER_KEY, JSON.stringify(this.user))
         },
 
         /**
@@ -87,7 +83,6 @@ export const useUserStore = defineStore('user', {
                 this.token = ''
                 this.user = null
                 localStorage.removeItem(TOKEN_KEY)
-                localStorage.removeItem(USER_KEY)
                 // 跳转到登录页
                 window.location.href = '/login'
             }
@@ -101,7 +96,6 @@ export const useUserStore = defineStore('user', {
                 ...this.user,
                 ...partial
             }
-            localStorage.setItem(USER_KEY, JSON.stringify(this.user))
         }
     }
 })

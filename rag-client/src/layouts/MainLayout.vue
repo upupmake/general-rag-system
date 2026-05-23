@@ -51,6 +51,11 @@ onMounted(() => {
   window.addEventListener('resize', checkIsMobile)
   document.addEventListener('click', handleDocumentClick)
   loadCurrentWorkspace()
+  if (userStore.token) {
+    userStore.fetchCurrentUser().catch(() => {
+      router.push('/login')
+    })
+  }
 })
 
 onUnmounted(() => {
@@ -63,7 +68,11 @@ const userDisplayName = computed(() => {
   return userStore.user?.username || userStore.user?.email || '未登录'
 })
 
-const isMemberUser = computed(() => userStore.user?.role?.id === 1)
+const isMemberUser = computed(() => {
+  const user = userStore.user
+  const roleId = user?.roleId ?? user?.role_id ?? user?.role?.id
+  return Number(roleId) === 1
+})
 
 const userRoleLabel = computed(() => isMemberUser.value ? '会员用户' : '普通用户')
 

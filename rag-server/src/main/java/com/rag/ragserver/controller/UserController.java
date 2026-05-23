@@ -18,9 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
+import javax.servlet.http.HttpServletRequest;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -189,6 +188,8 @@ public class UserController {
         userInfo.put("username", user.getUsername());
         userInfo.put("email", user.getEmail());
         userInfo.put("bz", user.getBz());
+        userInfo.put("roleId", user.getRoleId());
+        userInfo.put("role_id", user.getRoleId());
 
         Roles role = rolesService.getById(user.getRoleId());
         if (role != null) {
@@ -203,6 +204,31 @@ public class UserController {
                 "token", token,
                 "user", userInfo
         ));
+    }
+
+    @GetMapping("/me")
+    public R<Map<String, Object>> me(HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        Users user = usersService.getById(userId);
+
+        Map<String, Object> userInfo = new HashMap<>();
+        userInfo.put("id", user.getId());
+        userInfo.put("username", user.getUsername());
+        userInfo.put("email", user.getEmail());
+        userInfo.put("bz", user.getBz());
+        userInfo.put("roleId", user.getRoleId());
+        userInfo.put("role_id", user.getRoleId());
+
+        Roles role = rolesService.getById(user.getRoleId());
+        if (role != null) {
+            userInfo.put("role", Map.of(
+                    "id", role.getId(),
+                    "name", role.getName(),
+                    "weight", role.getWeight(),
+                    "dailyMaxTokens", role.getDailyMaxTokens()
+            ));
+        }
+        return R.success(userInfo);
     }
 
     @PostMapping("/logout")
