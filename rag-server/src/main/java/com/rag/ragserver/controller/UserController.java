@@ -188,6 +188,7 @@ public class UserController {
         userInfo.put("id", user.getId());
         userInfo.put("username", user.getUsername());
         userInfo.put("email", user.getEmail());
+        userInfo.put("bz", user.getBz());
 
         Roles role = rolesService.getById(user.getRoleId());
         if (role != null) {

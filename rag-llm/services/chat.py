@@ -280,8 +280,24 @@ def build_langchain_messages(history: list) -> list:
         if role == 'user':
             langchain_messages.append(HumanMessage(content=content))
         elif role == 'assistant':
-            langchain_messages.append(AIMessage(content=content))
+            thinking = msg.get('thinking')
+            additional_kwargs = {}
+            if thinking:
+                additional_kwargs['reasoning_content'] = thinking
+            langchain_messages.append(AIMessage(content=content, additional_kwargs=additional_kwargs))
     return langchain_messages
+
+
+def langchain_message_to_chat_dict(msg):
+    if isinstance(msg, HumanMessage):
+        return {"role": "user", "content": msg.content}
+    if isinstance(msg, AIMessage):
+        item = {"role": "assistant", "content": msg.content}
+        reasoning_content = msg.additional_kwargs.get("reasoning_content")
+        if reasoning_content:
+            item["reasoning_content"] = reasoning_content
+        return item
+    return None
 
 
 """
@@ -415,10 +431,9 @@ async def chat_stream(
 
         messages = []
         for msg in all_messages:
-            if isinstance(msg, HumanMessage):
-                messages.append({"role": "user", "content": msg.content})
-            elif isinstance(msg, AIMessage):
-                messages.append({"role": "assistant", "content": msg.content})
+            item = langchain_message_to_chat_dict(msg)
+            if item:
+                messages.append(item)
         return StreamingResponse(
             stream_generator(llm, messages, prompt_tokens=prompt_tokens, options=options),
             media_type="text/event-stream"

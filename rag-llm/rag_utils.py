@@ -649,7 +649,11 @@ class RAGService:
             if isinstance(msg, HumanMessage):
                 conversation.append({"role": "user", "content": msg.content})
             elif isinstance(msg, AIMessage):
-                conversation.append({"role": "assistant", "content": msg.content})
+                item = {"role": "assistant", "content": msg.content}
+                reasoning_content = msg.additional_kwargs.get("reasoning_content")
+                if reasoning_content:
+                    item["reasoning_content"] = reasoning_content
+                conversation.append(item)
         # 添加当前问题
         conversation.append({"role": "user", "content": question})
 

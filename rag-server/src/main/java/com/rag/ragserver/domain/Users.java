@@ -39,6 +39,11 @@ public class Users {
     private Integer roleId;
 
     /**
+     * 备注
+     */
+    private String bz;
+
+    /**
      * 所属工作空间 ID
      */
     private Long workspaceId;
@@ -81,6 +86,7 @@ public class Users {
             && (this.getEmail() == null ? other.getEmail() == null : this.getEmail().equals(other.getEmail()))
             && (this.getPwd() == null ? other.getPwd() == null : this.getPwd().equals(other.getPwd()))
             && (this.getRoleId() == null ? other.getRoleId() == null : this.getRoleId().equals(other.getRoleId()))
+            && (this.getBz() == null ? other.getBz() == null : this.getBz().equals(other.getBz()))
             && (this.getWorkspaceId() == null ? other.getWorkspaceId() == null : this.getWorkspaceId().equals(other.getWorkspaceId()))
             && (this.getStatus() == null ? other.getStatus() == null : this.getStatus().equals(other.getStatus()))
             && (this.getCreatedAt() == null ? other.getCreatedAt() == null : this.getCreatedAt().equals(other.getCreatedAt()))
@@ -97,6 +103,7 @@ public class Users {
         result = prime * result + ((getEmail() == null) ? 0 : getEmail().hashCode());
         result = prime * result + ((getPwd() == null) ? 0 : getPwd().hashCode());
         result = prime * result + ((getRoleId() == null) ? 0 : getRoleId().hashCode());
+        result = prime * result + ((getBz() == null) ? 0 : getBz().hashCode());
         result = prime * result + ((getWorkspaceId() == null) ? 0 : getWorkspaceId().hashCode());
         result = prime * result + ((getStatus() == null) ? 0 : getStatus().hashCode());
         result = prime * result + ((getCreatedAt() == null) ? 0 : getCreatedAt().hashCode());
@@ -116,6 +123,7 @@ public class Users {
         sb.append(", email=").append(email);
         sb.append(", pwd=").append(pwd);
         sb.append(", roleId=").append(roleId);
+        sb.append(", bz=").append(bz);
         sb.append(", workspaceId=").append(workspaceId);
         sb.append(", status=").append(status);
         sb.append(", createdAt=").append(createdAt);

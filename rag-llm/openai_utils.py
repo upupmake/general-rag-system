@@ -131,6 +131,12 @@ class OpenAIInstance:
             r['reasoning_effort'] = reasoning_effort
         return r
 
+    def _strip_reasoning_content(self, messages: list) -> list:
+        return [
+            {k: v for k, v in message.items() if k != "reasoning_content"}
+            for message in messages
+        ]
+
     async def astream(self, messages: list) -> AsyncGenerator[ResponseWrapper, None]:
         generate_config = self.get_generate_config()
         logger.info(f"generate_config: {generate_config}")
@@ -163,7 +169,7 @@ class OpenAIInstance:
             else:
                 stream = await self.client.responses.create(
                     model=self.model_name,
-                    input=messages,
+                    input=self._strip_reasoning_content(messages),
                     stream=True,
                     **generate_config
                 )

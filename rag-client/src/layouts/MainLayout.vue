@@ -5,8 +5,6 @@ import SessionList from '@/components/SessionList.vue'
 import {useThemeStore} from '@/stores/theme'
 import {useUserStore} from '@/stores/user'
 import {
-  BulbOutlined, 
-  BulbFilled, 
   LogoutOutlined, 
   UserOutlined,
   MenuFoldOutlined,
@@ -15,7 +13,6 @@ import {
 } from '@ant-design/icons-vue';
 // 引入本地静态资源 URL
 import lightThemeUrl from '@/assets/github-markdown.min.css?url';
-import darkThemeUrl from '@/assets/github-markdown-dark.min.css?url';
 import workspaceApi from '@/api/workspaceApi.js';
 
 const router = useRouter()
@@ -24,7 +21,8 @@ const selectedKeys = ref([])
 const themeStore = useThemeStore();
 const userStore = useUserStore();
 const currentWorkspace = ref(null)
-const isFooterExpanded = ref(false) // 控制底部区域展开/收起
+const isFooterExpanded = ref(false) // 控制底部用户菜单展开/收起
+const footerMenuRef = ref(null)
 const collapsed = ref(false) // 控制侧边栏收起/展开
 const isMobile = ref(false)
 
@@ -42,19 +40,46 @@ const checkIsMobile = () => {
   isMobile.value = window.innerWidth <= 768
 }
 
+const handleDocumentClick = (event) => {
+  if (footerMenuRef.value && !footerMenuRef.value.contains(event.target)) {
+    isFooterExpanded.value = false
+  }
+}
+
 onMounted(() => {
   checkIsMobile()
   window.addEventListener('resize', checkIsMobile)
+  document.addEventListener('click', handleDocumentClick)
   loadCurrentWorkspace()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkIsMobile)
+  document.removeEventListener('click', handleDocumentClick)
 })
 
 // 计算用户显示名称
 const userDisplayName = computed(() => {
-  return userStore.user?.email || userStore.user?.username || '未登录'
+  return userStore.user?.username || userStore.user?.email || '未登录'
+})
+
+const isMemberUser = computed(() => userStore.user?.role?.id === 1)
+
+const userRoleLabel = computed(() => isMemberUser.value ? '会员用户' : '普通用户')
+
+const membershipExpireDate = computed(() => {
+  const bz = userStore.user?.bz || ''
+  const match = bz.match(/^(\d{4}-\d{2}-\d{2})\s+开通(\d+)天$/)
+  if (!match) {
+    return ''
+  }
+
+  const startDate = new Date(`${match[1]}T00:00:00`)
+  startDate.setDate(startDate.getDate() + Number(match[2]))
+  const year = startDate.getFullYear()
+  const month = String(startDate.getMonth() + 1).padStart(2, '0')
+  const day = String(startDate.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 })
 
 // 计算工作空间显示名称
@@ -62,7 +87,7 @@ const workspaceDisplayName = computed(() => {
   return currentWorkspace.value?.name || '未选择工作空间'
 })
 
-// 切换底部区域展开状态
+// 切换底部用户菜单展开状态
 const toggleFooter = () => {
   isFooterExpanded.value = !isFooterExpanded.value
 }
@@ -70,6 +95,7 @@ const toggleFooter = () => {
 // 切换侧边栏收起/展开
 const toggleCollapsed = () => {
   collapsed.value = !collapsed.value
+  isFooterExpanded.value = false
 }
 
 // 退出登录
@@ -78,7 +104,7 @@ const handleLogout = () => {
 }
 
 // 动态加载 CSS 的函数
-const loadMarkdownTheme = (isDark) => {
+const loadMarkdownTheme = () => {
   const existingLink = document.getElementById('markdown-theme-css');
   if (existingLink) {
     existingLink.remove();
@@ -87,19 +113,11 @@ const loadMarkdownTheme = (isDark) => {
   const link = document.createElement('link');
   link.id = 'markdown-theme-css';
   link.rel = 'stylesheet';
-  // 使用本地资源 URL
-  link.href = isDark ? darkThemeUrl : lightThemeUrl;
+  link.href = lightThemeUrl;
   document.head.appendChild(link);
 };
 
-// 监听主题变化
-watch(
-    () => themeStore.isDark,
-    (newVal) => {
-      loadMarkdownTheme(newVal);
-    },
-    {immediate: true}
-);
+loadMarkdownTheme();
 
 /**
  * 同步菜单选中状态
@@ -206,56 +224,54 @@ const go = (path) => {
         <div class="sidebar-footer" :style="{ 
           borderTopColor: themeStore.isDark ? '#303030' : '#f0f0f0',
           backgroundColor: themeStore.isDark ? '#141414' : '#fafafa'}">
+          <div v-if="!collapsed" ref="footerMenuRef" class="footer-menu-wrapper">
+            <!-- 用户菜单 -->
+            <transition name="slide-fade-up">
+              <div v-if="isFooterExpanded" class="action-buttons">
+                <!-- 收起/展开按钮 -->
+                <a-button type="text" @click="toggleCollapsed" class="collapse-btn">
+                  <template #icon>
+                    <menu-fold-outlined v-if="!collapsed" />
+                    <menu-unfold-outlined v-else />
+                  </template>
+                  <span v-if="!collapsed">收起侧边栏</span>
+                </a-button>
+                
+                <!-- GitHub 开源地址 -->
+                <a-button type="text" href="https://github.com/cockmake/general-rag-system" target="_blank" title="GitHub 开源地址">
+                  <template #icon>
+                    <github-outlined />
+                  </template>
+                  GitHub 开源地址
+                </a-button>
 
-          <!-- 展开的操作按钮区域（在上方） - 仅在未收起时显示 -->
-          <transition name="slide-fade-up">
-            <div v-if="isFooterExpanded && !collapsed" class="action-buttons">
-              <!-- 收起/展开按钮 -->
-              <a-button type="text" @click="toggleCollapsed" class="collapse-btn">
-                <template #icon>
-                  <menu-fold-outlined v-if="!collapsed" />
-                  <menu-unfold-outlined v-else />
-                </template>
-                <span v-if="!collapsed">收起侧边栏</span>
-              </a-button>
-              <!-- 主题切换 -->
-              <a-button type="text" @click.stop="themeStore.toggleTheme" :title="themeStore.isDark ? '切换亮色主题' : '切换暗色主题'">
-                <template #icon>
-                  <bulb-filled v-if="themeStore.isDark"/>
-                  <bulb-outlined v-else/>
-                </template>
-                {{ themeStore.isDark ? '切换亮色' : '切换暗色' }}
-              </a-button>
-              
-              <!-- GitHub 开源地址 -->
-              <a-button type="text" href="https://github.com/cockmake/general-rag-system" target="_blank" title="GitHub 开源地址">
-                <template #icon>
-                  <github-outlined />
-                </template>
-                GitHub 开源地址
-              </a-button>
-
-              <!-- 退出登录 -->
-              <a-button type="text" danger @click.stop="handleLogout" title="退出登录">
-                <template #icon>
-                  <logout-outlined />
-                </template>
-                退出登录
-              </a-button>
-            </div>
-          </transition>
-          
-          <!-- 可点击的信息展示区域（在下方） - 仅在未收起时显示 -->
-          <div v-if="!collapsed" class="footer-info-section" @click="toggleFooter" :style="{ cursor: 'pointer' }">
-            <!-- 用户信息 -->
-            <div class="user-info" :style="{ color: themeStore.isDark ? '#fff' : '#000' }">
-              <user-outlined style="margin-right: 8px;" />
-              <span class="user-name">{{ userDisplayName }}</span>
-            </div>
+                <!-- 退出登录 -->
+                <a-button type="text" danger @click.stop="handleLogout" title="退出登录">
+                  <template #icon>
+                    <logout-outlined />
+                  </template>
+                  退出登录
+                </a-button>
+              </div>
+            </transition>
             
-            <!-- 工作空间信息 -->
-            <div class="workspace-info" :style="{ color: themeStore.isDark ? '#999' : '#666' }">
-              <span>🏢 {{ workspaceDisplayName }}</span>
+            <!-- 用户信息卡片 -->
+            <div class="footer-info-section" @click.stop="toggleFooter">
+              <div class="user-avatar" :class="{ 'member-avatar': isMemberUser }">
+                <user-outlined />
+              </div>
+              <div class="user-meta">
+                <div class="user-info" :style="{ color: themeStore.isDark ? '#fff' : '#000' }">
+                  <span class="user-name" :class="{ 'member-user-name': isMemberUser }">{{ userDisplayName }}</span>
+                  <span class="user-role-tag" :class="{ 'member-role-tag': isMemberUser }">{{ userRoleLabel }}</span>
+                </div>
+                <div v-if="isMemberUser && membershipExpireDate" class="membership-expire" :style="{ color: themeStore.isDark ? '#999' : '#666' }">
+                  到期：{{ membershipExpireDate }}
+                </div>
+                <div class="workspace-info" :style="{ color: themeStore.isDark ? '#999' : '#666' }">
+                  🏢 {{ workspaceDisplayName }}
+                </div>
+              </div>
             </div>
           </div>
           
@@ -337,11 +353,16 @@ const go = (path) => {
 
 .sidebar-footer {
   flex-shrink: 0;
-  padding: 12px 16px;
+  margin-top: auto;
+  padding: 12px;
   border-top: 1px solid #f0f0f0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.footer-menu-wrapper {
+  position: relative;
 }
 
 .collapse-btn {
@@ -352,19 +373,55 @@ const go = (path) => {
 
 .footer-info-section {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px 0;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .footer-info-section:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+  background-color: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="dark"] .footer-info-section {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="dark"] .footer-info-section:hover {
   background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.user-avatar {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.12);
+}
+
+.member-avatar {
+  color: #722ed1;
+  background: linear-gradient(135deg, rgba(114, 46, 209, 0.16), rgba(250, 173, 20, 0.2));
+}
+
+.user-meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .footer-collapsed-icon {
@@ -397,25 +454,55 @@ const go = (path) => {
   flex: 1;
 }
 
+.member-user-name {
+  color: #722ed1;
+}
+
+.user-role-tag {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.member-role-tag {
+  color: #722ed1;
+  background: rgba(114, 46, 209, 0.12);
+}
+
+.membership-expire {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 .workspace-info {
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding-left: 24px;
 }
 
 .action-buttons {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 10;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 4px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 [data-theme="dark"] .action-buttons {
-  border-bottom-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #1f1f1f;
 }
 
 .action-buttons .ant-btn {

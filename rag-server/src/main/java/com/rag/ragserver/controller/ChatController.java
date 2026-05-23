@@ -287,7 +287,8 @@ public class ChatController {
                         ConversationMessages::getContent,
                         ConversationMessages::getRagContext,
                         ConversationMessages::getStatus,
-                        ConversationMessages::getOptions
+                        ConversationMessages::getOptions,
+                        ConversationMessages::getThinking
                 )
                 .eq(ConversationMessages::getSessionId, sessionId)
                 .eq(ConversationMessages::getUserId, userId)

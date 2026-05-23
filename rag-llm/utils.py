@@ -395,13 +395,13 @@ async def image_split(
     return markdown_split(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
 
-def get_token_count(text: str, encoding_name: str = "cl100k_base") -> int:
+def get_token_count(text: str, encoding_name: str = "o200k_base") -> int:
     """计算文本的token数量"""
     try:
         encoding = tiktoken.get_encoding(encoding_name)
     except Exception:
-        # Fallback to cl100k_base if specific encoding not found
-        encoding = tiktoken.get_encoding("cl100k_base")
+        # Fallback to o200k_base if specific encoding not found
+        encoding = tiktoken.get_encoding("o200k_base")
     return len(encoding.encode(text))
 
 
