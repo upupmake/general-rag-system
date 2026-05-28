@@ -35,13 +35,6 @@ class OpenAIInstance:
             },
         )
 
-    def response_api_extract(self, chunk):
-        if chunk.type == 'response.reasoning_summary_text.delta':
-            return ResponseWrapper(content=[{"type": "reasoning", "text": chunk.delta}])
-        elif chunk.type == 'response.output_text.delta':
-            return ResponseWrapper(content=chunk.delta)
-        return None
-
     def chat_api_extract(self, chunk):
         delta = chunk.choices[0].delta
 
@@ -68,8 +61,7 @@ class OpenAIInstance:
             raise e
 
     def get_generate_config(self):
-        # 包含tools, extra_body, thinking, reasoning等配置
-        tools = []
+        # 包含extra_body, thinking, reasoning等配置
         extra_body = {}
         reasoning = {}
         reasoning_effort = {}
@@ -98,13 +90,8 @@ class OpenAIInstance:
             else:
                 extra_body['thinking'] = {"type": "disabled"}
         elif self.model_name.startswith("gpt-"):
-            # 配置思考
-            if self.enable_thinking:
-                reasoning['effort'] = "medium"
-                reasoning['summary'] = 'detailed'
-            # 配置网页搜索
-            if self.enable_web_search:
-                tools.append({"type": "web_search"})
+            # Chat Completions 路径不再支持 Responses API 内置网页搜索
+            reasoning_effort = "medium"
         elif "grok-4" in self.model_name:
             if self.enable_thinking:
                 reasoning_effort = "high"
@@ -121,8 +108,6 @@ class OpenAIInstance:
                     "type": "disabled"
                 }
         r = {}
-        if tools:
-            r['tools'] = tools
         if extra_body:
             r['extra_body'] = extra_body
         if reasoning:
@@ -131,52 +116,22 @@ class OpenAIInstance:
             r['reasoning_effort'] = reasoning_effort
         return r
 
-    def _strip_reasoning_content(self, messages: list) -> list:
-        return [
-            {k: v for k, v in message.items() if k != "reasoning_content"}
-            for message in messages
-        ]
-
     async def astream(self, messages: list) -> AsyncGenerator[ResponseWrapper, None]:
         generate_config = self.get_generate_config()
         logger.info(f"generate_config: {generate_config}")
         try:
-            if (
-                    "deepseek" == self.provider
-                    or "qwen" == self.provider
-                    or "x-ai" == self.provider
-                    or "z-ai" == self.provider
-                    or "moonshotai" == self.provider
-                    or "minimax" == self.provider
-                    or "xiaomi" == self.provider
-                    or "anthropic" == self.provider
-                    or "bytedance" == self.provider
-
-            ):
-                # 只支持 chat api
-                stream = await self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                    stream=True,
-                    **generate_config
-                )
-                async for chunk in stream:
-                    if not chunk.choices:
-                        continue
-                    item = self.chat_api_extract(chunk)
-                    if item:
-                        yield item
-            else:
-                stream = await self.client.responses.create(
-                    model=self.model_name,
-                    input=self._strip_reasoning_content(messages),
-                    stream=True,
-                    **generate_config
-                )
-                async for chunk in stream:
-                    response = self.response_api_extract(chunk)
-                    if response:
-                        yield response
+            stream = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                stream=True,
+                **generate_config
+            )
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                item = self.chat_api_extract(chunk)
+                if item:
+                    yield item
 
 
         except Exception as e:

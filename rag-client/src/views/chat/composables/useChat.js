@@ -5,7 +5,7 @@ import {
     fetchSessionMessages,
     startChatStream
 } from '@/api/chatApi'
-import {models, selectedModel, selectedKb, ragMode, contextMultiplier, findKbById, loadKbs} from '@/vars.js'
+import {models, selectedModel, selectedKb, contextMultiplier, findKbById, loadKbs} from '@/vars.js'
 
 export function useChat(
     sessionId,
@@ -303,13 +303,8 @@ export function useChat(
             options.thinking = true
         }
 
-        // 添加RAG模式选项
         if (selectedKb.value) {
-            if (ragMode.value === 'agentic') {
-                options.agenticRag = true
-            } else if (ragMode.value === 'fast') {
-                options.agenticRag = false  // Fast RAG 模式
-            }
+            options.agenticRag = true
         }
 
         if (contextMultiplier.value !== null) {

@@ -1,7 +1,7 @@
 import {ref, reactive} from 'vue'
 import {message as antMessage} from 'ant-design-vue'
 import {editMessageStream, retryMessageStream} from '@/api/chatApi'
-import {ragMode, contextMultiplier} from '@/vars.js'
+import {contextMultiplier} from '@/vars.js'
 
 export function useMessageEdit(
     messages,
@@ -91,13 +91,8 @@ export function useMessageEdit(
             options.thinking = true
         }
 
-        // 添加RAG模式选项
         if (selectedKb.value) {
-            if (ragMode.value === 'agentic') {
-                options.agenticRag = true
-            } else if (ragMode.value === 'fast') {
-                options.agenticRag = false
-            }
+            options.agenticRag = true
         }
 
         if (contextMultiplier.value !== null) {
@@ -152,13 +147,8 @@ export function useMessageEdit(
             options.thinking = true
         }
 
-        // 添加RAG模式选项
         if (selectedKb.value) {
-            if (ragMode.value === 'agentic') {
-                options.agenticRag = true
-            } else if (ragMode.value === 'fast') {
-                options.agenticRag = false
-            }
+            options.agenticRag = true
         }
 
         if (contextMultiplier.value !== null) {

@@ -1,5 +1,5 @@
 <script setup>
-import {kbs, selectedKb, kbGroupLabels, ragMode} from "@/vars.js"
+import {kbs, selectedKb, kbGroupLabels} from "@/vars.js"
 
 defineProps({
   width: {
@@ -52,18 +52,6 @@ const filterKbOption = (input, option) => {
         </a-select-option>
       </a-select-opt-group>
     </a-select>
-
-    <!-- RAG模式切换按钮 -->
-    <a-segmented
-        v-if="selectedKb"
-        v-model:value="ragMode"
-        :size="size"
-        :options="[
-          { label: 'Fast', value: 'fast' },
-          { label: 'Agentic', value: 'agentic' }
-        ]"
-        class="rag-mode-toggle"
-    />
   </div>
 </template>
 
@@ -78,62 +66,5 @@ const filterKbOption = (input, option) => {
 .kb-select {
   min-width: 120px;
   flex: 1;
-}
-
-.rag-mode-toggle {
-  flex-shrink: 0;
-}
-
-/* 增强 Segmented 样式 - 使用渐变和阴影效果 */
-.rag-mode-toggle :deep(.ant-segmented) {
-  display: flex;
-  background: linear-gradient(145deg, #f0f2f5, #e8eaed);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.rag-mode-toggle :deep(.ant-segmented-item) {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: rgba(0, 0, 0, 0.65);
-  font-weight: 500;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.rag-mode-toggle :deep(.ant-segmented-item:hover:not(.ant-segmented-item-selected)) {
-  color: #1890ff;
-}
-
-.rag-mode-toggle :deep(.ant-segmented-item-selected) {
-  background: linear-gradient(135deg, #40a9ff 0%, #1890ff 100%);
-  color: #fff;
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.3);
-}
-
-.rag-mode-toggle :deep(.ant-segmented-thumb) {
-  background: linear-gradient(135deg, #40a9ff 0%, #1890ff 100%);
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.3);
-}
-
-/* 移动端适配：kb-selector-wrapper 始终横排，由父容器决定换行 */
-@media (max-width: 768px) {
-  .rag-mode-toggle :deep(.ant-segmented-item) {
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 480px) {
-  .rag-mode-toggle {
-    max-width: 280px;
-  }
-  
-  .rag-mode-toggle :deep(.ant-segmented-item) {
-    font-size: 12px;
-    padding: 4px 8px;
-  }
 }
 </style>
