@@ -53,7 +53,7 @@ class RAGGateway:
     """
     RAG网关：判断是否需要使用RAG检索
     
-    使用MiniMax-M2.7-highspeed模型进行判断，分析问题和对话历史，
+    使用mimo-v2.5模型进行判断，分析问题和对话历史，
     决定是否需要从知识库检索文档。
     """
 
@@ -61,8 +61,8 @@ class RAGGateway:
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "MiniMax-M2.7",
-            "provider": "minimax"
+            "name": "mimo-v2.5",
+            "provider": "xiaomi"
         }
 
     async def initialize(self):

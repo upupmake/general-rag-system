@@ -36,7 +36,7 @@ async def get_session_name(body: dict = Body()):
     """根据用户第一条消息生成会话标题"""
     content = body.get("content", "")
     try:
-        model = {"name": "MiniMax-M2.7", "provider": "minimax"}
+        model = {"name": "mimo-v2.5", "provider": "xiaomi"}
         llm = get_langchain_llm(model)
         llm = get_structured_data_agent(llm, _SessionTitle)
         messages = [
