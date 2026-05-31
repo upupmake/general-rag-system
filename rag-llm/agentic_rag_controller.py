@@ -118,8 +118,8 @@ class RetrievalController:
 
     def __init__(self):
         model_info = {
-            "name": "mimo-v2.5",
-            "provider": "xiaomi"
+            "name": "MiniMax-M2.7",
+            "provider": "minimax"
         }
         generate_config = {
         }

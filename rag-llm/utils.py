@@ -163,11 +163,6 @@ def get_langchain_llm(
     api_key = settings.get("api_key")
     base_url = settings.get("base_url")
 
-    if provider == "minimax":
-        extra_body = {"reasoning_split": True}
-        extra_body.update(kwargs.pop("extra_body", {}))
-        kwargs["extra_body"] = extra_body
-
     llm = init_chat_model(
         model=model_name,
         api_key=api_key,

@@ -147,8 +147,8 @@ class RAGService:
 ## 当前问题
 {question}"""
         model_info = {
-            'name': 'mimo-v2.5',
-            'provider': 'xiaomi'
+            'name': 'MiniMax-M2.7',
+            'provider': 'minimax'
         }
         llm = get_langchain_llm(model_info)
         structured_agent = get_structured_data_agent(llm, MultiQueryList)
