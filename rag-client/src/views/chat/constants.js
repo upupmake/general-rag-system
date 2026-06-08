@@ -7,7 +7,7 @@ import {
 export const allKnownTools = ['webSearch']
 
 export const toolConfigs = {
-  'webSearch': {icon: GlobalOutlined, label: '联网', desc: '开启联网搜索'},
+  'webSearch': {icon: GlobalOutlined, label: '联网搜索', desc: '开启联网搜索'},
   'web_extractor': {icon: FileSearchOutlined, label: '网页', desc: '网页提取'},
   'code_interpreter': {icon: CodeOutlined, label: '代码', desc: '代码解释器'},
 }

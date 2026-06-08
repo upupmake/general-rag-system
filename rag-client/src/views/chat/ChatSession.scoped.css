@@ -220,11 +220,13 @@
 .model-select-footer-wrapper {
   position: relative;
   display: inline-block;
-  min-width: 120px;
+  min-width: 140px;
+  width: var(--model-select-width, 140px);
+  max-width: 100%;
 }
 
 .model-select-footer {
-  min-width: 120px;
+  min-width: 140px;
   width: 100%;
 }
 
@@ -245,6 +247,10 @@
   transition: all 0.2s;
 }
 
+.footer-kb-tool {
+  display: inline-flex;
+}
+
 .kb-tool-item:hover {
   border-color: #1890ff;
 }
@@ -262,14 +268,8 @@
   box-shadow: none !important;
 }
 
-/* 移动端选中知识库时，内部组件自动填满整行 */
 @media (max-width: 768px) {
-  .kb-tool-item--active :deep(.kb-selector-wrapper) {
-    width: 100%;
-  }
-
-  .kb-tool-item--active :deep(.kb-select) {
-    flex: 1;
+  .kb-tool-item :deep(.kb-select) {
     min-width: 0;
   }
 }
@@ -481,14 +481,78 @@
   }
 
   /* Sender配置移动端适配 */
+  .sender-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .sender-config {
+    width: 100%;
+    flex: none;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    gap: 6px;
+  }
+
   .model-select-footer-wrapper {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 90px;
+    width: auto;
   }
 
   .model-select-footer {
     width: 100% !important;
     min-width: 90px;
+  }
+
+  .model-select-footer :deep(.ant-select-selector) {
+    height: 26px !important;
+    padding: 0 24px 0 8px !important;
+  }
+
+  .model-select-footer :deep(.ant-select-selection-search-input),
+  .model-select-footer :deep(.ant-select-selection-item),
+  .model-select-footer :deep(.ant-select-selection-placeholder) {
+    line-height: 26px !important;
+  }
+
+  .selected-model-value {
+    left: 8px;
+    right: 24px;
+    gap: 4px;
+  }
+
+  .footer-kb-tool {
+    flex: 0 1 auto;
+    min-width: 82px;
+    max-width: 48%;
+    height: 26px;
+    padding: 0 2px 0 6px;
+  }
+
+  .footer-kb-tool :deep(.kb-selector-wrapper),
+  .footer-kb-tool :deep(.kb-select) {
+    max-width: 100%;
+  }
+
+  .footer-kb-tool :deep(.ant-select-selector) {
+    height: 24px !important;
+    padding: 0 22px 0 4px !important;
+  }
+
+  .footer-kb-tool :deep(.ant-select-selection-search-input),
+  .footer-kb-tool :deep(.ant-select-selection-item),
+  .footer-kb-tool :deep(.ant-select-selection-placeholder) {
+    line-height: 24px !important;
+  }
+
+  .sender-actions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-left: 0;
   }
 
   .kb-wrapper {
@@ -499,10 +563,6 @@
   .kb-select-footer {
     width: 100% !important;
     min-width: 100px;
-  }
-
-  .sender-config {
-    flex-wrap: nowrap;
   }
 
   /* 移动端上下文按钮只显示图标，激活时带蓝色小圆点 */
@@ -542,9 +602,4 @@
     text-overflow: ellipsis;
   }
 
-  /* 知识库选项：选中时独占整行，未选中时与其他工具项一致 */
-  .header-tools-wrapper .kb-tool-item--active {
-    flex-basis: 100%;
-    max-width: 100%;
-  }
 }

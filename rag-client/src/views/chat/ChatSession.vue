@@ -1,5 +1,5 @@
 <script setup>
-import {h, onMounted, onUnmounted, ref, watch, computed} from 'vue'
+import {h, onMounted, onUnmounted, ref, watch, computed, nextTick} from 'vue'
 import {
   UserOutlined,
   CopyOutlined,
@@ -63,6 +63,12 @@ const isKbSupported = computed(() => {
   return modelObj.kbSupported || false
 })
 
+const modelSelectWidth = computed(() => {
+  const modelName = currentModel.value?.modelName || ''
+  const textWidth = [...modelName].reduce((width, char) => width + (/[^\x00-\xff]/.test(char) ? 14 : 8), 0)
+  return `${Math.max(140, textWidth + 72)}px`
+})
+
 // Chat management
 const {
   messages,
@@ -118,12 +124,20 @@ const {
 // Mobile detection
 const isMobile = ref(false)
 const inputExpanded = ref(false)
+const inputWrapper = ref(null)
 const checkIsMobile = () => {
   isMobile.value = window.innerWidth <= 768
 }
 
+const focusSenderInput = () => {
+  nextTick(() => {
+    inputWrapper.value?.querySelector('textarea, input, [contenteditable="true"]')?.focus()
+  })
+}
+
 const expandInput = () => {
   inputExpanded.value = true
+  focusSenderInput()
 }
 
 const collapseInput = () => {
@@ -354,7 +368,7 @@ const confirmContextCustom = () => {
 
     <!-- 输入区域 -->
     <div class="input-container">
-      <div class="input-wrapper">
+      <div class="input-wrapper" ref="inputWrapper">
         <button
             v-if="!inputExpanded"
             type="button"
@@ -377,7 +391,7 @@ const confirmContextCustom = () => {
           <!-- 工具栏 (Header插槽) -->
           <template #header>
             <div class="sender-header-tools"
-                 v-if="allKnownTools.some(k => availableTools.includes(k)) || currentModel?.metadata?.thinking || isKbSupported">
+                 v-if="allKnownTools.some(k => availableTools.includes(k)) || currentModel?.metadata?.thinking">
               <div class="header-tools-wrapper">
                 <!-- 思考模型开关 -->
                 <div
@@ -410,13 +424,6 @@ const confirmContextCustom = () => {
                     <CheckOutlined v-if="selectedTools.includes(toolKey)" style="font-size: 10px; margin-left: 2px;"/>
                   </div>
                 </template>
-
-                <!-- 知识库选择 -->
-                <a-tooltip v-if="isKbSupported"
-                           title="请在您需要检索知识库中信息时选用"
-                           placement="topLeft">
-                  <KbSelector :class="['kb-tool-item', { 'kb-tool-item--active': selectedKb }]" :bordered="false" size="small" width="150px"/>
-                </a-tooltip>
               </div>
             </div>
           </template>
@@ -424,7 +431,7 @@ const confirmContextCustom = () => {
           <template #footer="{ info: { components: { SendButton, LoadingButton } } }">
             <div class="sender-footer">
               <div class="sender-config">
-                <div class="model-select-footer-wrapper">
+                <div class="model-select-footer-wrapper" :style="{ '--model-select-width': modelSelectWidth }">
                   <a-select
                       v-model:value="selectedModel"
                       class="model-select-footer model-select-with-logo"
@@ -455,6 +462,11 @@ const confirmContextCustom = () => {
                     <span>{{ currentModel.modelName }}</span>
                   </div>
                 </div>
+                <a-tooltip v-if="isKbSupported"
+                           title="请在您需要检索知识库中信息时选用"
+                           placement="topLeft">
+                  <KbSelector :class="['kb-tool-item', 'footer-kb-tool', { 'kb-tool-item--active': selectedKb }]" :bordered="false" size="small" width="150px"/>
+                </a-tooltip>
               </div>
               <div class="sender-actions">
                 <!-- 上下文长度控制 -->

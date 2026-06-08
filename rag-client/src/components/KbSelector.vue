@@ -1,7 +1,8 @@
 <script setup>
-import {kbs, selectedKb, kbGroupLabels} from "@/vars.js"
+import {computed} from "vue"
+import {kbs, selectedKb, kbGroupLabels, findKbById} from "@/vars.js"
 
-defineProps({
+const props = defineProps({
   width: {
     type: String,
     default: '280px'
@@ -14,6 +15,17 @@ defineProps({
     type: Boolean,
     default: false
   }
+})
+
+const currentKb = computed(() => findKbById(selectedKb.value))
+
+const adaptiveWidth = computed(() => {
+  const kbName = currentKb.value?.name || ''
+  if (!kbName || !props.width.endsWith('px')) return props.width
+
+  const baseWidth = Number.parseFloat(props.width)
+  const textWidth = [...kbName].reduce((width, char) => width + (/[^\x00-\xff]/.test(char) ? 14 : 8), 0)
+  return `${Math.max(baseWidth, textWidth + 64)}px`
 })
 
 // 知识库搜索过滤
@@ -29,7 +41,7 @@ const filterKbOption = (input, option) => {
   <div class="kb-selector-wrapper">
     <a-select
         v-model:value="selectedKb"
-        :style="{ width }"
+        :style="{ width: adaptiveWidth, maxWidth: '100%' }"
         :size="size"
         :disabled="disabled"
         placeholder="知识库（可选）"
@@ -57,14 +69,15 @@ const filterKbOption = (input, option) => {
 
 <style scoped>
 .kb-selector-wrapper {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  max-width: 100%;
 }
 
 .kb-select {
   min-width: 120px;
-  flex: 1;
+  flex: 0 1 auto;
 }
 </style>

@@ -272,7 +272,7 @@ const onSend = async (text) => {
               <span
                   style="font-size: 12px; color: #999; margin-left: 8px; font-weight: normal;">请在您需要检索知识库中信息时选用</span>
             </div>
-            <KbSelector size="large" class="config-select" :disabled="!isKbSupported"/>
+            <KbSelector size="large" class="config-select kb-config-select" :disabled="!isKbSupported"/>
             <div v-if="!isKbSupported && selectedModel" style="color: #faad14; font-size: 12px; margin-top: 4px;">
               当前模型不支持知识库功能
             </div>
@@ -403,6 +403,11 @@ const onSend = async (text) => {
 
 .config-select {
   /* width: 100%; removed to allow manual width control */
+}
+
+.kb-config-select {
+  align-self: flex-start;
+  justify-content: flex-start;
 }
 
 .provider-option-label {
