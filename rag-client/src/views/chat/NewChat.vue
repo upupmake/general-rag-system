@@ -16,7 +16,7 @@ import {
 } from '@ant-design/icons-vue'
 
 import {fetchAvailableModels, fetchSessionTitle, startChat} from '@/api/chatApi'
-import {models, groupedModels, selectedModel, selectedKb, loadKbs} from "@/vars.js";
+import {models, groupedModels, providerLogos, selectedModel, selectedKb, loadKbs} from "@/vars.js";
 import {events} from "@/events.js";
 import KbSelector from "@/components/KbSelector.vue";
 import {useThemeStore} from '@/stores/theme';
@@ -188,25 +188,36 @@ const onSend = async (text) => {
               <RobotOutlined class="config-icon"/>
               <span>模型</span>
             </div>
-            <a-select
-                v-model:value="selectedModel"
-                class="config-select"
-                placeholder="请选择对话模型"
-                size="large"
-                style="width: 280px">
-              <a-select-opt-group
-                  v-for="(list, provider) in groupedModels"
-                  :key="provider"
-                  :label="provider.toUpperCase()">
-                <a-select-option
-                    v-for="m in list"
-                    :key="m.modelId"
-                    :value="m.modelId"
-                >
-                  {{ m.modelName }}
-                </a-select-option>
-              </a-select-opt-group>
-            </a-select>
+            <div class="model-select-value-wrapper" style="width: 280px">
+              <a-select
+                  v-model:value="selectedModel"
+                  class="config-select model-select-with-logo"
+                  placeholder="请选择对话模型"
+                  size="large"
+                  style="width: 100%">
+                <a-select-opt-group
+                    v-for="(list, provider) in groupedModels"
+                    :key="provider">
+                  <template #label>
+                    <span class="provider-option-label">
+                      <img v-if="providerLogos[provider]" :src="providerLogos[provider]" :alt="`${provider} logo`" class="provider-logo"/>
+                      <span>{{ provider.toUpperCase() }}</span>
+                    </span>
+                  </template>
+                  <a-select-option
+                      v-for="m in list"
+                      :key="m.modelId"
+                      :value="m.modelId"
+                  >
+                    {{ m.modelName }}
+                  </a-select-option>
+                </a-select-opt-group>
+              </a-select>
+              <div v-if="currentModel" class="selected-model-value">
+                <img v-if="providerLogos[currentModel.provider]" :src="providerLogos[currentModel.provider]" :alt="`${currentModel.provider} logo`" class="provider-logo"/>
+                <span>{{ currentModel.modelName }}</span>
+              </div>
+            </div>
           </div>
 
           <div class="config-item">
@@ -394,6 +405,48 @@ const onSend = async (text) => {
   /* width: 100%; removed to allow manual width control */
 }
 
+.provider-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.provider-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.model-select-value-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.model-select-with-logo :deep(.ant-select-selection-item) {
+  opacity: 0;
+}
+
+.selected-model-value {
+  position: absolute;
+  left: 12px;
+  right: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #333;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.selected-model-value span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .input-section {
   margin-bottom: 24px;
 }
@@ -459,7 +512,8 @@ const onSend = async (text) => {
     align-items: center;
   }
 
-  .config-select {
+  .config-select,
+  .model-select-value-wrapper {
     width: 100% !important;
   }
 

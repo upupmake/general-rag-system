@@ -199,6 +199,44 @@
   color: #ccc !important;
 }
 
+/* ================= 模型供应商分组 ================= */
+.provider-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.provider-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.model-select-with-logo .ant-select-selection-item {
+  opacity: 0;
+}
+
+.selected-model-value {
+  position: absolute;
+  left: 12px;
+  right: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #333;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.selected-model-value span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ================= 上下文长度控制面板 ================= */
 .context-multiplier-panel {
   background: #fff;

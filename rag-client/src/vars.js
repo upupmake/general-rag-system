@@ -1,6 +1,14 @@
 import {computed, ref} from "vue";
 import {fetchAvailableKbs} from "@/api/kbApi";
 
+const providerLogoModules = import.meta.glob('./assets/providers/*-logo.*', {eager: true, query: '?url', import: 'default'})
+const providerLogos = Object.fromEntries(
+    Object.entries(providerLogoModules).map(([path, url]) => {
+        const provider = path.match(/\/([^/]+)-logo\.[^.]+$/)?.[1]
+        return [provider, url]
+    }).filter(([provider]) => provider)
+)
+
 const models = ref([])
 
 const groupedModels = computed(() => {
@@ -54,4 +62,4 @@ const findKbById = (kbId) => {
     return allKbs.find(kb => kb.id === kbId)
 }
 
-export {models, groupedModels, selectedModel, kbs, selectedKb, contextMultiplier, kbGroupLabels, loadKbs, findKbById}
+export {models, groupedModels, selectedModel, kbs, selectedKb, contextMultiplier, kbGroupLabels, providerLogos, loadKbs, findKbById}

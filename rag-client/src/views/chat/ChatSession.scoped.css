@@ -217,8 +217,15 @@
   margin-left: 8px;
 }
 
+.model-select-footer-wrapper {
+  position: relative;
+  display: inline-block;
+  min-width: 120px;
+}
+
 .model-select-footer {
   min-width: 120px;
+  width: 100%;
 }
 
 .kb-select-footer {
@@ -474,9 +481,13 @@
   }
 
   /* Sender配置移动端适配 */
-  .model-select-footer {
-    width: auto !important;
+  .model-select-footer-wrapper {
     flex: 1;
+    min-width: 90px;
+  }
+
+  .model-select-footer {
+    width: 100% !important;
     min-width: 90px;
   }
 

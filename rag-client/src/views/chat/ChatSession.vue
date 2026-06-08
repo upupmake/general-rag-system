@@ -16,7 +16,7 @@ import {
 import {Bubble, Sender, ThoughtChain} from 'ant-design-x-vue'
 import {useRoute} from 'vue-router'
 import {Typography, theme, Spin} from 'ant-design-vue'
-import {groupedModels, models, selectedKb, selectedModel, contextMultiplier} from '@/vars.js'
+import {groupedModels, models, providerLogos, selectedKb, selectedModel, contextMultiplier} from '@/vars.js'
 import KbSelector from '@/components/KbSelector.vue'
 import {useThemeStore} from '@/stores/theme'
 
@@ -424,26 +424,37 @@ const confirmContextCustom = () => {
           <template #footer="{ info: { components: { SendButton, LoadingButton } } }">
             <div class="sender-footer">
               <div class="sender-config">
-                <a-select
-                    v-model:value="selectedModel"
-                    class="model-select-footer"
-                    placeholder="选择模型"
-                    :bordered="false"
-                    :dropdownMatchSelectWidth="false"
-                >
-                  <a-select-opt-group
-                      v-for="(list, provider) in groupedModels"
-                      :key="provider"
-                      :label="provider.toUpperCase()">
-                    <a-select-option
-                        v-for="m in list"
-                        :key="m.modelId"
-                        :value="m.modelId"
-                    >
-                      {{ m.modelName }}
-                    </a-select-option>
-                  </a-select-opt-group>
-                </a-select>
+                <div class="model-select-footer-wrapper">
+                  <a-select
+                      v-model:value="selectedModel"
+                      class="model-select-footer model-select-with-logo"
+                      placeholder="选择模型"
+                      :bordered="false"
+                      :dropdownMatchSelectWidth="false"
+                  >
+                    <a-select-opt-group
+                        v-for="(list, provider) in groupedModels"
+                        :key="provider">
+                      <template #label>
+                        <span class="provider-option-label">
+                          <img v-if="providerLogos[provider]" :src="providerLogos[provider]" :alt="`${provider} logo`" class="provider-logo"/>
+                          <span>{{ provider.toUpperCase() }}</span>
+                        </span>
+                      </template>
+                      <a-select-option
+                          v-for="m in list"
+                          :key="m.modelId"
+                          :value="m.modelId"
+                      >
+                        {{ m.modelName }}
+                      </a-select-option>
+                    </a-select-opt-group>
+                  </a-select>
+                  <div v-if="currentModel" class="selected-model-value">
+                    <img v-if="providerLogos[currentModel.provider]" :src="providerLogos[currentModel.provider]" :alt="`${currentModel.provider} logo`" class="provider-logo"/>
+                    <span>{{ currentModel.modelName }}</span>
+                  </div>
+                </div>
               </div>
               <div class="sender-actions">
                 <!-- 上下文长度控制 -->
