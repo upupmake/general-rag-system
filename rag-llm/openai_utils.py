@@ -31,7 +31,7 @@ class OpenAIInstance:
             timeout=timeout,
             max_retries=max_retries,
             default_headers={
-                "User-Agent": "MakeCode Agent",
+                "User-Agent": "RAG Agent",
             },
         )
 
@@ -65,8 +65,9 @@ class OpenAIInstance:
         extra_body = {}
         reasoning = {}
         reasoning_effort = {}
+        tools = []
 
-        if self.model_name.startswith("qwen"):
+        if self.provider == "qwen":
             # 配置思考
             if self.enable_thinking:
                 extra_body['enable_thinking'] = True
@@ -74,14 +75,29 @@ class OpenAIInstance:
                 extra_body['enable_thinking'] = False
             # 配置网页搜索
             if self.enable_web_search:
+                extra_body['enable_code_interpreter'] = True
+                extra_body['enable_thinking'] = True
                 extra_body['enable_search'] = True
+                extra_body['search_options'] = {"search_strategy": "agent_max"}
         elif self.provider == "minimax":
             extra_body["reasoning_split"] = True
+        elif self.provider == "xiaomi":
+            # 配置思考
+            if self.enable_thinking:
+                extra_body['thinking'] = {"type": "enabled"}
+            else:
+                extra_body['thinking'] = {"type": "disabled"}
+            if self.enable_web_search:
+                tools.append({
+                    "type": "web_search",
+                    "max_keyword": 3,
+                    "force_search": False,
+                    "limit": 1
+                })
         elif (
                 self.provider == "deepseek"
                 or self.provider == "z-ai"
                 or self.provider == "moonshotai"
-                or self.provider == "xiaomi"
                 or self.provider == "bytedance"
         ):
             # 配置思考
@@ -114,6 +130,8 @@ class OpenAIInstance:
             r['reasoning'] = reasoning
         if reasoning_effort:
             r['reasoning_effort'] = reasoning_effort
+        if tools:
+            r["tools"] = tools
         return r
 
     async def astream(self, messages: list) -> AsyncGenerator[ResponseWrapper, None]:

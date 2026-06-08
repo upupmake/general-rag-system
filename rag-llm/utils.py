@@ -325,8 +325,8 @@ async def image_split(
 
     # 2. 获取配置
     model_info = {
-        'name': 'qwen3.6-flash',
-        'provider': 'qwen'
+        'name': 'mimo-v2.5',
+        'provider': 'xiaomi'
     }
     config = _load_config_cached()
     config = config['chat']
