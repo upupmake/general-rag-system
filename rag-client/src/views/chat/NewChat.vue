@@ -27,7 +27,6 @@ const themeStore = useThemeStore();
 const loading = ref(false)
 const selectedTools = ref([])
 const thinkingEnabled = ref(false)
-const isUserUncheckedWebSearch = ref(false)
 
 // 工具配置映射
 const toolConfigs = {
@@ -96,13 +95,6 @@ const updateModelConfig = () => {
   // 如果支持，保留用户的选择（或者根据需求也可以全重置，这里选择保留支持的）
   const newSupported = availableTools.value
   selectedTools.value = selectedTools.value.filter(t => newSupported.includes(t))
-
-  // 如果支持 webSearch 且用户未手动取消，则默认选中
-  if (newSupported.includes('webSearch')) {
-    if (!isUserUncheckedWebSearch.value && !selectedTools.value.includes('webSearch')) {
-      selectedTools.value.push('webSearch')
-    }
-  }
 }
 
 watch(selectedModel, () => {
@@ -116,14 +108,8 @@ const toggleTool = (toolKey) => {
   const index = selectedTools.value.indexOf(toolKey)
   if (index === -1) {
     selectedTools.value.push(toolKey)
-    if (toolKey === 'webSearch') {
-      isUserUncheckedWebSearch.value = false
-    }
   } else {
     selectedTools.value.splice(index, 1)
-    if (toolKey === 'webSearch') {
-      isUserUncheckedWebSearch.value = true
-    }
   }
 }
 
