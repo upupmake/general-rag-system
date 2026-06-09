@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-from functools import lru_cache
 from typing import List
 
 import numpy as np
@@ -31,9 +30,8 @@ logger = logging.getLogger(__name__)
 # 统一返回结构
 
 
-@lru_cache(maxsize=1)
-def _load_config_cached():
-    """Cache the configuration to avoid blocking I/O on every request"""
+def _load_config():
+    """Load configuration from disk each time."""
     config_path = "model_config.json"
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file {config_path} not found")
@@ -50,7 +48,7 @@ def _get_model_setting(model_info: dict):
     if not provider or not model_name:
         raise ValueError("Model provider and name are required")
 
-    config = _load_config_cached()
+    config = _load_config()
     config = config['chat']
 
     provider_config = config.get(provider)
@@ -124,7 +122,7 @@ def get_embedding_instance(embedding_info: dict):
     if not provider or not model_name:
         raise ValueError("Embedding provider and name are required")
 
-    config = _load_config_cached()
+    config = _load_config()
     config = config['embedding']
 
     provider_config = config.get(provider)
@@ -328,7 +326,7 @@ async def image_split(
         'name': 'mimo-v2.5',
         'provider': 'xiaomi'
     }
-    config = _load_config_cached()
+    config = _load_config()
     config = config['chat']
     provider_config = config.get(model_info['provider'])
     if not provider_config:

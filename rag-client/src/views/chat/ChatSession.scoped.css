@@ -480,12 +480,16 @@
     padding: 8px 16px 12px;
   }
 
+  .input-wrapper :deep(.ant-sender .ant-sender-footer) {
+    padding: 4px 5px !important;
+  }
+
   /* Sender配置移动端适配 */
   .sender-footer {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
-    padding: 8px 10px;
+    padding: 0;
   }
 
   .sender-config {
