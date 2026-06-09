@@ -4,7 +4,7 @@ from typing import Optional
 
 import aiohttp
 
-from utils import _load_config_cached
+from utils import _load_config
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ async def rerank(
         logger.warning("文档列表为空，跳过重排序")
         return {"results": []}
 
-    config = _load_config_cached()
+    config = _load_config()
 
     try:
         rerank_config = config['rerank'][provider]
