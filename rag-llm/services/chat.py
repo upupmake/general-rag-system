@@ -67,8 +67,10 @@ async def process_rag_stream_events(stream_iterator, prompt_tokens: int = 0):
     """
     full_content = ""
     cot_content = ""
+    error_content = ""
     rag_process_data = []
     start_time = time.time()
+    first_token_latency_ms = None
 
     # 处理流式事件
     async for item in stream_iterator:
@@ -82,6 +84,8 @@ async def process_rag_stream_events(stream_iterator, prompt_tokens: int = 0):
             }
             yield f"data: {json.dumps(process_data, ensure_ascii=False)}\n\n"
         elif item["type"] == "thinking":
+            if first_token_latency_ms is None:
+                first_token_latency_ms = time.time() - start_time
             # 思考内容
             content = item["payload"]
             if content:
@@ -93,6 +97,8 @@ async def process_rag_stream_events(stream_iterator, prompt_tokens: int = 0):
                 }
                 yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         elif item["type"] == "content":
+            if first_token_latency_ms is None:
+                first_token_latency_ms = time.time() - start_time
             # 答案内容
             content = item["payload"]
             if content:
@@ -103,6 +109,14 @@ async def process_rag_stream_events(stream_iterator, prompt_tokens: int = 0):
                     "payload": json.dumps(content, ensure_ascii=False)
                 }
                 yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+        elif item["type"] == "error":
+            # 错误信息
+            error_content += item["payload"]
+            data = {
+                "type": "error",
+                "payload": json.dumps(error_content, ensure_ascii=False)
+            }
+            yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
         elif item["type"] == "system_prompt":
             # 接收系统提示词，用于计算token数
             system_prompt_text = item["payload"]
@@ -129,7 +143,11 @@ async def process_rag_stream_events(stream_iterator, prompt_tokens: int = 0):
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "total_tokens": prompt_tokens + completion_tokens,
-            "latency_ms": latency_ms
+            "latency_ms": latency_ms,
+            "first_token_latency_ms": int(
+                first_token_latency_ms * 1000
+            ) if first_token_latency_ms is not None else None,
+            "is_success": False if error_content else True
         }
     }
     yield f"data: {json.dumps(usage_data)}\n\n"
@@ -139,14 +157,20 @@ async def stream_generator(model_instance, messages, prompt_tokens: int = 0, opt
     """纯LLM流式响应生成器"""
     cot_content = ""
     full_content = ""
+    error_content = ""
     start_time = time.time()  # Start timing
+    first_token_latency_ms = None
 
     async for item in unified_llm_stream(model_instance, messages):
+        if first_token_latency_ms is None:
+            first_token_latency_ms = time.time() - start_time  # Time to first token
         content = item["payload"]
         if item["type"] == "thinking":
             cot_content += content
         elif item["type"] == "content":
             full_content += content
+        elif item["type"] == "error":
+            error_content += content
 
         # 对content进行json.dumps包裹，防止特殊字符导致JSON解析错误
         data = {
@@ -165,7 +189,11 @@ async def stream_generator(model_instance, messages, prompt_tokens: int = 0, opt
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "total_tokens": prompt_tokens + completion_tokens,
-            "latency_ms": latency_ms  # Add latency_ms
+            "latency_ms": latency_ms,  # Add latency_ms
+            "first_token_latency_ms": int(
+                first_token_latency_ms * 1000
+            ) if first_token_latency_ms is not None else None,
+            "is_success": False if error_content else True
         }
     }
     yield f"data: {json.dumps(usage_data)}\n\n"

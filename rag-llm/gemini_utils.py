@@ -116,7 +116,12 @@ class GeminiInstance:
             return ResponseWrapper(content=text)
         except Exception as e:
             logger.error(f"Gemini ainvoke error: {e}")
-            return ResponseWrapper(content=f"Error: {str(e)}")
+            return ResponseWrapper([
+                {
+                    "type": "error",
+                    "text": f"Error: {str(e)}"
+                }
+            ])
 
     async def astream(self, messages: list) -> AsyncGenerator[ResponseWrapper, None]:
         # 1. 构建 URL
@@ -178,7 +183,14 @@ class GeminiInstance:
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"Gemini Request Failed [Status: {response.status}]: {error_text}")
-                        yield ResponseWrapper(content=f"Error {response.status}: {error_text}")
+                        yield ResponseWrapper(
+                            [
+                                {
+                                    "type": "error",
+                                    "text": f"Request failed with status {response.status}: {error_text}"
+                                }
+                            ]
+                        )
                         return
 
                     # 高性能流式读取
@@ -223,7 +235,21 @@ class GeminiInstance:
 
         except aiohttp.ClientError as e:
             logger.error(f"Network error in astream: {e}")
-            yield ResponseWrapper(content=f"Network error: {str(e)}")
+            yield ResponseWrapper(
+                [
+                    {
+                        "type": "error",
+                        "text": f"Network error: {str(e)}"
+                    }
+                ]
+            )
         except Exception as e:
-            logger.error(f"Unknown error in astream: {e}")
-            yield ResponseWrapper(content=f"Error: {str(e)}")
+            logger.error(f"Error in astream: {e}")
+            yield ResponseWrapper(
+                [
+                    {
+                        "type": "error",
+                        "text": f"Error: {str(e)}"
+                    }
+                ]
+            )

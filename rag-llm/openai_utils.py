@@ -58,7 +58,14 @@ class OpenAIInstance:
             return ResponseWrapper(content=content)
         except Exception as e:
             logger.error(f"OpenAI ainvoke error: {e}")
-            raise e
+            return ResponseWrapper(
+                [
+                    {
+                        "type": "error",
+                        "text": f"Error: {str(e)}"
+                    }
+                ]
+            )
 
     def get_generate_config(self):
         # 包含extra_body, thinking, reasoning等配置
@@ -154,4 +161,11 @@ class OpenAIInstance:
 
         except Exception as e:
             logger.error(f"OpenAI astream error: {e}")
-            yield ResponseWrapper(content=f"Error: {str(e)}")
+            yield ResponseWrapper(
+                content=[
+                    {
+                        "type": "error",
+                        "text": f"Error: {str(e)}"
+                    }
+                ]
+            )

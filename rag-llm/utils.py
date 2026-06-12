@@ -450,6 +450,7 @@ def content_extractor(content):
     """提取content中的文本和推理内容"""
     think_content = ""
     text_content = ""
+    error_content = ""
     if isinstance(content, str):
         text_content = content
     elif isinstance(content, list):
@@ -468,7 +469,10 @@ def content_extractor(content):
                     summary = summary[0]
                     if "text" in summary:
                         think_content += summary["text"]
-    return think_content, text_content
+        elif item['type'] == 'error':
+            if "text" in item:
+                error_content += item["text"]
+    return think_content, text_content, error_content
 
 
 def get_display_docs(documents: list, max_tokens: int = 2048, min_docs: int = 1):
@@ -507,7 +511,7 @@ async def unified_llm_stream(model_instance, messages):
         async for chunk in model_instance.astream(messages):
             content = chunk.content or reasoning_content_wrapper(chunk)
             if content:
-                think_content, text_content = content_extractor(content)
+                think_content, text_content, error_content = content_extractor(content)
                 if think_content:
                     yield {
                         "type": "thinking",
@@ -518,8 +522,17 @@ async def unified_llm_stream(model_instance, messages):
                         "type": "content",
                         "payload": text_content
                     }
+                if error_content:
+                    yield {
+                        "type": "error",
+                        "payload": error_content
+                    }
     except Exception as e:
         logger.error(f"LLM streaming error: {e}")
+        yield {
+            "type": "error",
+            "payload": f"LLM streaming error: {e}"
+        }
 
 
 def filter_grade_threshold(
