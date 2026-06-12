@@ -412,12 +412,12 @@ public class ChatController {
             String type = data.path("type").asText();
 
             if ("content".equals(type) || "thinking".equals(type)) {
-                String payloadJson = data.path("payload").asText();
                 try {
+                    String payloadJson = data.path("payload").asText();
                     String text = objectMapper.readValue(payloadJson, String.class);
                     if ("content".equals(type)) {
                         sb.append(text);
-                    } else if ("thinking".equals(type)) {
+                    } else {
                         thinkingSb.append(text);
                     }
                     return Flux.just(objectMapper.writeValueAsString(
@@ -425,6 +425,18 @@ public class ChatController {
                     ));
                 } catch (JsonProcessingException e) {
                     log.error("解析content payload失败: {}", e.getMessage());
+                    return Flux.error(new BusinessException(400, "数据转换异常"));
+                }
+            } else if ("error".equals(type)) {
+                try {
+                    String payloadJson = data.path("payload").asText();
+                    String text = objectMapper.readValue(payloadJson, String.class);
+                    sb.append(text);
+                    return Flux.just(objectMapper.writeValueAsString(
+                            Map.of("type", "content", "content", text)
+                    ));
+                } catch (JsonProcessingException e) {
+                    log.error("解析error payload失败: {}", e.getMessage());
                     return Flux.error(new BusinessException(400, "数据转换异常"));
                 }
             } else if ("process".equals(type)) {
@@ -462,6 +474,12 @@ public class ChatController {
                 }
                 if (payload.has("total_tokens")) {
                     usageInfo.put("total_tokens", payload.get("total_tokens").asInt());
+                }
+                if (payload.has("first_token_latency_ms") && !payload.get("first_token_latency_ms").isNull()) {
+                    usageInfo.put("first_token_latency_ms", payload.get("first_token_latency_ms").asLong());
+                }
+                if (payload.has("is_success")) {
+                    usageInfo.put("is_success", payload.get("is_success").asBoolean());
                 }
                 // Forward usage data to frontend
                 return Flux.just(objectMapper.writeValueAsString(
@@ -514,6 +532,15 @@ public class ChatController {
             if (usageInfo.containsKey("total_tokens")) {
                 aiMessage.setTotalTokens((Integer) usageInfo.get("total_tokens"));
             }
+            // Set first token latency if available
+            if (usageInfo.containsKey("first_token_latency_ms")) {
+                aiMessage.setFirstTokenLatencyMs((Long) usageInfo.get("first_token_latency_ms"));
+            }
+            // Set success status if available
+            if (usageInfo.containsKey("is_success")) {
+                aiMessage.setIsSuccess((Boolean) usageInfo.get("is_success"));
+            }
+
 
             if (!ragProcessList.isEmpty()) {
                 try {

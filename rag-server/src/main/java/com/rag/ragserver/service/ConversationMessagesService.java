@@ -1,6 +1,7 @@
 package com.rag.ragserver.service;
 
 import com.rag.ragserver.domain.ConversationMessages;
+import com.rag.ragserver.domain.model.vo.ModelPerformanceVO;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
@@ -35,4 +36,6 @@ public interface ConversationMessagesService extends IService<ConversationMessag
 
     Long countTodayTokens(Long userId);
     List<ConversationMessages> getLastNRagContextMessages(Long sessionId, int n);
+
+    List<ModelPerformanceVO> getModelPerformance(int hours);
 }

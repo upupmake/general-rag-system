@@ -5,16 +5,18 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.rag.ragserver.domain.ConversationMessages;
+import com.rag.ragserver.domain.model.vo.ModelPerformanceStats;
+import com.rag.ragserver.domain.model.vo.ModelPerformanceVO;
 import com.rag.ragserver.exception.BusinessException;
 import com.rag.ragserver.service.ConversationMessagesService;
 import com.rag.ragserver.mapper.ConversationMessagesMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 /**
  * @author make
@@ -169,6 +171,25 @@ public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMes
         this.updateById(lastUserMessage);
 
         return lastUserMessage;
+    }
+
+    @Override
+    public List<ModelPerformanceVO> getModelPerformance(int hours) {
+        Date startTime = new Date(System.currentTimeMillis() - hours * 60 * 60 * 1000L);
+        List<ModelPerformanceStats> statsList = this.baseMapper.getModelPerformanceStats(startTime);
+
+        List<ModelPerformanceVO> result = new ArrayList<>();
+        for (ModelPerformanceStats stats : statsList) {
+            ModelPerformanceVO vo = new ModelPerformanceVO();
+            vo.setModelId(stats.getModelId());
+            vo.setModelName(stats.getModelName());
+            vo.setProvider(stats.getProvider());
+            vo.setRequestCount(stats.getRequestCount());
+            vo.setSuccessRate(stats.getSuccessRate());
+            vo.setAvgFirstTokenLatencyMs(stats.getAvgLatency().longValue());
+            result.add(vo);
+        }
+        return result;
     }
 }
 

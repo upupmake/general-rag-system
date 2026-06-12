@@ -22,11 +22,13 @@
         <result property="isDeleted" column="is_deleted"/>
         <result property="thinking" column="thinking"/>
         <result property="options" column="options"/>
+        <result property="firstTokenLatencyMs" column="first_token_latency_ms"/>
+        <result property="isSuccess" column="is_success"/>
     </resultMap>
 
     <sql id="Base_Column_List">
         id,session_id,user_id,kb_id,role,content,
         status,model_id,prompt_tokens,completion_tokens,total_tokens,
-        rag_context,latency_ms,created_at,is_deleted, options
+        rag_context,latency_ms,created_at,is_deleted, options, thinking, first_token_latency_ms, is_success
     </sql>
 </mapper>
