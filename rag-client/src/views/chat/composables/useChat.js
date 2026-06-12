@@ -101,6 +101,7 @@ export function useChat(
                         }
                     }
                 }
+                scrollToBottom('auto')
             },
             onError: (err) => {
                 assistantMsg.content += `\n[Error: 请求发起失败！]`
@@ -267,7 +268,7 @@ export function useChat(
         loading.value = false
         userScrolledUp.value = false
         nextTick(() => {
-            scrollToBottom('auto')
+            scrollToBottom('auto', true)
             setTimeout(() => {
                 isRestoring.value = false
             }, 0)
@@ -289,7 +290,7 @@ export function useChat(
             totalTokens: 0,
             thinkingCollapseKeys: []
         }))
-        scrollToBottom()
+        scrollToBottom('auto', true)
         const assistant = messages.value[messages.value.length - 1]
         const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg)
         isGenerating.value = true

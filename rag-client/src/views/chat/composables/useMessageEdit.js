@@ -14,6 +14,7 @@ export function useMessageEdit(
     currentModel,
     isGenerating,
     userScrolledUp,
+    scrollToBottom,
     handleStreamCallbacks
 ) {
     const editingIndex = ref(-1)
@@ -115,6 +116,7 @@ export function useMessageEdit(
         editingIndex.value = -1
         editingContent.value = ''
         userScrolledUp.value = false
+        scrollToBottom('auto', true)
     }
 
     const onRetry = (userMsgIndex) => {
@@ -168,6 +170,7 @@ export function useMessageEdit(
         )
 
         userScrolledUp.value = false
+        scrollToBottom('auto', true)
     }
 
     const onRetryFromAssistant = () => {

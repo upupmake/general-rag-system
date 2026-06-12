@@ -40,7 +40,8 @@ const {
   messagesContainer,
   userScrolledUp,
   scrollToBottom,
-  handleScroll
+  handleScroll,
+  markUserScrolling
 } = useScroll()
 
 // Tools management
@@ -118,6 +119,7 @@ const {
     currentModel,
     isGenerating,
     userScrolledUp,
+    scrollToBottom,
     handleStreamCallbacks
 )
 
@@ -225,10 +227,13 @@ const confirmContextCustom = () => {
       <div
           ref="messagesContainer"
           class="messages-wrapper"
+          @wheel="markUserScrolling"
+          @touchstart="markUserScrolling"
+          @pointerdown="markUserScrolling"
           @scroll="handleScroll">
         <Spin :spinning="loading">
           <Bubble.List
-              auto-scroll
+              :auto-scroll="false"
               :roles="roles"
               :items="messages"
               class="bubble-list">

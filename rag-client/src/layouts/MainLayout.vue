@@ -295,6 +295,17 @@ const go = (path) => {
       </div>
     </a-layout-sider>
 
+    <!-- PC端侧边栏边缘半圆切换手柄 -->
+    <div
+      v-if="!isMobile"
+      class="sidebar-toggle-handle"
+      :style="{ left: collapsed ? '56px' : '232px' }"
+      @click="toggleCollapsed"
+    >
+      <menu-fold-outlined v-if="!collapsed" />
+      <menu-unfold-outlined v-else />
+    </div>
+
     <a-layout :style="{ marginLeft: isMobile ? '0px' : (collapsed ? '64px' : '240px'), transition: 'margin-left 0.2s' }">
       <!-- 移动端展开按钮 -->
       <a-button 
@@ -544,6 +555,49 @@ const go = (path) => {
   .sidebar-container {
     overflow-x: hidden;
   }
+}
+
+/* 侧边栏边缘半圆切换手柄 */
+.sidebar-toggle-handle {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 101;
+  transition: left 0.2s, background-color 0.2s, color 0.2s, box-shadow 0.2s, width 0.2s, height 0.2s;
+  border-radius: 0 32px 32px 0;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #e8e8e8;
+  border-left: none;
+  color: #bbb;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+}
+
+.sidebar-toggle-handle:hover {
+  width: 30px;
+  height: 72px;
+  background: #1677ff;
+  color: #fff;
+  box-shadow: 2px 0 16px rgba(22, 119, 255, 0.35);
+  border-color: #1677ff;
+}
+
+[data-theme="dark"] .sidebar-toggle-handle {
+  background: #1f1f1f;
+  border-color: #303030;
+  color: #666;
+}
+
+[data-theme="dark"] .sidebar-toggle-handle:hover {
+  background: #1677ff;
+  color: #fff;
 }
 
 /* 移动端遮罩层 */

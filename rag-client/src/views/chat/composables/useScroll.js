@@ -4,9 +4,29 @@ export function useScroll() {
   const messagesContainer = ref(null)
   const userScrolledUp = ref(false)
   const isAutoScrolling = ref(false)
+  const isUserScrolling = ref(false)
+  let userScrollTimer = null
 
-  const scrollToBottom = (behavior = 'smooth') => {
-    if (!messagesContainer.value || userScrolledUp.value) return
+  const markUserScrolling = () => {
+    isUserScrolling.value = true
+    isAutoScrolling.value = false
+    if (userScrollTimer) clearTimeout(userScrollTimer)
+    userScrollTimer = setTimeout(() => {
+      isUserScrolling.value = false
+    }, 120)
+  }
+
+  const updateUserScrolledUp = () => {
+    if (!messagesContainer.value) return
+
+    const container = messagesContainer.value
+    const threshold = 50
+    const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    userScrolledUp.value = distanceToBottom >= threshold
+  }
+
+  const scrollToBottom = (behavior = 'smooth', force = false) => {
+    if (!messagesContainer.value || isUserScrolling.value || (!force && userScrolledUp.value)) return
 
     isAutoScrolling.value = true
     nextTick(() => {
@@ -17,7 +37,6 @@ export function useScroll() {
           behavior: behavior
         })
       }
-      // 等待滚动完成后重置标志
       setTimeout(() => {
         isAutoScrolling.value = false
       }, behavior === 'smooth' ? 300 : 0)
@@ -25,19 +44,8 @@ export function useScroll() {
   }
 
   const handleScroll = () => {
-    if (isAutoScrolling.value || !messagesContainer.value) return
-
-    const container = messagesContainer.value
-    const threshold = 50 // 距离底部的阈值
-    const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight
-
-    // 如果用户滚动到接近底部，认为用户想要自动滚动
-    if (distanceToBottom < threshold) {
-      userScrolledUp.value = false
-    } else {
-      // 用户向上滚动了
-      userScrolledUp.value = true
-    }
+    if (!messagesContainer.value || (isAutoScrolling.value && !isUserScrolling.value)) return
+    updateUserScrolledUp()
   }
 
   return {
@@ -45,6 +53,7 @@ export function useScroll() {
     userScrolledUp,
     isAutoScrolling,
     scrollToBottom,
-    handleScroll
+    handleScroll,
+    markUserScrolling
   }
 }

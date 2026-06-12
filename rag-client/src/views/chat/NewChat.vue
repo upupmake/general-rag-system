@@ -270,7 +270,7 @@ const onSend = async (text) => {
               <DatabaseOutlined class="config-icon"/>
               <span>知识库</span>
               <span
-                  style="font-size: 12px; color: #999; margin-left: 8px; font-weight: normal;">请在您需要检索知识库中信息时选用</span>
+                  style="font-size: 12px; color: #999; margin-left: 8px; font-weight: normal; white-space: normal;">请在您需要检索知识库中信息时选用</span>
             </div>
             <KbSelector size="large" class="config-select kb-config-select" :disabled="!isKbSupported"/>
             <div v-if="!isKbSupported && selectedModel" style="color: #faad14; font-size: 12px; margin-top: 4px;">
@@ -394,6 +394,7 @@ const onSend = async (text) => {
   font-size: 15px;
   font-weight: 500;
   color: #333;
+  white-space: nowrap;
 }
 
 .config-icon {
