@@ -41,7 +41,9 @@ const {
   userScrolledUp,
   scrollToBottom,
   handleScroll,
-  markUserScrolling
+  handleWheel,
+  startTouchScrolling,
+  endTouchScrolling
 } = useScroll()
 
 // Tools management
@@ -227,9 +229,10 @@ const confirmContextCustom = () => {
       <div
           ref="messagesContainer"
           class="messages-wrapper"
-          @wheel="markUserScrolling"
-          @touchstart="markUserScrolling"
-          @pointerdown="markUserScrolling"
+          @wheel="handleWheel"
+          @touchstart="startTouchScrolling"
+          @touchend="endTouchScrolling"
+          @touchcancel="endTouchScrolling"
           @scroll="handleScroll">
         <Spin :spinning="loading">
           <Bubble.List

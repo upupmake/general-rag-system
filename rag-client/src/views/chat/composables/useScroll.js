@@ -4,29 +4,35 @@ export function useScroll() {
   const messagesContainer = ref(null)
   const userScrolledUp = ref(false)
   const isAutoScrolling = ref(false)
-  const isUserScrolling = ref(false)
-  let userScrollTimer = null
+  const isTouchHolding = ref(false)
 
-  const markUserScrolling = () => {
-    isUserScrolling.value = true
-    isAutoScrolling.value = false
-    if (userScrollTimer) clearTimeout(userScrollTimer)
-    userScrollTimer = setTimeout(() => {
-      isUserScrolling.value = false
-    }, 120)
-  }
+  const nearBottomThreshold = 50
 
   const updateUserScrolledUp = () => {
     if (!messagesContainer.value) return
 
     const container = messagesContainer.value
-    const threshold = 50
     const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight
-    userScrolledUp.value = distanceToBottom >= threshold
+    userScrolledUp.value = distanceToBottom > nearBottomThreshold
+  }
+
+  const handleWheel = () => {
+    isAutoScrolling.value = false
+    userScrolledUp.value = true
+  }
+
+  const startTouchScrolling = () => {
+    isTouchHolding.value = true
+    isAutoScrolling.value = false
+  }
+
+  const endTouchScrolling = () => {
+    isTouchHolding.value = false
+    updateUserScrolledUp()
   }
 
   const scrollToBottom = (behavior = 'smooth', force = false) => {
-    if (!messagesContainer.value || isUserScrolling.value || (!force && userScrolledUp.value)) return
+    if (!messagesContainer.value || isTouchHolding.value || (!force && userScrolledUp.value)) return
 
     isAutoScrolling.value = true
     nextTick(() => {
@@ -44,7 +50,7 @@ export function useScroll() {
   }
 
   const handleScroll = () => {
-    if (!messagesContainer.value || (isAutoScrolling.value && !isUserScrolling.value)) return
+    if (!messagesContainer.value || (isAutoScrolling.value && !isTouchHolding.value)) return
     updateUserScrolledUp()
   }
 
@@ -54,6 +60,8 @@ export function useScroll() {
     isAutoScrolling,
     scrollToBottom,
     handleScroll,
-    markUserScrolling
+    handleWheel,
+    startTouchScrolling,
+    endTouchScrolling
   }
 }

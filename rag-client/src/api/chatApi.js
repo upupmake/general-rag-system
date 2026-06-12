@@ -8,6 +8,10 @@ export function fetchAvailableModels() {
     return commonApi.get('/models/available')
 }
 
+export function fetchModelPerformance(hours = 24) {
+    return commonApi.get(`/models/performance?hours=${hours}`)
+}
+
 export function startChat({modelId, question, kbId, options}) {
     return commonApi.post('/chat/start', {
         modelId,
