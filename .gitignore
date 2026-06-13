@@ -34,7 +34,7 @@ rag-llm/.env
 rag-llm/venv/
 rag-llm/temp/
 rag-llm/*.zip
-rag-llm/model_config.json
+**/model_config*.json
 rag-llm/*_example.py
 rag-llm/t.py
 rag-llm/main.py

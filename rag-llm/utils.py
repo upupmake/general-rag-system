@@ -23,6 +23,7 @@ from sklearn.cluster import KMeans
 
 from gemini_utils import GeminiInstance
 from openai_utils import OpenAIInstance
+from wrapper import ResponseWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,19 @@ def _load_config():
         return json.load(f)
 
 
-def _get_model_setting(model_info: dict):
-    """根据模型信息加载配置并初始化 LLM"""
+def _normalize_candidate_list(config_value, config_name: str):
+    if not config_value:
+        return []
+    if isinstance(config_value, list):
+        return [item.copy() for item in config_value if item.get("enabled", True)]
+    if isinstance(config_value, dict):
+        if config_value.get("enabled", True):
+            return [config_value.copy()]
+        return []
+    raise ValueError(f"Invalid model configuration for {config_name}: expected object or list")
+
+
+def _get_provider_config(model_info: dict):
     provider = model_info.get("provider")
     model_name = model_info.get("name")
 
@@ -55,12 +67,140 @@ def _get_model_setting(model_info: dict):
     if not provider_config:
         raise ValueError(f"Provider '{provider}' not found in configuration")
 
-    # 合并配置：公共配置 < 模型特定配置
-    settings = provider_config.get("settings", {}).copy()
-    model_specific_settings = provider_config.get(model_name, {})
-    settings.update(model_specific_settings)
+    return provider_config
 
-    return settings
+
+def _get_model_candidates(model_info: dict):
+    provider_config = _get_provider_config(model_info)
+    model_name = model_info.get("name")
+
+    default_config = provider_config.get("settings", {})
+    model_config = provider_config.get(model_name, {})
+
+    if isinstance(default_config, dict) and isinstance(model_config, dict):
+        settings = default_config.copy()
+        settings.update(model_config)
+        return [settings] if settings.get("enabled", True) else []
+
+    model_candidates = _normalize_candidate_list(model_config, model_name)
+    default_candidates = _normalize_candidate_list(default_config, "settings")
+    candidates = model_candidates + default_candidates
+    if not candidates:
+        raise ValueError(f"No enabled candidates found for model '{model_name}'")
+    return candidates
+
+
+def _get_model_setting(model_info: dict):
+    """根据模型信息加载配置并返回第一个候选配置"""
+    return _get_model_candidates(model_info)[0]
+
+
+def _is_error_response(response):
+    content = getattr(response, "content", None)
+    if isinstance(content, list) and content:
+        first = content[0]
+        return isinstance(first, dict) and first.get("type") == "error"
+    return False
+
+
+class FallbackLLMInstance:
+    def __init__(
+            self,
+            model_info: dict,
+            candidates: list,
+            enable_web_search: bool = False,
+            enable_thinking: bool = False,
+            timeout: int = 30,
+            max_retries: int = 3,
+    ):
+        self.model_info = model_info
+        self.candidates = candidates
+        self.enable_web_search = enable_web_search
+        self.enable_thinking = enable_thinking
+        self.timeout = timeout
+        self.max_retries = max_retries
+
+    def _build_llm(self, settings: dict):
+        provider = self.model_info.get("provider")
+        model_name = self.model_info.get("name")
+        api_key = settings.get("api_key")
+        base_url = settings.get("base_url")
+        timeout = settings.get("timeout", self.timeout)
+        max_retries = settings.get("max_retries", self.max_retries)
+
+        if provider == "gemini":
+            return GeminiInstance(
+                model_name=model_name,
+                api_key=api_key,
+                base_url=base_url,
+                enable_web_search=self.enable_web_search,
+                enable_thinking=True,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
+        return OpenAIInstance(
+            model_name=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+            max_retries=max_retries,
+            enable_web_search=self.enable_web_search,
+            enable_thinking=self.enable_thinking,
+            provider=provider
+        )
+
+    def _candidate_name(self, settings: dict, index: int):
+        return f"candidate-{index + 1}"
+
+    async def ainvoke(self, messages: list) -> ResponseWrapper:
+        last_error = None
+        for index, settings in enumerate(self.candidates):
+            candidate_name = self._candidate_name(settings, index)
+            try:
+                response = await self._build_llm(settings).ainvoke(messages)
+                if _is_error_response(response):
+                    last_error = response.content[0].get("text", "unknown error")
+                    logger.warning(f"LLM candidate {candidate_name} failed, trying next candidate: {last_error}")
+                    continue
+                return response
+            except Exception as e:
+                last_error = e
+                logger.warning(f"LLM candidate {candidate_name} failed, trying next candidate: {e}")
+
+        return ResponseWrapper(content=[{"type": "error", "text": f"All LLM candidates failed: {last_error}"}])
+
+    async def astream(self, messages: list):
+        last_error = None
+        for index, settings in enumerate(self.candidates):
+            candidate_name = self._candidate_name(settings, index)
+            stream_started = False
+            try:
+                stream = self._build_llm(settings).astream(messages)
+                first_chunk = await anext(stream)
+                if _is_error_response(first_chunk):
+                    last_error = first_chunk.content[0].get("text", "unknown error")
+                    logger.warning(f"LLM candidate {candidate_name} failed before stream started, trying next candidate: {last_error}")
+                    continue
+
+                stream_started = True
+                yield first_chunk
+
+                async for chunk in stream:
+                    yield chunk
+                return
+            except StopAsyncIteration:
+                last_error = "stream ended before first chunk"
+                logger.warning(f"LLM candidate {candidate_name} ended before stream started, trying next candidate")
+                continue
+            except Exception as e:
+                if stream_started:
+                    logger.error(f"LLM candidate {candidate_name} failed during stream: {e}")
+                    yield ResponseWrapper(content=[{"type": "error", "text": f"LLM streaming error: {e}"}])
+                    return
+                last_error = e
+                logger.warning(f"LLM candidate {candidate_name} failed before stream started, trying next candidate: {e}")
+
+        yield ResponseWrapper(content=[{"type": "error", "text": f"All LLM candidates failed: {last_error}"}])
 
 
 def get_official_llm(
@@ -71,32 +211,14 @@ def get_official_llm(
         max_retries: int = 3,
 ):
     """根据模型信息加载配置并初始化 LLM"""
-    settings = _get_model_setting(model_info)
-    provider = model_info.get("provider")
-    model_name = model_info.get("name")
-
-    api_key = settings.get("api_key")
-    base_url = settings.get("base_url")
-
-    if provider == "gemini":
-        return GeminiInstance(
-            model_name=model_name,
-            api_key=api_key,
-            base_url=base_url,
-            enable_web_search=enable_web_search,
-            enable_thinking=True,
-            timeout=timeout,
-            max_retries=max_retries,
-        )
-    return OpenAIInstance(
-        model_name=model_name,
-        api_key=api_key,
-        base_url=base_url,
-        timeout=timeout,
-        max_retries=max_retries,
+    candidates = _get_model_candidates(model_info)
+    return FallbackLLMInstance(
+        model_info=model_info,
+        candidates=candidates,
         enable_web_search=enable_web_search,
         enable_thinking=enable_thinking,
-        provider=model_info['provider']
+        timeout=timeout,
+        max_retries=max_retries,
     )
 
 
@@ -150,7 +272,7 @@ def get_embedding_instance(embedding_info: dict):
 
 def get_langchain_llm(
         model_info: dict,
-        timeout: int = 60,
+        timeout: int = 30,
         max_retries: int = 5,
         **kwargs
 ):
@@ -165,7 +287,7 @@ def get_langchain_llm(
         model=model_name,
         api_key=api_key,
         base_url=base_url,
-        model_provider=settings['model_provider'] if "model_provider" in settings else None,
+        model_provider=settings.get('model_provider', provider),
         timeout=timeout,
         max_retries=max_retries,
         **kwargs

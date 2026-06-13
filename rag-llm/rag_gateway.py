@@ -68,7 +68,7 @@ class RAGGateway:
             logger.info(f"初始化RAG Gateway，使用模型: {self.model_info['name']}")
             self.llm = get_langchain_llm(
                 model_info=self.model_info,
-                timeout=60,
+                timeout=30,
                 max_retries=3
             )
             self.structured_agent = get_structured_data_agent(
