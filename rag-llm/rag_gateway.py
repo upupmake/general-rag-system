@@ -58,8 +58,11 @@ class RAGGateway:
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "MiniMax-M3",
-            "provider": "minimax"
+            "name": "deepseek-v4-pro",
+            "provider": "deepseek"
+        }
+        self.generate_config = {
+            "extra_body": {"thinking": {"type": "disabled"}}
         }
 
     async def initialize(self):
@@ -69,7 +72,8 @@ class RAGGateway:
             self.llm = get_langchain_llm(
                 model_info=self.model_info,
                 timeout=30,
-                max_retries=3
+                max_retries=3,
+                **self.generate_config
             )
             self.structured_agent = get_structured_data_agent(
                 llm=self.llm,
