@@ -58,8 +58,8 @@ class RAGGateway:
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "deepseek-v4-flash",
-            "provider": "deepseek"
+            "name": "MiniMax-M3",
+            "provider": "minimax"
         }
 
     async def initialize(self):

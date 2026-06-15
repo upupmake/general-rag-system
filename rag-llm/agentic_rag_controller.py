@@ -118,8 +118,8 @@ class RetrievalController:
 
     def __init__(self):
         model_info = {
-            "name": "MiniMax-M2.7",
-            "provider": "minimax"
+            "name": "deepseek-v4-flash",
+            "provider": "deepseek"
         }
         generate_config = {
         }

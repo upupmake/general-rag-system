@@ -362,6 +362,37 @@ def test_gemini_candidate_build_uses_gemini_instance():
         utils.GeminiInstance = original_gemini
 
 
+async def _collect_stream_text(llm):
+    chunks = []
+    async for chunk in llm.astream([{"role": "user", "content": "hello"}]):
+        chunks.append(chunk.content)
+    return chunks
+
+
+def test_other_gemini_stream_uses_ainvoke_once():
+    calls = []
+
+    class FakeLLM:
+        async def ainvoke(self, messages):
+            calls.append(("ainvoke", messages))
+            return utils.ResponseWrapper("final-text")
+
+        async def astream(self, messages):
+            calls.append(("astream", messages))
+            yield utils.ResponseWrapper("stream-text")
+
+    class TestFallback(utils.FallbackLLMInstance):
+        def _build_llm(self, settings):
+            return FakeLLM()
+
+    llm = TestFallback(
+        model_info={"provider": "other", "name": "gemini-2.5-flash"},
+        candidates=[{"api_key": "key"}],
+    )
+    assert asyncio.run(_collect_stream_text(llm)) == ["final-text"]
+    assert calls == [("ainvoke", [{"role": "user", "content": "hello"}])]
+
+
 def _run_tests():
     tests = [
         test_old_dict_config_merges_to_single_candidate,
@@ -376,6 +407,7 @@ def _run_tests():
         test_langchain_llm_falls_back_to_request_provider,
         test_openai_candidate_build_uses_provider_and_candidate_settings,
         test_gemini_candidate_build_uses_gemini_instance,
+        test_other_gemini_stream_uses_ainvoke_once,
     ]
     for test in tests:
         test()

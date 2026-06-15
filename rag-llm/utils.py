@@ -152,6 +152,12 @@ class FallbackLLMInstance:
     def _candidate_name(self, settings: dict, index: int):
         return f"candidate-{index + 1}"
 
+    def _should_stream_via_ainvoke(self):
+        return (
+                self.model_info.get("provider") == "other"
+                and self.model_info.get("name", "").startswith("gemini")
+        )
+
     async def ainvoke(self, messages: list) -> ResponseWrapper:
         last_error = None
         for index, settings in enumerate(self.candidates):
@@ -170,6 +176,11 @@ class FallbackLLMInstance:
         return ResponseWrapper(content=[{"type": "error", "text": f"All LLM candidates failed: {last_error}"}])
 
     async def astream(self, messages: list):
+        if self._should_stream_via_ainvoke():
+            response = await self.ainvoke(messages)
+            yield response
+            return
+
         last_error = None
         for index, settings in enumerate(self.candidates):
             candidate_name = self._candidate_name(settings, index)
