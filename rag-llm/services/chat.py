@@ -36,7 +36,7 @@ async def get_session_name(body: dict = Body()):
     """根据用户第一条消息生成会话标题"""
     content = body.get("content", "")
     try:
-        model = {"name": "glm-5.1", "provider": "z-ai"}
+        model = {"name": "glm-5.2", "provider": "z-ai"}
         generate_config = {
             "extra_body": {"thinking": {"type": "disabled"}}
         }

@@ -58,7 +58,7 @@ class RAGGateway:
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "glm-5.1",
+            "name": "glm-5.2",
             "provider": "z-ai"
         }
         self.generate_config = {
