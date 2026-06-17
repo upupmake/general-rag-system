@@ -82,9 +82,9 @@ def _get_model_candidates(model_info: dict):
         settings.update(model_config)
         return [settings] if settings.get("enabled", True) else []
 
-    model_candidates = _normalize_candidate_list(model_config, model_name)
-    default_candidates = _normalize_candidate_list(default_config, "settings")
-    candidates = model_candidates + default_candidates
+    candidates = _normalize_candidate_list(model_config, model_name)
+    if not candidates:
+        candidates = _normalize_candidate_list(default_config, "settings")
     if not candidates:
         raise ValueError(f"No enabled candidates found for model '{model_name}'")
     return candidates

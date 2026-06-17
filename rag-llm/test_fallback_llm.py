@@ -120,7 +120,7 @@ def test_old_dict_config_merges_to_single_candidate():
         utils._load_config = original_load_config
 
 
-def test_list_config_orders_model_candidates_before_settings():
+def test_list_config_uses_model_candidates_before_settings_fallback():
     original_load_config = utils._load_config
     try:
         utils._load_config = lambda: {
@@ -137,7 +137,7 @@ def test_list_config_orders_model_candidates_before_settings():
             }
         }
         candidates = utils._get_model_candidates({"provider": "deepseek", "name": "deepseek-v4-flash"})
-        assert [item["api_key"] for item in candidates] == ["model-1", "default-1"]
+        assert [item["api_key"] for item in candidates] == ["model-1"]
     finally:
         utils._load_config = original_load_config
 
