@@ -54,6 +54,14 @@ export function useScroll() {
     updateUserScrolledUp()
   }
 
+  // 用户主动点击"回到底部"：重置跟随状态并强制平滑滚到底部
+  const jumpToBottom = () => {
+    if (!messagesContainer.value) return
+    userScrolledUp.value = false
+    isTouchHolding.value = false
+    scrollToBottom('smooth', true)
+  }
+
   return {
     messagesContainer,
     userScrolledUp,
@@ -62,6 +70,7 @@ export function useScroll() {
     handleScroll,
     handleWheel,
     startTouchScrolling,
-    endTouchScrolling
+    endTouchScrolling,
+    jumpToBottom
   }
 }

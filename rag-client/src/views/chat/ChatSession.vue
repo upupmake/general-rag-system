@@ -12,6 +12,7 @@ import {
   CaretRightOutlined,
   HistoryOutlined,
   UpOutlined,
+  VerticalAlignBottomOutlined,
 } from '@ant-design/icons-vue'
 import {Bubble, Sender, ThoughtChain} from 'ant-design-x-vue'
 import {useRoute} from 'vue-router'
@@ -43,7 +44,8 @@ const {
   handleScroll,
   handleWheel,
   startTouchScrolling,
-  endTouchScrolling
+  endTouchScrolling,
+  jumpToBottom
 } = useScroll()
 
 // Tools management
@@ -372,6 +374,18 @@ const confirmContextCustom = () => {
           </Bubble.List>
         </Spin>
       </div>
+      <!-- 回到底部悬浮按钮 -->
+      <transition name="scroll-to-bottom-fade">
+        <button
+            v-if="userScrolledUp"
+            type="button"
+            class="scroll-to-bottom-btn"
+            title="回到底部"
+            @click="jumpToBottom"
+        >
+          <VerticalAlignBottomOutlined/>
+        </button>
+      </transition>
     </div>
 
     <!-- 输入区域 -->

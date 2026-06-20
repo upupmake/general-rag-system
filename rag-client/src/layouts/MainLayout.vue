@@ -571,13 +571,12 @@ const go = (path) => {
   z-index: 101;
   transition: left 0.2s, background-color 0.2s, color 0.2s, box-shadow 0.2s, width 0.2s, height 0.2s;
   border-radius: 0 32px 32px 0;
-  background: rgba(255, 255, 255, 0.85);
+  background: #fff;
   border: 1px solid #e8e8e8;
   border-left: none;
   color: #bbb;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 3px 2px 12px rgba(0, 0, 0, 0.15);
   font-size: 12px;
-  backdrop-filter: blur(4px);
 }
 
 .sidebar-toggle-handle:hover {
@@ -585,7 +584,7 @@ const go = (path) => {
   height: 72px;
   background: #1677ff;
   color: #fff;
-  box-shadow: 2px 0 16px rgba(22, 119, 255, 0.35);
+  box-shadow: 3px 2px 18px rgba(22, 119, 255, 0.4);
   border-color: #1677ff;
 }
 

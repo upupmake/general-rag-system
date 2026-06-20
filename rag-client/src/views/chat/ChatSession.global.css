@@ -54,6 +54,18 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* 回到底部按钮暗色适配 */
+.chat-session-container.is-dark .scroll-to-bottom-btn {
+  background: #2a2a2a;
+  color: #e0e0e0;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
+}
+
+.chat-session-container.is-dark .scroll-to-bottom-btn:hover {
+  background: #3a3a3a;
+  color: #fff;
+}
+
 /* ================= 思考过程 (Thinking Section) ================= */
 .thinking-section {
   margin-bottom: 16px;
