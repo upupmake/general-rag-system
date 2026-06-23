@@ -32,6 +32,7 @@ import java.time.Duration;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @RestController
@@ -354,6 +355,7 @@ public class ChatController {
         List<Map<String, Object>> ragProcessList = new java.util.ArrayList<>();
         Map<String, Object> usageInfo = new java.util.HashMap<>(); // Store usage info
         ObjectMapper objectMapper = new ObjectMapper();
+        AtomicBoolean saved = new AtomicBoolean(false);
 
         Map<String, Object> options = new java.util.HashMap<>();
         // 合并用户传递的 options
@@ -385,10 +387,20 @@ public class ChatController {
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
                 })
                 .doOnSubscribe(a -> updateMessageStatus(sessionId, currentUserMessageId, "generating"))
-                .doOnError(e -> updateMessageStatus(sessionId, currentUserMessageId, "pending"))
-                .doOnCancel(() -> updateMessageStatus(sessionId, currentUserMessageId, "pending"))
+                .doOnError(e -> {
+                    if (saved.compareAndSet(false, true)) {
+                        saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo)
+                                .subscribeOn(Schedulers.boundedElastic()).subscribe();
+                    }
+                })
+                .doOnCancel(() -> {
+                    if (saved.compareAndSet(false, true)) {
+                        saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo)
+                                .subscribeOn(Schedulers.boundedElastic()).subscribe();
+                    }
+                })
                 .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo))
-                .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo));
+                .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, saved));
 
         RequestLimitations requestLimitations = requestLimitationsService.getOne(
                 new LambdaQueryWrapper<RequestLimitations>()
@@ -494,8 +506,11 @@ public class ChatController {
 
     private Mono<String> saveCompletedMessage(Long sessionId, Long userId, ChatStream chatStream,
                                               Long currentUserMessageId, StringBuffer sb, StringBuffer thinkingSb,
-                                              List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper, Map<String, Object> usageInfo) {
+                                              List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper, Map<String, Object> usageInfo, AtomicBoolean saved) {
         return Mono.defer(() -> Mono.fromCallable(() -> {
+            if (!saved.compareAndSet(false, true)) {
+                return objectMapper.writeValueAsString(Map.of("type", "done"));
+            }
             ConversationMessages userMessage = conversationMessagesService.getById(currentUserMessageId);
             if (userMessage != null) {
                 userMessage.setStatus("completed");
@@ -558,6 +573,64 @@ public class ChatController {
                     "userMessageId", currentUserMessageId,
                     "assistantMessageId", aiMessage.getId()
             ));
+        }).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    private Mono<String> saveStoppedMessage(Long sessionId, Long userId, ChatStream chatStream,
+                                            Long currentUserMessageId, StringBuffer sb, StringBuffer thinkingSb,
+                                            List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper, Map<String, Object> usageInfo) {
+        return Mono.defer(() -> Mono.fromCallable(() -> {
+            // 客户端主动中断：user msg -> completed，assistant msg 保存部分内容（可能为空），status=completed
+            ConversationMessages userMessage = conversationMessagesService.getById(currentUserMessageId);
+            if (userMessage != null) {
+                userMessage.setStatus("completed");
+                conversationMessagesService.updateById(userMessage);
+            }
+
+            ConversationMessages aiMessage = new ConversationMessages();
+            aiMessage.setSessionId(sessionId);
+            aiMessage.setUserId(userId);
+            aiMessage.setRole("assistant");
+            aiMessage.setContent(sb.toString());
+            if (thinkingSb.length() > 0) {
+                aiMessage.setThinking(thinkingSb.toString());
+            }
+            aiMessage.setKbId(chatStream.getKbId());
+            aiMessage.setStatus("completed");
+            aiMessage.setModelId(chatStream.getModelId());
+
+            if (usageInfo.containsKey("latency_ms")) {
+                aiMessage.setLatencyMs((Long) usageInfo.get("latency_ms"));
+            }
+            if (usageInfo.containsKey("completion_tokens")) {
+                aiMessage.setCompletionTokens((Integer) usageInfo.get("completion_tokens"));
+            }
+            if (usageInfo.containsKey("prompt_tokens")) {
+                aiMessage.setPromptTokens((Integer) usageInfo.get("prompt_tokens"));
+            }
+            if (usageInfo.containsKey("total_tokens")) {
+                aiMessage.setTotalTokens((Integer) usageInfo.get("total_tokens"));
+            }
+            if (usageInfo.containsKey("first_token_latency_ms")) {
+                aiMessage.setFirstTokenLatencyMs((Long) usageInfo.get("first_token_latency_ms"));
+            }
+            if (usageInfo.containsKey("is_success")) {
+                aiMessage.setIsSuccess((Boolean) usageInfo.get("is_success"));
+            }
+
+            if (!ragProcessList.isEmpty()) {
+                try {
+                    String ragContextJson = objectMapper.writeValueAsString(ragProcessList);
+                    aiMessage.setRagContext(ragContextJson);
+                } catch (JsonProcessingException e) {
+                    log.error("序列化RAG过程信息失败", e);
+                }
+            }
+
+            conversationMessagesService.save(aiMessage);
+            log.info("客户端中断，已保存部分内容为 assistant 消息，messageId={}, contentLength={}", aiMessage.getId(), sb.length());
+
+            return "";
         }).subscribeOn(Schedulers.boundedElastic()));
     }
 

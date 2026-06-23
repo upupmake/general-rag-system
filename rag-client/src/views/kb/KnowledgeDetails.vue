@@ -338,6 +338,9 @@ const folderUploadFileSet = ref(new Set());
 const folderUploadChecked = ref(false);
 const folderUploadBlocked = ref(false); // 标记本次文件夹上传是否已被阻止
 const MAX_FOLDER_FILES = 300;
+const MAX_FILE_SIZE_MB = 100;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const sizeUploadBlocked = ref(false); // 标记本次上传是否因文件过大而被阻止
 
 // 自动排除的文件夹列表
 const EXCLUDED_FOLDERS = [
@@ -392,6 +395,7 @@ const beforeUpload = (file, fileList) => {
       if (fileList && fileList.length > 0) {
         let totalFiles = 0;
         let excludedFiles = 0;
+        let oversizedFile = null;
 
         fileList.forEach(f => {
           if (f.webkitRelativePath) {
@@ -400,6 +404,9 @@ const beforeUpload = (file, fileList) => {
             } else {
               folderUploadFileSet.value.add(f.uid);
               totalFiles++;
+              if (!oversizedFile && f.size > MAX_FILE_SIZE_BYTES) {
+                oversizedFile = f;
+              }
             }
           }
         });
@@ -408,6 +415,20 @@ const beforeUpload = (file, fileList) => {
 
         if (excludedFiles > 0) {
           message.info(`已自动排除 ${excludedFiles} 个开发环境文件（如 node_modules、.git 等）`, 3);
+        }
+
+        if (oversizedFile) {
+          const sizeMB = (oversizedFile.size / (1024 * 1024)).toFixed(2);
+          message.error(`文件 ${oversizedFile.name} 大小为 ${sizeMB} MB，超过最大限制 ${MAX_FILE_SIZE_MB} MB，整批次上传已取消`, 5);
+          folderUploadChecked.value = false;
+          folderUploadBlocked.value = true;
+          folderUploadFileSet.value.clear();
+
+          setTimeout(() => {
+            folderUploadBlocked.value = false;
+          }, 1000);
+
+          return false;
         }
 
         if (totalFiles > MAX_FOLDER_FILES) {
@@ -438,6 +459,20 @@ const beforeUpload = (file, fileList) => {
     folderUploadChecked.value = false;
     folderUploadFileSet.value.clear();
     folderUploadBlocked.value = false;
+
+    // 文件大小校验（整批次拒绝）
+    if (sizeUploadBlocked.value) {
+      return false;
+    }
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      message.error(`文件 ${file.name} 大小为 ${sizeMB} MB，超过最大限制 ${MAX_FILE_SIZE_MB} MB，整批次上传已取消`, 5);
+      sizeUploadBlocked.value = true;
+      setTimeout(() => {
+        sizeUploadBlocked.value = false;
+      }, 1000);
+      return false;
+    }
   }
 
   return true;

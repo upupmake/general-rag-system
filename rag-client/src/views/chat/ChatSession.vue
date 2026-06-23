@@ -13,6 +13,7 @@ import {
   HistoryOutlined,
   UpOutlined,
   VerticalAlignBottomOutlined,
+  PauseOutlined,
 } from '@ant-design/icons-vue'
 import {Bubble, Sender, ThoughtChain} from 'ant-design-x-vue'
 import {useRoute} from 'vue-router'
@@ -83,6 +84,9 @@ const {
   handleStreamCallbacks,
   loadSession,
   onSend,
+  stopGeneration,
+  abortController,
+  isStopped,
   onCopy,
   lastUserMessage,
   isLastUserMsgGenerating,
@@ -124,7 +128,9 @@ const {
     isGenerating,
     userScrolledUp,
     scrollToBottom,
-    handleStreamCallbacks
+    handleStreamCallbacks,
+    abortController,
+    isStopped
 )
 
 // Mobile detection
@@ -554,9 +560,17 @@ const confirmContextCustom = () => {
                     title="收起输入区"
                     @click="collapseInput"/>
 
-                <component :is="(loading || isGenerating || isLastUserMsgGenerating) ? LoadingButton : SendButton"
-                           type="primary" :disabled="loading || isGenerating || isLastUserMsgGenerating || !question"
-                           @click="!loading && !isGenerating && !isLastUserMsgGenerating && handleSend(question)"/>
+                <a-button
+                    v-if="isGenerating"
+                    type="primary"
+                    danger
+                    :icon="h(PauseOutlined)"
+                    title="停止生成"
+                    @click="stopGeneration"/>
+                <component v-else
+                           :is="(loading || isLastUserMsgGenerating) ? LoadingButton : SendButton"
+                           type="primary" :disabled="loading || isLastUserMsgGenerating || !question"
+                           @click="!loading && !isLastUserMsgGenerating && handleSend(question)"/>
               </div>
             </div>
           </template>

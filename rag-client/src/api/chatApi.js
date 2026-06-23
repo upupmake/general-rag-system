@@ -47,8 +47,10 @@ export function fetchSessionTitle(sessionId) {
 
 /**
  * 通用流式请求处理函数
+ * 返回 AbortController，调用方可通过 abort() 主动中断
  */
 function streamRequest(url, body, onOpen, onMessage, onError, onClose, logTag = "Stream") {
+    const controller = new AbortController()
     fetchEventSource(url, {
         method: "POST",
         headers: {
@@ -56,6 +58,7 @@ function streamRequest(url, body, onOpen, onMessage, onError, onClose, logTag = 
             "Content-Type": "application/json"
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
         onopen(response) {
             if (response.ok) {
                 console.log(`${logTag} SSE connected`)
@@ -99,6 +102,7 @@ function streamRequest(url, body, onOpen, onMessage, onError, onClose, logTag = 
         },
         openWhenHidden: true
     }).then()
+    return controller
 }
 
 export function startChatStream(sessionId, modelId, question, kbId, options, onOpen, onMessage, onError, onClose) {
@@ -109,7 +113,7 @@ export function startChatStream(sessionId, modelId, question, kbId, options, onO
         kbId: kbId,
         options: options
     }
-    streamRequest(`${API_BASE_URL}/chat/stream`, body, onOpen, onMessage, onError, onClose, "Chat")
+    return streamRequest(`${API_BASE_URL}/chat/stream`, body, onOpen, onMessage, onError, onClose, "Chat")
 }
 
 /**
@@ -123,7 +127,7 @@ export function editMessageStream(messageId, sessionId, modelId, kbId, newConten
         newContent: newContent,
         options: options
     }
-    streamRequest(`${API_BASE_URL}/chat/messages/${messageId}/edit`, body, onOpen, onMessage, onError, onClose, "Edit")
+    return streamRequest(`${API_BASE_URL}/chat/messages/${messageId}/edit`, body, onOpen, onMessage, onError, onClose, "Edit")
 }
 
 /**
@@ -136,5 +140,5 @@ export function retryMessageStream(userMessageId, sessionId, modelId, kbId, opti
         kbId: kbId,
         options: options
     }
-    streamRequest(`${API_BASE_URL}/chat/messages/${userMessageId}/retry`, body, onOpen, onMessage, onError, onClose, "Retry")
+    return streamRequest(`${API_BASE_URL}/chat/messages/${userMessageId}/retry`, body, onOpen, onMessage, onError, onClose, "Retry")
 }

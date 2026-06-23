@@ -23,11 +23,57 @@ export function useChat(
     const loading = ref(false)
     const isGenerating = ref(false)
     const question = ref('')
+    const abortController = ref(null)
+    const isStopped = ref(false)
+    const currentAssistantMsg = ref(null)
+    const currentUserMsg = ref(null)
+    const stoppedFinalized = ref(false)
+
+    const finalizeStopped = () => {
+        if (stoppedFinalized.value) return
+        stoppedFinalized.value = true
+        const assistantMsg = currentAssistantMsg.value
+        const userMsg = currentUserMsg.value
+        if (assistantMsg) {
+            assistantMsg.loading = false
+            assistantMsg.status = 'completed'
+            if (assistantMsg.thinking) {
+                nextTick(() => {
+                    assistantMsg.thinkingCollapseKeys = []
+                })
+            }
+        }
+        if (userMsg) {
+            userMsg.status = 'completed'
+        }
+        isGenerating.value = false
+        abortController.value = null
+        currentAssistantMsg.value = null
+        currentUserMsg.value = null
+        // 后端异步保存部分内容，延迟拉取消息以获取真实的 user/assistant messageId
+        const sid = sessionId.value
+        setTimeout(async () => {
+            try {
+                const data = await fetchSessionMessages(sid)
+                data.forEach((msg, i) => {
+                    if (messages.value[i] && !messages.value[i].id && msg.id) {
+                        messages.value[i].id = msg.id
+                    }
+                })
+            } catch (e) {
+                console.error('停止后刷新消息失败', e)
+            }
+        }, 500)
+    }
 
     const handleStreamCallbacks = (assistantMsg, userMsg = null) => {
         if (userMsg) {
             userMsg.status = 'generating'
         }
+        isStopped.value = false
+        stoppedFinalized.value = false
+        currentAssistantMsg.value = assistantMsg
+        currentUserMsg.value = userMsg
         return {
             onOpen: () => {
             },
@@ -104,14 +150,27 @@ export function useChat(
                 scrollToBottom('auto')
             },
             onError: (err) => {
+                if (isStopped.value) {
+                    // 主动停止：保留已生成内容，标记完成，不显示错误
+                    finalizeStopped()
+                    return
+                }
                 assistantMsg.content += `\n[Error: 请求发起失败！]`
                 assistantMsg.loading = false
                 isGenerating.value = false
                 if (userMsg) {
                     userMsg.status = 'pending'
                 }
+                abortController.value = null
+                currentAssistantMsg.value = null
+                currentUserMsg.value = null
             },
             onClose: () => {
+                if (isStopped.value) {
+                    // 主动停止：保留已生成内容，标记完成
+                    finalizeStopped()
+                    return
+                }
                 assistantMsg.loading = false
                 assistantMsg.status = 'completed'
 
@@ -126,6 +185,9 @@ export function useChat(
                 if (userMsg) {
                     userMsg.status = 'completed'
                 }
+                abortController.value = null
+                currentAssistantMsg.value = null
+                currentUserMsg.value = null
             }
         }
     }
@@ -262,7 +324,7 @@ export function useChat(
                     }
                 }
 
-                startChatStream(newSessionId, selectedModel.value, null, selectedKb.value || undefined, options, onOpen, onMessage, onError, onClose)
+                abortController.value = startChatStream(newSessionId, selectedModel.value, null, selectedKb.value || undefined, options, onOpen, onMessage, onError, onClose)
             }
         }
         loading.value = false
@@ -312,7 +374,18 @@ export function useChat(
             options.contextMultiplier = contextMultiplier.value
         }
 
-        startChatStream(sessionId.value, selectedModel.value, text, isKbSupported.value ? (selectedKb.value || undefined) : undefined, options, onOpen, onMessage, onError, onClose)
+        abortController.value = startChatStream(sessionId.value, selectedModel.value, text, isKbSupported.value ? (selectedKb.value || undefined) : undefined, options, onOpen, onMessage, onError, onClose)
+    }
+
+    const stopGeneration = () => {
+        if (!isGenerating.value) return
+        isStopped.value = true
+        if (abortController.value) {
+            abortController.value.abort()
+            abortController.value = null
+        }
+        // fetchEventSource 在 abort 时不会触发 onerror/onclose，需在此直接 finalize
+        finalizeStopped()
     }
 
     const onCopy = (textToCopy) => {
@@ -377,6 +450,9 @@ export function useChat(
         handleStreamCallbacks,
         loadSession,
         onSend,
+        stopGeneration,
+        abortController,
+        isStopped,
         onCopy,
         lastUserMessage,
         isLastUserMsgGenerating,

@@ -15,7 +15,9 @@ export function useMessageEdit(
     isGenerating,
     userScrolledUp,
     scrollToBottom,
-    handleStreamCallbacks
+    handleStreamCallbacks,
+    abortController,
+    isStopped
 ) {
     const editingIndex = ref(-1)
     const editingContent = ref('')
@@ -83,6 +85,7 @@ export function useMessageEdit(
         const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg)
 
         isGenerating.value = true
+        isStopped.value = false
         const options = {}
         if (selectedTools.value.includes('webSearch')) {
             options.webSearch = true
@@ -100,7 +103,7 @@ export function useMessageEdit(
             options.contextMultiplier = contextMultiplier.value
         }
 
-        editMessageStream(
+        abortController.value = editMessageStream(
             userMsg.id,
             sessionId.value,
             selectedModel.value,
@@ -140,6 +143,7 @@ export function useMessageEdit(
         const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg)
 
         isGenerating.value = true
+        isStopped.value = false
         const options = {}
         if (selectedTools.value.includes('webSearch')) {
             options.webSearch = true
@@ -157,7 +161,7 @@ export function useMessageEdit(
             options.contextMultiplier = contextMultiplier.value
         }
 
-        retryMessageStream(
+        abortController.value = retryMessageStream(
             userMsg.id,
             sessionId.value,
             selectedModel.value,
