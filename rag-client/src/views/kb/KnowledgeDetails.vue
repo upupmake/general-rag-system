@@ -1,5 +1,5 @@
 <script setup>
-import {onMounted, ref, computed, watch, h} from "vue";
+import {onMounted, ref, computed, watch} from "vue";
 import {onUnmounted} from "vue";
 import VuePdfEmbed from 'vue-pdf-embed';
 import 'vue-pdf-embed/dist/styles/annotationLayer.css';
@@ -337,7 +337,6 @@ const fetchKbInfo = async () => {
 const folderUploadFileSet = ref(new Set());
 const folderUploadChecked = ref(false);
 const folderUploadBlocked = ref(false); // 标记本次文件夹上传是否已被阻止
-const batchNameBlocked = ref(false);   // 标记本次批次因文件名不合规而被整体拒绝
 const MAX_FOLDER_FILES = 300;
 
 // 自动排除的文件夹列表
@@ -367,44 +366,7 @@ const isFileExcluded = (filePath) => {
 };
 
 const beforeUpload = (file, fileList) => {
-  // ① 批次文件名校验 —— 仅在处理批次第一个文件时执行一次，统一校验全批次
-  if (!batchNameBlocked.value && fileList && fileList.length > 0 && fileList[0].uid === file.uid) {
-    // 对于文件夹上传，排除自动过滤的目录，只校验实际会上传的文件
-    const filesToCheck = fileList.filter(f =>
-      !f.webkitRelativePath || !isFileExcluded(f.webkitRelativePath)
-    );
-    const invalidFiles = [];
-    filesToCheck.forEach(f => {
-      const pathName = f.webkitRelativePath || f.name;
-      const base = pathName.split('/').pop() || pathName;
-      const reasons = [];
-      if (base.includes(' ')) reasons.push('包含空格');
-      if (reasons.length > 0) {
-        invalidFiles.push({ name: base, reason: reasons.join('、') });
-      }
-    });
-    if (invalidFiles.length > 0) {
-      message.error({
-        content: h('div', [
-          h('div', { style: 'font-weight:500; margin-bottom:6px;' },
-            `整批次上传已取消，以下 ${invalidFiles.length} 个文件命名不规范：`
-          ),
-          h('ul', { style: 'margin:0; padding-left:18px;' },
-            invalidFiles.map(f => h('li', { style: 'color:#ff4d4f;' }, `"${f.name}"（${f.reason}）`))
-          )
-        ]),
-        duration: 8
-      });
-      batchNameBlocked.value = true;
-      setTimeout(() => { batchNameBlocked.value = false; }, 1000);
-      return false;
-    }
-  }
-
-  // 如果批次已因文件名校验失败被整体拒绝，拒绝后续每个文件（不再弹窗）
-  if (batchNameBlocked.value) return false;
-
-  // ② 文件类型校验（逐文件）
+  // ① 文件类型校验（逐文件）
   const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
   const allowed = acceptExtensions.split(',');
   if (!allowed.includes(extension)) {
@@ -412,7 +374,7 @@ const beforeUpload = (file, fileList) => {
     return false;
   }
 
-  // ③ 文件夹上传逻辑
+  // ② 文件夹上传逻辑
   if (file.webkitRelativePath) {
     // 自动排除开发环境目录
     if (isFileExcluded(file.webkitRelativePath)) {

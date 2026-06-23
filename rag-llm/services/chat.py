@@ -361,8 +361,8 @@ async def chat_stream(
             context_multiplier = None
 
     if model.get("provider") == "anthropic":
-        model["provider"] = "xiaomi"
-        model["name"] = "mimo-v2.5-pro"
+        model["provider"] = "z-ai"
+        model["name"] = "glm-5.2"
 
     prompt_tokens = 0
     if history:

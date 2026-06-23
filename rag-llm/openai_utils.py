@@ -35,6 +35,17 @@ class OpenAIInstance:
             },
         )
 
+    def _use_responses_api(self):
+        return self.model_name.startswith("gpt-")
+
+    def _responses_extract(self, event):
+        event_type = getattr(event, "type", None)
+        if event_type == "response.output_text.delta":
+            return ResponseWrapper(content=event.delta)
+        if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
+            return ResponseWrapper(content=[{"type": "reasoning", "text": event.delta}])
+        return None
+
     def chat_api_extract(self, chunk):
         delta = chunk.choices[0].delta
 
@@ -49,6 +60,13 @@ class OpenAIInstance:
 
     async def ainvoke(self, messages: list) -> ResponseWrapper:
         try:
+            if self._use_responses_api():
+                response = await self.client.responses.create(
+                    model=self.model_name,
+                    input=messages,
+                    **self.get_generate_config()
+                )
+                return ResponseWrapper(content=response.output_text)
             response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
@@ -113,8 +131,10 @@ class OpenAIInstance:
             else:
                 extra_body['thinking'] = {"type": "disabled"}
         elif self.model_name.startswith("gpt-"):
-            # Chat Completions 路径不再支持 Responses API 内置网页搜索
-            reasoning_effort = "medium"
+            # gpt-* 走 Responses API
+            reasoning = {"effort": "medium"}
+            if self.enable_web_search:
+                tools.append({"type": "web_search"})
         elif "grok-4" in self.model_name:
             if self.enable_thinking:
                 reasoning_effort = "high"
@@ -142,9 +162,22 @@ class OpenAIInstance:
         return r
 
     async def astream(self, messages: list) -> AsyncGenerator[ResponseWrapper, None]:
-        generate_config = self.get_generate_config()
-        logger.info(f"generate_config: {generate_config}")
         try:
+            if self._use_responses_api():
+                stream = await self.client.responses.create(
+                    model=self.model_name,
+                    input=messages,
+                    stream=True,
+                    **self.get_generate_config()
+                )
+                async for event in stream:
+                    item = self._responses_extract(event)
+                    if item:
+                        yield item
+                return
+
+            generate_config = self.get_generate_config()
+            logger.info(f"generate_config: {generate_config}")
             stream = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,

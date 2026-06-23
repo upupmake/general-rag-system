@@ -98,16 +98,10 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
                     extension = originalFilename.substring(originalFilename.lastIndexOf("."));
                 }
 
-                // 校验文件名（取路径最后一段）
-                String baseName = (originalFilename != null && originalFilename.contains("/"))
-                        ? originalFilename.substring(originalFilename.lastIndexOf("/") + 1)
-                        : originalFilename;
-                if (baseName != null) {
-                    List<String> reasons = new java.util.ArrayList<>();
-                    if (baseName.contains(" ")) reasons.add("包含空格");
-                    if (!reasons.isEmpty()) {
-                        throw new BusinessException(400, "文件名 '" + baseName + "' 不符合规范：" + String.join("、", reasons));
-                    }
+                // 文件名中的空格自动替换为下划线
+                if (originalFilename != null && originalFilename.contains(" ")) {
+                    originalFilename = originalFilename.replace(" ", "_");
+                    log.info("文件名包含空格，已自动替换为下划线: {}", originalFilename);
                 }
 
                 // File organization: users/{groupId}/{kbId}/{uuid}{ext}
