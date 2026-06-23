@@ -14,6 +14,7 @@ import {
 // 引入本地静态资源 URL
 import lightThemeUrl from '@/assets/github-markdown.min.css?url';
 import workspaceApi from '@/api/workspaceApi.js';
+import {events} from '@/events.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -56,11 +57,18 @@ onMounted(() => {
       router.push('/login')
     })
   }
+  events.on('sessionTitleUpdated', ({sessionId: sid, title}) => {
+    if (String(route.params.sessionId) === String(sid)) {
+      currentSessionTitle.value = title
+      updatePageTitle()
+    }
+  })
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkIsMobile)
   document.removeEventListener('click', handleDocumentClick)
+  events.off('sessionTitleUpdated')
 })
 
 // 计算用户显示名称
@@ -128,6 +136,29 @@ const loadMarkdownTheme = () => {
 
 loadMarkdownTheme();
 
+// 页面标题映射
+const pageTitleMap = {
+  '/chat/new': '新聊天',
+  '/dashboard': 'Dashboard',
+  '/kb': '知识库',
+  '/search': '搜索对话',
+  '/workspaces': '工作空间',
+}
+
+const currentSessionTitle = ref('')
+
+const updatePageTitle = () => {
+  let pageTitle = ''
+  if (route.path.startsWith('/chat/') && !route.path.startsWith('/chat/new')) {
+    pageTitle = currentSessionTitle.value || '对话'
+  } else if (route.path.startsWith('/kb/')) {
+    pageTitle = '知识库'
+  } else {
+    pageTitle = pageTitleMap[route.path] || ''
+  }
+  document.title = pageTitle ? `${pageTitle} - RAG知识系统` : 'RAG知识系统'
+}
+
 /**
  * 同步菜单选中状态
  */
@@ -147,6 +178,17 @@ watch(
       } else {
         selectedKeys.value = []
       }
+      updatePageTitle()
+    },
+    {immediate: true}
+)
+
+// 切换会话时重置标题，实际标题由 SessionList 通过 sessionTitleUpdated 事件提供
+watch(
+    () => route.params.sessionId,
+    () => {
+      currentSessionTitle.value = ''
+      updatePageTitle()
     },
     {immediate: true}
 )
@@ -155,6 +197,12 @@ watch(
 // loadCurrentWorkspace()
 
 const go = (path) => {
+  // 在对话页面切换到其他页面时，在新标签页打开
+  const isOnChatSession = route.path.startsWith('/chat/') && !route.path.startsWith('/chat/new')
+  if (isOnChatSession) {
+    window.open(path, '_blank')
+    return
+  }
   router.push(path)
 }
 </script>

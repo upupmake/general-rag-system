@@ -140,7 +140,12 @@ const groupable = {
 }
 
 const handleActiveChange = (key) => {
-  router.push(`/chat/${key}`)
+  const isOnChatSession = route.path.startsWith('/chat/') && !route.path.startsWith('/chat/new')
+  if (isOnChatSession && String(route.params.sessionId) !== String(key)) {
+    window.open(`/chat/${key}`, '_blank')
+  } else {
+    router.push(`/chat/${key}`)
+  }
 }
 
 watch(
@@ -148,6 +153,22 @@ watch(
     (val) => {
       activeKey.value = val
     }
+)
+
+// 当活跃会话或列表数据变化时，通知 MainLayout 更新页面标题
+watch(
+    [activeKey, conversationItems],
+    () => {
+      if (!activeKey.value) return
+      const item = conversationItems.value.find(i => i.key === String(activeKey.value))
+      if (item) {
+        events.emit('sessionTitleUpdated', {
+          sessionId: activeKey.value,
+          title: item.label || '对话'
+        })
+      }
+    },
+    {immediate: true}
 )
 
 onMounted(() => {
