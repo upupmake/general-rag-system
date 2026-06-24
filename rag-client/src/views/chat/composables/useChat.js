@@ -28,6 +28,7 @@ export function useChat(
     const currentAssistantMsg = ref(null)
     const currentUserMsg = ref(null)
     const stoppedFinalized = ref(false)
+    const streamStarted = ref(false)
 
     const finalizeStopped = () => {
         if (stoppedFinalized.value) return
@@ -47,6 +48,7 @@ export function useChat(
             userMsg.status = 'completed'
         }
         isGenerating.value = false
+        streamStarted.value = false
         abortController.value = null
         currentAssistantMsg.value = null
         currentUserMsg.value = null
@@ -72,12 +74,14 @@ export function useChat(
         }
         isStopped.value = false
         stoppedFinalized.value = false
+        streamStarted.value = false
         currentAssistantMsg.value = assistantMsg
         currentUserMsg.value = userMsg
         return {
             onOpen: () => {
             },
             onMessage: (data) => {
+                streamStarted.value = true
                 if (data.type === 'content') {
                     if (assistantMsg.loading) assistantMsg.loading = false
                     if (assistantMsg.thinking && assistantMsg.thinkingCollapseKeys?.length) {
@@ -158,6 +162,7 @@ export function useChat(
                 assistantMsg.content += `\n[Error: 请求发起失败！]`
                 assistantMsg.loading = false
                 isGenerating.value = false
+                streamStarted.value = false
                 if (userMsg) {
                     userMsg.status = 'pending'
                 }
@@ -182,6 +187,7 @@ export function useChat(
                 }
 
                 isGenerating.value = false
+                streamStarted.value = false
                 if (userMsg) {
                     userMsg.status = 'completed'
                 }
@@ -446,6 +452,7 @@ export function useChat(
         messages,
         loading,
         isGenerating,
+        streamStarted,
         question,
         handleStreamCallbacks,
         loadSession,

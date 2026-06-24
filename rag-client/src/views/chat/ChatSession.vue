@@ -80,6 +80,7 @@ const {
   messages,
   loading,
   isGenerating,
+  streamStarted,
   question,
   handleStreamCallbacks,
   loadSession,
@@ -561,16 +562,16 @@ const confirmContextCustom = () => {
                     @click="collapseInput"/>
 
                 <a-button
-                    v-if="isGenerating"
+                    v-if="isGenerating && streamStarted"
                     type="primary"
                     danger
                     :icon="h(PauseOutlined)"
                     title="停止生成"
                     @click="stopGeneration"/>
                 <component v-else
-                           :is="(loading || isLastUserMsgGenerating) ? LoadingButton : SendButton"
-                           type="primary" :disabled="loading || isLastUserMsgGenerating || !question"
-                           @click="!loading && !isLastUserMsgGenerating && handleSend(question)"/>
+                           :is="(loading || isGenerating || isLastUserMsgGenerating) ? LoadingButton : SendButton"
+                           type="primary" :disabled="loading || isGenerating || isLastUserMsgGenerating || !question"
+                           @click="!loading && !isGenerating && !isLastUserMsgGenerating && handleSend(question)"/>
               </div>
             </div>
           </template>
