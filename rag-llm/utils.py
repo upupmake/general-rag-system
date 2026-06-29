@@ -459,21 +459,13 @@ async def image_split(
         'name': 'mimo-v2.5',
         'provider': 'xiaomi'
     }
-    config = _load_config()
-    config = config['chat']
-    provider_config = config.get(model_info['provider'])
-    if not provider_config:
-        raise ValueError(f"Provider '{model_info['provider']}' not found in configuration")
-    # 合并配置：公共配置 < 模型特定配置
-    settings = provider_config.get("settings", {}).copy()
-    model_specific_settings = provider_config.get(model_info['name'], {})
-    settings.update(model_specific_settings)
+    settings = _get_model_setting(model_info)
 
     api_key = settings.get('api_key', None)
     base_url = settings.get('base_url', None)
 
     if not api_key or not base_url:
-        raise ValueError("API key and base URL must be provided in configuration for Qwen models.")
+        raise ValueError("API key and base URL must be provided in configuration for image models.")
 
     # 3. 初始化 LLM
     llm = OpenAIInstance(

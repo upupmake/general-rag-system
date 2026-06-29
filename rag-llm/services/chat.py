@@ -363,6 +363,9 @@ async def chat_stream(
     if model.get("provider") == "anthropic":
         model["provider"] = "z-ai"
         model["name"] = "glm-5.2"
+    elif model.get("provider") == "openai":
+        model["provider"] = "z-ai"
+        model["name"] = "glm-5.2"
 
     prompt_tokens = 0
     if history:
