@@ -218,8 +218,8 @@ def get_official_llm(
         model_info: dict,
         enable_web_search: bool = False,
         enable_thinking: bool = False,
-        timeout: int = 30,
-        max_retries: int = 3,
+        timeout: int = 20,
+        max_retries: int = 1,
 ):
     """根据模型信息加载配置并初始化 LLM"""
     candidates = _get_model_candidates(model_info)
@@ -456,8 +456,8 @@ async def image_split(
 
     # 2. 获取配置
     model_info = {
-        'name': 'mimo-v2.5',
-        'provider': 'xiaomi'
+        'name': 'doubao-seed-2.0-code',
+        'provider': 'bytedance'
     }
     settings = _get_model_setting(model_info)
 
@@ -472,7 +472,8 @@ async def image_split(
         model_name=model_info['name'],
         api_key=api_key,
         base_url=base_url,
-        provider=model_info['provider']
+        provider=model_info['provider'],
+        timeout=120,
     )
 
     # 4. 构造 Prompt
@@ -505,6 +506,8 @@ async def image_split(
     try:
         response = await llm.ainvoke(messages)
         text = response.content
+        if isinstance(text, list):
+            raise RuntimeError(f"LLM returned error content: {text}")
         logger.info(f"Image description generated, length: {len(text)}")
     except Exception as e:
         logger.error(f"Failed to generate image description: {e}")

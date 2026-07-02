@@ -71,6 +71,7 @@ class OpenAIInstance:
                 model=self.model_name,
                 messages=messages,
                 stream=False,
+                **self.get_generate_config()
             )
             content = response.choices[0].message.content
             return ResponseWrapper(content=content)
