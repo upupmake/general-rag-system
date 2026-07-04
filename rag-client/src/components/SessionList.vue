@@ -283,4 +283,10 @@ onUnmounted(() => {
     padding-inline-start: 5px !important;
   }
 }
+
+@media (hover: none), (pointer: coarse) {
+  :deep(.ant-conversations .ant-conversations-menu-icon) {
+    opacity: 1;
+  }
+}
 </style>
