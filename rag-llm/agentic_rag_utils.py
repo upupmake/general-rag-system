@@ -643,7 +643,7 @@ class AgenticRAGService:
 
         yield {
             "type": "system_prompt",
-            "payload": answer_system_prompt
+            "payload": final_user_content
         }
 
         # 构建对话消息
