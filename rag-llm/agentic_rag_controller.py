@@ -7,7 +7,7 @@ import logging
 from typing import List, Dict, Any
 
 from langchain_core.documents import Document
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.tools import StructuredTool
 
 from utils import get_langchain_llm
@@ -207,78 +207,26 @@ class RetrievalController:
 
     async def decide_next_action(
             self,
-            question: str,
-            history: list,
-            current_round: int,
-            max_rounds: int,
-            reference_docs: List[Document],
-            tool_messages: List,
+            messages: list,
             tools: List[StructuredTool],
+            current_round: int,
     ) -> AIMessage:
         """
         决策下一步行动（原生 Function Calling）
 
         Args:
-            question: 用户问题
-            history: 对话历史
-            current_round: 当前轮次
-            max_rounds: 最大轮次
-            reference_docs: 所有累积的文档
-            tool_messages: 累积的 AIMessage 和 ToolMessage 列表
+            messages: 标准多轮 tool calling 消息列表
             tools: StructuredTool 列表（从 toolkit.get_tools() 获取）
+            current_round: 当前轮次，用于日志
 
         Returns:
             AIMessage: 包含 tool_calls 属性的响应消息
         """
-
-        # 1. 对话上下文
-        history_copy = history.copy()
-        history_copy.append({"role": "user", "content": question})
-        conversation_context = {
-            "current_question": question,
-            "history": self._format_history(history_copy),
-        }
-
-        # 2. RAG检索信息（按文件聚合并排序）
-        docs_info = self._format_docs_by_file(reference_docs)
-
-        # 3. 构建 system prompt（静态，可被缓存）
-        system_prompt = CONTROLLER_SYSTEM_PROMPT
-
-        # 4. 构建 user prompt
-        round_hint = f"## 当前轮次: {current_round}/{max_rounds}" + (
-            " ⚠️ 最后一轮，若信息仍不足请停止并基于现有内容作答" if current_round == max_rounds else ""
-        )
-
-        user_prompt = f"""## 一、对话上下文
-
-{json.dumps(conversation_context, ensure_ascii=False, indent=2)}
-
-## 二、已检索的文档和对应切片（按文件聚合，按chunkIndex排序）
-
-{json.dumps(docs_info, ensure_ascii=False, indent=2)}
-
----
-
-{round_hint}
-
-请基于以上信息和决策策略，选择最合适的工具进行下一步检索，或调用 stop_search 停止检索。"""
-
-        # 5. 构建消息列表：system + user + tool_messages
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt),
-        ]
-        # 追加之前的工具调用历史（AIMessage + ToolMessage）
-        messages.extend(tool_messages)
-
         logger.debug(
             f"\n{'=' * 60}\n"
             f"[Round {current_round}] decide_next_action INPUT\n"
             f"{'=' * 60}\n"
-            f"[SYSTEM]\n{system_prompt}\n\n"
-            f"[USER]\n{user_prompt}\n"
-            f"[TOOL_MESSAGES count: {len(tool_messages)}]\n"
+            f"[MESSAGES count: {len(messages)}]\n"
             f"{'=' * 60}"
         )
 

@@ -13,9 +13,9 @@ from typing import List, Dict, Any, Optional
 import tiktoken
 
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 
-from agentic_rag_controller import RetrievalController
+from agentic_rag_controller import CONTROLLER_SYSTEM_PROMPT, RetrievalController
 from agentic_rag_toolkit import RetrievalToolkit
 from milvus_utils import MilvusClientManager
 from rag_utils import merge_consecutive_chunks
@@ -129,8 +129,50 @@ class AgenticRAGService:
         return "\n".join(lines)
 
     @staticmethod
+    def _format_history_for_controller(history: list) -> str:
+        if not history:
+            return "无对话历史"
+
+        lines = []
+        for msg in history:
+            if isinstance(msg, HumanMessage):
+                role, content = "用户", msg.content
+            elif isinstance(msg, AIMessage):
+                role, content = "助手", msg.content
+            elif isinstance(msg, dict):
+                role_key = msg.get("role", "")
+                role = "用户" if role_key == "user" else "助手" if role_key == "assistant" else role_key
+                content = msg.get("content", "")
+            else:
+                role, content = "未知", str(msg)
+            lines.append(f"{role}: {content}")
+
+        return "\n".join(lines)
+
+    @classmethod
+    def _build_controller_initial_prompt(cls, question: str, history: list, max_rounds: int) -> str:
+        return f"""## 对话历史
+
+{cls._format_history_for_controller(history)}
+
+## 用户当前问题
+
+{question}
+
+## 检索任务
+
+请基于用户问题，通过可用工具检索知识库内容。
+你可以多轮调用工具；工具执行结果会按标准 ToolMessage 形式返回。
+当信息足够、无法继续构造有效查询、或达到检索上限时，调用 stop_search。
+最大检索轮次：{max_rounds}。"""
+
+    @staticmethod
     def _format_tool_message_content(
-            tool_name: str, tool_result: Dict[str, Any], new_added: int, accumulated: int
+            tool_name: str,
+            tool_result: Dict[str, Any],
+            new_docs: List[Document],
+            new_added: int,
+            accumulated: int,
     ) -> str:
         """
         格式化工具执行结果为 ToolMessage 内容字符串
@@ -138,6 +180,7 @@ class AgenticRAGService:
         Args:
             tool_name: 工具名称
             tool_result: 工具原始返回结果
+            new_docs: 去重后新增的文档切片
             new_added: 去重后新增的文档切片数
             accumulated: 累计文档切片总数
 
@@ -148,7 +191,6 @@ class AgenticRAGService:
             results = tool_result.get("results", [])
             if not results:
                 return "未找到匹配的文件"
-            # 格式为 markdown 表格
             table_lines = [
                 "| 文件名 | DocID | 总Chunks |",
                 "|--------|-------|----------|"
@@ -159,30 +201,46 @@ class AgenticRAGService:
                 max_chunk = doc.metadata.get("maxChunkIndex", 0)
                 table_lines.append(f"| {file_name} | {doc_id} | {max_chunk + 1} |")
             return f"找到 {len(results)} 个文件:\n" + "\n".join(table_lines)
-        else:
-            retrieved = tool_result.get("total_hits", 0)
-            return f"检索到 {retrieved} 个文档切片，新增 {new_added} 个，累计 {accumulated} 个"
+
+        retrieved = tool_result.get("total_hits", 0)
+        lines = [
+            f"工具 {tool_name} 执行完成。",
+            "",
+            f"检索到 {retrieved} 个文档切片，新增 {new_added} 个，累计 {accumulated} 个。"
+        ]
+
+        if not new_docs:
+            lines.append("本次没有发现新的文档切片。")
+            return "\n".join(lines)
+
+        lines.extend(["", "## 新增切片"])
+        for index, doc in enumerate(new_docs, start=1):
+            lines.extend([
+                "",
+                f"### [{index}] {doc.metadata.get('fileName', '')} | chunkIndex={doc.metadata.get('chunkIndex', '')} | maxChunkIndex={doc.metadata.get('maxChunkIndex', '')} | documentId={doc.metadata.get('documentId', '')}",
+                "",
+                doc.page_content or ""
+            ])
+
+        return "\n".join(lines)
 
     @staticmethod
-    def _estimate_tool_messages_tokens(tool_messages: List) -> int:
+    def _estimate_messages_tokens(messages: List) -> int:
         """
-        估算 tool_messages（AIMessage + ToolMessage 序列）的总 token 数
-        使用 tiktoken cl100k_base 编码，一次性拼接后计算
+        估算完整 controller messages 的总 token 数
+        使用 tiktoken o200k_base 编码，一次性拼接后计算
         """
         parts = []
-        for msg in tool_messages:
-            if isinstance(msg, AIMessage):
-                if msg.content:
-                    parts.append(str(msg.content))
-                if msg.tool_calls:
-                    parts.append(json.dumps(msg.tool_calls, ensure_ascii=False, default=str))
-            elif isinstance(msg, ToolMessage):
-                if msg.content:
-                    parts.append(str(msg.content))
+        for msg in messages:
+            if getattr(msg, "content", None):
+                parts.append(str(msg.content))
+            tool_calls = getattr(msg, "tool_calls", None)
+            if tool_calls:
+                parts.append(json.dumps(tool_calls, ensure_ascii=False, default=str))
         if not parts:
             return 0
         combined = "\n".join(parts)
-        encoding = tiktoken.get_encoding("cl100k_base")
+        encoding = tiktoken.get_encoding("o200k_base")
         return len(encoding.encode(combined))
 
     async def retrieve_with_process(
@@ -214,7 +272,10 @@ class AgenticRAGService:
 
         all_docs: Dict[int, Document] = {}  # 所有遇到的文档，key为documentId
         reference_docs: Dict[str, Document] = {}  # 用于回答的参考文档，key为pk
-        tool_messages: List = []  # 累积的 AIMessage 和 ToolMessage
+        controller_messages: List = [
+            SystemMessage(content=CONTROLLER_SYSTEM_PROMPT),
+            HumanMessage(content=self._build_controller_initial_prompt(question, history, max_rounds)),
+        ]
         total_rounds = 0
         should_stop = False
 
@@ -224,13 +285,9 @@ class AgenticRAGService:
 
             try:
                 response: AIMessage = await self.controller.decide_next_action(
-                    question=question,
-                    history=history,
-                    reference_docs=list(reference_docs.values()),
-                    tool_messages=tool_messages,
+                    messages=controller_messages,
                     tools=self.toolkit.get_tools(),
                     current_round=round_no,
-                    max_rounds=max_rounds,
                 )
             except Exception as e:
                 logger.error(f"❌ 第{round_no}轮决策失败，停止检索并基于已有结果生成答案: {e}")
@@ -261,8 +318,8 @@ class AgenticRAGService:
                 }
                 break
 
-            # 将 AIMessage 加入历史
-            tool_messages.append(response)
+            # 将 AIMessage 加入检索控制器消息历史
+            controller_messages.append(response)
 
             # 记录本轮调用的工具名（用于 yield）
             round_tool_calls = []
@@ -276,6 +333,10 @@ class AgenticRAGService:
                 if tool_name == "stop_search":
                     stop_reason = tool_args.get("reason", "")
                     logger.info(f"⏹️ stop_search: {stop_reason}")
+                    controller_messages.append(ToolMessage(
+                        content=f"检索已停止: {stop_reason}" if stop_reason else "检索已停止",
+                        tool_call_id=tool_call_id
+                    ))
                     yield {
                         "type": "process",
                         "payload": {
@@ -294,7 +355,7 @@ class AgenticRAGService:
                 try:
                     tool_result = await self.toolkit.execute_tool(tool_name, tool_args)
                     new_docs = tool_result["results"]
-                    before_count = len(reference_docs)
+                    newly_added_docs = []
 
                     # find_files 只返回元信息，不加入reference_docs
                     if tool_name != "find_files":
@@ -303,6 +364,7 @@ class AgenticRAGService:
                             if pk and pk not in reference_docs:
                                 doc.metadata["retrieved_round"] = round_no
                                 reference_docs[pk] = doc
+                                newly_added_docs.append(doc)
 
                     # 记录所有遇到的文档信息
                     for doc in new_docs:
@@ -317,18 +379,18 @@ class AgenticRAGService:
                                 }
                             )
 
-                    after_count = len(reference_docs)
-                    new_added = after_count - before_count
+                    new_added = len(newly_added_docs)
+                    accumulated = len(reference_docs)
 
-                    logger.info(f"📊 {tool_name}: 本轮新增 {new_added}, 累积总数 {after_count}")
+                    logger.info(f"📊 {tool_name}: 本轮新增 {new_added}, 累积总数 {accumulated}")
                     if new_added == 0:
                         logger.warning(f"⚠️ 本轮无新增文档")
 
                     # 格式化结果为 ToolMessage 内容
                     tool_message_content = self._format_tool_message_content(
-                        tool_name, tool_result, new_added, after_count
+                        tool_name, tool_result, newly_added_docs, new_added, accumulated
                     )
-                    tool_messages.append(ToolMessage(
+                    controller_messages.append(ToolMessage(
                         content=tool_message_content,
                         tool_call_id=tool_call_id
                     ))
@@ -338,13 +400,13 @@ class AgenticRAGService:
                         "args": tool_args,
                         "retrieved": tool_result.get("total_hits", 0),
                         "new_added": new_added,
-                        "accumulated": after_count,
+                        "accumulated": accumulated,
                     })
 
                 except Exception as e:
                     logger.error(f"❌ 工具 {tool_name} 执行失败: {e}")
                     # 将错误信息作为 ToolMessage 回传给 LLM
-                    tool_messages.append(ToolMessage(
+                    controller_messages.append(ToolMessage(
                         content=f"工具执行出错: {str(e)}",
                         tool_call_id=tool_call_id
                     ))
@@ -394,18 +456,18 @@ class AgenticRAGService:
                     }
                 }
 
-            # 检查累积 token 是否超限（180k），超限则提前终止
-            total_tokens = self._estimate_tool_messages_tokens(tool_messages)
-            logger.info(f"📏 当前 tool_messages 累积 token: {total_tokens}")
-            if total_tokens > 180_000:
-                logger.warning(f"⚠️ token 超限 ({total_tokens} > 180000)，提前终止检索")
+            # 检查累积 token 是否超限（256k），超限则提前终止
+            total_tokens = self._estimate_messages_tokens(controller_messages)
+            logger.info(f"📏 当前 controller_messages 累积 token: {total_tokens}")
+            if total_tokens > 256_000:
+                logger.warning(f"⚠️ token 超限 ({total_tokens} > 256000)，提前终止检索")
                 yield {
                     "type": "process",
                     "payload": {
                         "step": f"round_{round_no}",
                         "title": "提前终止",
-                        "description": f"检索上下文 token 已达 {total_tokens}，超过 180k 限制，停止检索并生成答案",
-                        "content": f"**提前终止**\n\n累积 token: **{total_tokens:,}** / 180,000\n\n已获取足够上下文，停止检索并生成答案",
+                        "description": f"检索上下文 token 已达 {total_tokens}，超过 256k 限制，停止检索并生成答案",
+                        "content": f"**提前终止**\n\n累积 token: **{total_tokens:,}** / 256,000\n\n已获取足够上下文，停止检索并生成答案",
                         "status": "completed"
                     }
                 }
@@ -555,6 +617,7 @@ class AgenticRAGService:
         # 构建系统提示词
         if system_prompt:
             logger.info("使用自定义提示词")
+            answer_system_prompt = system_prompt
             final_system_prompt = f"""{system_prompt}
 
 检索过程中涉及到的全部文档列表（元信息表格）：
@@ -564,6 +627,12 @@ class AgenticRAGService:
 {context}"""
         else:
             logger.info("使用系统内置提示词")
+            answer_system_prompt = """你是一个专业的AI助手。基于用户提供的知识库参考内容和对话历史回答用户问题。
+
+要求：
+1. 优先基于文档内容作答，文档是主要信息来源
+2. 如果文档不足以完整回答，结合对话历史进行推理或明确说明
+3. 文档中的信息为切片信息，可能语义并不连贯或存在错误，你需要抽取或推理相关信息"""
             final_system_prompt = f"""你是一个专业的AI助手。基于提供的文档和对话历史回答用户问题。
 
 要求：
@@ -577,13 +646,27 @@ class AgenticRAGService:
 可能与问题有关的参考文档中的内容：
 {context}"""
 
+        final_user_content = f"""# 知识库检索出的可参考的内容
+
+## 检索过程中涉及到的全部文档列表（元信息表格）
+
+{all_docs_table}
+
+## 可能与问题有关的参考文档中的内容
+
+{context}
+
+# 用户当前问题
+
+{question}"""
+
         yield {
             "type": "system_prompt",
             "payload": final_system_prompt
         }
 
         # 构建对话消息
-        conversation = [{"role": "system", "content": final_system_prompt}]
+        conversation = [{"role": "system", "content": answer_system_prompt}]
         for msg in history:
             if isinstance(msg, HumanMessage):
                 conversation.append({"role": "user", "content": msg.content})
@@ -593,7 +676,7 @@ class AgenticRAGService:
                 if reasoning_content:
                     item["reasoning_content"] = reasoning_content
                 conversation.append(item)
-        conversation.append({"role": "user", "content": question})
+        conversation.append({"role": "user", "content": final_user_content})
 
         llm = get_official_llm(
             model_info,
