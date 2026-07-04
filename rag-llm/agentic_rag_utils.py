@@ -11,7 +11,6 @@ import os
 from typing import List, Dict, Any, Optional
 
 import tiktoken
-
 from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 
@@ -305,7 +304,7 @@ class AgenticRAGService:
 
             # 无工具调用 = LLM 决定停止
             if not response.tool_calls:
-                logger.info(f"⏹️ LLM 未调用工具，停止检索")
+                logger.info("⏹️ LLM 未调用工具，停止检索")
                 yield {
                     "type": "process",
                     "payload": {
@@ -384,7 +383,7 @@ class AgenticRAGService:
 
                     logger.info(f"📊 {tool_name}: 本轮新增 {new_added}, 累积总数 {accumulated}")
                     if new_added == 0:
-                        logger.warning(f"⚠️ 本轮无新增文档")
+                        logger.warning("⚠️ 本轮无新增文档")
 
                     # 格式化结果为 ToolMessage 内容
                     tool_message_content = self._format_tool_message_content(
