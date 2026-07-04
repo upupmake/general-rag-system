@@ -1,10 +1,10 @@
 <script setup>
 import {ref, onMounted, computed, h, watch, onUnmounted} from 'vue'
 import {useRouter, useRoute} from 'vue-router'
-import {message, Button, Typography} from 'ant-design-vue'
+import {message, Button, Typography, Modal, Input} from 'ant-design-vue'
 import {Conversations} from 'ant-design-x-vue'
-import {CommentOutlined, ClockCircleOutlined, DeleteOutlined, DownloadOutlined} from '@ant-design/icons-vue'
-import {deleteSession, fetchSessions, fetchSessionMessages} from '@/api/chatApi'
+import {CommentOutlined, ClockCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined} from '@ant-design/icons-vue'
+import {deleteSession, fetchSessions, fetchSessionMessages, renameSession} from '@/api/chatApi'
 import {events} from '@/events.js';
 
 const router = useRouter()
@@ -15,6 +15,8 @@ const groups = ref([])
 const cursor = ref(null)
 const hasMore = ref(true)
 const activeKey = ref(route.params.sessionId)
+const renameState = ref({visible: false, sessionId: null, title: ''})
+const renameLoading = ref(false)
 
 const loadData = async () => {
   if (loading.value || !hasMore.value) return
@@ -94,6 +96,11 @@ const menu = (conversation) => ({
       icon: h(DownloadOutlined),
     },
     {
+      label: '重命名',
+      key: 'rename',
+      icon: h(EditOutlined),
+    },
+    {
       type: 'divider',
     },
     {
@@ -120,9 +127,41 @@ const menu = (conversation) => ({
       })
     } else if (menuInfo.key === 'export') {
       exportSession(conversation.key)
+    } else if (menuInfo.key === 'rename') {
+      renameState.value = {visible: true, sessionId: conversation.key, title: conversation.label}
     }
   },
 });
+
+const confirmRename = async () => {
+  const newTitle = renameState.value.title.trim()
+  if (!newTitle) {
+    message.warning('会话标题不能为空')
+    return
+  }
+  renameLoading.value = true
+  try {
+    await renameSession(renameState.value.sessionId, newTitle)
+    for (const g of groups.value) {
+      const item = g.items.find(i => String(i.id) === String(renameState.value.sessionId))
+      if (item) {
+        item.title = newTitle
+        break
+      }
+    }
+    events.emit('sessionTitleUpdated', {sessionId: renameState.value.sessionId, title: newTitle})
+    message.success('重命名成功')
+    renameState.value.visible = false
+  } catch (e) {
+    message.error('重命名失败，请重试')
+  } finally {
+    renameLoading.value = false
+  }
+}
+
+const cancelRename = () => {
+  renameState.value.visible = false
+}
 
 const groupable = {
   sort(a, b) {
@@ -214,6 +253,23 @@ onUnmounted(() => {
         查看更多历史
       </Button>
     </div>
+    <Modal
+        :open='renameState.visible'
+        title='重命名会话'
+        :confirm-loading='renameLoading'
+        ok-text='保存'
+        cancel-text='取消'
+        @ok='confirmRename'
+        @cancel='cancelRename'
+    >
+      <Input
+          v-model:value='renameState.title'
+          placeholder='请输入新的会话标题'
+          :maxlength='100'
+          allow-clear
+          @press-enter='confirmRename'
+      />
+    </Modal>
   </div>
 </template>
 

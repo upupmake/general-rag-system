@@ -68,4 +68,15 @@ public class QuerySessionController {
         String title = querySessionsService.generateTitle(sessionId, userId, workspaceId);
         return R.success(Map.of("title", title));
     }
+
+    @PutMapping("/{sessionId}/title")
+    public R<Map<String, String>> renameSession(
+            @PathVariable Long sessionId,
+            @RequestBody Map<String, String> body
+    ) {
+        Long userId = (Long) request.getAttribute("userId");
+        Long workspaceId = (Long) request.getAttribute("workspaceId");
+        String newTitle = querySessionsService.renameSession(sessionId, userId, workspaceId, body.get("title"));
+        return R.success(Map.of("title", newTitle));
+    }
 }

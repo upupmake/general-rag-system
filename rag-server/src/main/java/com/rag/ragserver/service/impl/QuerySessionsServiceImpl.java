@@ -190,6 +190,26 @@ public class QuerySessionsServiceImpl extends ServiceImpl<QuerySessionsMapper, Q
         }
         return removeById(sessionId);
     }
+
+    @Override
+    public String renameSession(Long sessionId, Long userId, Long workspaceId, String title) {
+        String trimmed = title == null ? "" : title.trim();
+        if (trimmed.isEmpty()) {
+            throw new BusinessException(400, "会话标题不能为空");
+        }
+        QuerySessions session = getOne(new LambdaQueryWrapper<QuerySessions>()
+                .eq(QuerySessions::getId, sessionId)
+                .eq(QuerySessions::getUserId, userId)
+                .eq(QuerySessions::getWorkspaceId, workspaceId)
+                .eq(QuerySessions::getIsDeleted, 0));
+        if (session == null) {
+            throw new BusinessException(404, "会话不存在或无权限修改");
+        }
+        update(new LambdaUpdateWrapper<QuerySessions>()
+                .eq(QuerySessions::getId, sessionId)
+                .set(QuerySessions::getSessionKey, trimmed));
+        return trimmed;
+    }
 }
 
 

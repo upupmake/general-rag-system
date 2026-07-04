@@ -45,6 +45,10 @@ export function fetchSessionTitle(sessionId) {
     return commonApi.get(`/sessions/${sessionId}/title`)
 }
 
+export function renameSession(sessionId, title) {
+    return commonApi.put(`/sessions/${sessionId}/title`, {title})
+}
+
 /**
  * 通用流式请求处理函数
  * 返回 AbortController，调用方可通过 abort() 主动中断

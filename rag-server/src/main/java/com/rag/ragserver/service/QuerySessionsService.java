@@ -21,6 +21,7 @@ public interface QuerySessionsService extends IService<QuerySessions> {
             SessionCursorQuery query
     );
     Boolean deleteSession(Long sessionId, Long userId, Long workspaceId);
+    String renameSession(Long sessionId, Long userId, Long workspaceId, String title);
 
     List<SessionSearchResultDTO> searchSessions(Long userId, Long workspaceId, String keyword, int limit, int offset);
 }
