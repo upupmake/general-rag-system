@@ -508,7 +508,6 @@ class AgenticRAGService:
 
         context = "具体内容为空"
         reference_documents = []
-        all_documents = []
         all_docs_table = ""
 
         # 执行Agentic RAG流程
