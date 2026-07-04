@@ -145,16 +145,40 @@ class RetrievalToolkit:
         """转义特殊字符"""
         return s.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
 
+    @staticmethod
+    def _filter_excluded_pks(docs: List[Document], exclude_pks: Optional[set]) -> List[Document]:
+        if not exclude_pks:
+            return docs
+        return [doc for doc in docs if doc.metadata.get("pk") not in exclude_pks]
+
+    @staticmethod
+    def _build_exclude_pks_expr(exclude_pks: Optional[set]) -> str:
+        if not exclude_pks:
+            return ""
+        numeric_pks = []
+        for pk in exclude_pks:
+            try:
+                numeric_pks.append(int(pk))
+            except (TypeError, ValueError):
+                continue
+        if not numeric_pks:
+            return ""
+        return f"not (pk in [{', '.join(str(pk) for pk in numeric_pks)}])"
+
     async def _milvus_filter(
             self,
             filter_expr: str,
             offset: int = 0,
             limit: int = 20,
-            output_fields: Optional[List[str]] = None
+            output_fields: Optional[List[str]] = None,
+            exclude_pks: Optional[set] = None,
     ) -> List[Document]:
         """底层Milvus查询封装"""
         if output_fields is None:
             output_fields = ["text", "pk", "documentId", "chunkIndex", "fileName", "maxChunkIndex"]
+        exclude_expr = self._build_exclude_pks_expr(exclude_pks)
+        if exclude_expr:
+            filter_expr = f"({filter_expr}) and {exclude_expr}"
         try:
             rows = await self.vector_store.aclient.query(
                 collection_name=self.vector_store.collection_name,
@@ -181,6 +205,7 @@ class RetrievalToolkit:
             self,
             query: str,
             top_k: int = 10,
+            exclude_pks: Optional[set] = None,
     ) -> List[Document]:
         """底层向量检索封装"""
         try:
@@ -191,7 +216,7 @@ class RetrievalToolkit:
             keywords = query.split(" ")
             if len(keywords) > 1:
                 expr_filter = " OR ".join([f'text like "%{self._escape(kw)}%"' for kw in keywords])
-                docs.extend(await self._milvus_filter(filter_expr=expr_filter, limit=top_k))
+                docs.extend(await self._milvus_filter(filter_expr=expr_filter, limit=top_k, exclude_pks=exclude_pks))
             return docs
 
         except Exception as e:
@@ -206,6 +231,7 @@ class RetrievalToolkit:
             match_mode: str = "OR",
             top_k: int = 15,
             file_names: Optional[List[str]] = None,
+            exclude_pks: Optional[set] = None,
     ) -> Dict[str, Any]:
         """关键词检索（grep风格），支持全库检索或指定文件范围"""
         if file_names:
@@ -226,8 +252,10 @@ class RetrievalToolkit:
 
         docs = await self._milvus_filter(
             filter_expr=filter_expr,
-            limit=top_k
+            limit=top_k,
+            exclude_pks=exclude_pks
         )
+        docs = self._filter_excluded_pks(docs, exclude_pks)
 
         logger.info(f"✅ grep检索结果: {len(docs)}条")
 
@@ -297,6 +325,7 @@ class RetrievalToolkit:
             grade_query: str,
             top_k: int = 10,
             grade_score_threshold: float = 0.3,
+            exclude_pks: Optional[set] = None,
     ) -> Dict[str, Any]:
         """
         全库语义检索(多query+rerank)
@@ -304,9 +333,10 @@ class RetrievalToolkit:
         流程:
             1. 并行向量检索所有queries（召回阶段）
             2. 合并去重
-            3. 使用grade_query进行Rerank重排序评分（精排阶段）
-            4. K-Means动态阈值过滤
-            5. 按rerank_score排序并返回top_k
+            3. 排除已进入参考文档的chunk
+            4. 使用grade_query进行Rerank重排序评分（精排阶段）
+            5. K-Means动态阈值过滤
+            6. 按rerank_score排序并返回top_k
         """
 
         logger.info(
@@ -317,7 +347,7 @@ class RetrievalToolkit:
 
         retrieval_top_k = max(top_k * 3, 15)
         tasks = [
-            asyncio.create_task(self._vector_search(query=query, top_k=retrieval_top_k))
+            asyncio.create_task(self._vector_search(query=query, top_k=retrieval_top_k, exclude_pks=exclude_pks))
             for query in queries
         ]
 
@@ -333,9 +363,10 @@ class RetrievalToolkit:
                     seen_pks.add(pk)
                     all_docs.append(doc)
 
-        logger.info(f"📊 并行检索完成: 总计{len(all_docs)}个独立文档")
+        all_docs = self._filter_excluded_pks(all_docs, exclude_pks)
+        logger.info(f"📊 并行检索完成: 总计{len(all_docs)}个独立新文档")
         if not all_docs:
-            logger.warning("⚠️ 并行检索未找到任何文档")
+            logger.warning("⚠️ 并行检索未找到任何新文档")
             return {
                 "results": [],
                 "total_hits": 0
@@ -512,13 +543,14 @@ class RetrievalToolkit:
         """返回所有工具（含 stop_search）"""
         return self._tools
 
-    async def execute_tool(self, tool_name: str, args: dict) -> Dict[str, Any]:
+    async def execute_tool(self, tool_name: str, args: dict, exclude_pks: Optional[set] = None) -> Dict[str, Any]:
         """
         执行指定的检索工具（不含 stop_search）
 
         Args:
             tool_name: 工具名称
             args: 工具参数
+            exclude_pks: 已进入参考文档的chunk pk集合，仅用于搜索类工具过滤重复chunk
 
         Returns:
             {"results": List[Document], "total_hits": int}
@@ -526,6 +558,10 @@ class RetrievalToolkit:
         logger.info(f"🔧 执行工具: {tool_name}, 参数: {args}")
         if tool_name not in self._tool_map:
             raise ValueError(f"未知工具: {tool_name}")
+        if tool_name == "keyword_search":
+            return await self._search_by_grep(**args, exclude_pks=exclude_pks)
+        if tool_name == "semantic_search":
+            return await self._search_by_multi_queries_in_database(**args, exclude_pks=exclude_pks)
         return await self._tool_map[tool_name].ainvoke(args)
 
     # ============= 停止工具 =============

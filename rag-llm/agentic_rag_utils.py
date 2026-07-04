@@ -352,7 +352,11 @@ class AgenticRAGService:
 
                 # 执行工具
                 try:
-                    tool_result = await self.toolkit.execute_tool(tool_name, tool_args)
+                    tool_result = await self.toolkit.execute_tool(
+                        tool_name,
+                        tool_args,
+                        exclude_pks=set(reference_docs.keys())
+                    )
                     new_docs = tool_result["results"]
                     newly_added_docs = []
 
