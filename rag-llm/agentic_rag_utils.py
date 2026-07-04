@@ -618,13 +618,6 @@ class AgenticRAGService:
         if system_prompt:
             logger.info("使用自定义提示词")
             answer_system_prompt = system_prompt
-            final_system_prompt = f"""{system_prompt}
-
-检索过程中涉及到的全部文档列表（元信息表格）：
-{all_docs_table}
-
-可能与问题有关的参考文档中的内容：
-{context}"""
         else:
             logger.info("使用系统内置提示词")
             answer_system_prompt = """你是一个专业的AI助手。基于用户提供的知识库参考内容和对话历史回答用户问题。
@@ -633,18 +626,6 @@ class AgenticRAGService:
 1. 优先基于文档内容作答，文档是主要信息来源
 2. 如果文档不足以完整回答，结合对话历史进行推理或明确说明
 3. 文档中的信息为切片信息，可能语义并不连贯或存在错误，你需要抽取或推理相关信息"""
-            final_system_prompt = f"""你是一个专业的AI助手。基于提供的文档和对话历史回答用户问题。
-
-要求：
-1. 优先基于文档内容作答，文档是主要信息来源
-2. 如果文档不足以完整回答，结合对话历史进行推理或明确说明
-3. 文档中的信息为切片信息，可能语义并不连贯或存在错误，你需要抽取或推理相关信息
-
-检索过程中涉及到的全部文档列表（元信息表格）：
-{all_docs_table}
-
-可能与问题有关的参考文档中的内容：
-{context}"""
 
         final_user_content = f"""# 知识库检索出的可参考的内容
 
@@ -662,7 +643,7 @@ class AgenticRAGService:
 
         yield {
             "type": "system_prompt",
-            "payload": final_system_prompt
+            "payload": answer_system_prompt
         }
 
         # 构建对话消息
