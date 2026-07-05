@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +37,14 @@ import javax.validation.Valid;
 @RequestMapping("/users")
 @RequiredArgsConstructor
 public class UserController {
+    private static final List<String> ALLOWED_REGISTER_EMAIL_DOMAINS = List.of(
+            "qq.com", "foxmail.com", "163.com", "126.com", "yeah.net",
+            "sina.com", "sina.cn", "sohu.com", "139.com", "189.cn",
+            "wo.cn", "21cn.com", "gmail.com", "outlook.com", "hotmail.com",
+            "live.com", "msn.com", "yahoo.com", "icloud.com", "aol.com",
+            "gmx.com", "proton.me", "protonmail.com", "mail.com", "yandex.com", "zoho.com"
+    );
+
     private final UsersService usersService;
     private final RolesService rolesService;
     private final WorkspacesService workspacesService;
@@ -51,6 +60,10 @@ public class UserController {
     @PostMapping("/send-code")
     public R<String> sendCode(@RequestBody @Valid SendCodeRequest request) {
         String email = request.getEmail();
+        if (!isRegistrationEmailDomainAllowed(email)) {
+            throw new BusinessException(400, "暂不支持该邮箱域名注册，请使用常见邮箱或教育邮箱");
+        }
+
         // Check if email already registered
         long count = usersService.lambdaQuery().eq(Users::getEmail, email).count();
         if (count > 0) {
@@ -68,6 +81,9 @@ public class UserController {
     public R<String> register(@RequestBody @Valid RegisterRequest request) {
         String email = request.getEmail();
         String code = request.getCode();
+        if (!isRegistrationEmailDomainAllowed(email)) {
+            throw new BusinessException(400, "暂不支持该邮箱域名注册，请使用常见邮箱或教育邮箱");
+        }
 
         String cacheCode = redisTemplate.opsForValue().get("register:code:" + email);
         if (cacheCode == null || !cacheCode.equals(code)) {
@@ -86,21 +102,6 @@ public class UserController {
         user.setUsername(request.getUsername());
         user.setPwd(request.getPassword()); // In real app, password should be encrypted
         user.setEmail(email);
-        // Check if email domain is allowed; disable account if not
-        /*
-        List<String> allowedDomains = Arrays.asList(
-                "qq.com", "foxmail.com", "163.com", "126.com", "yeah.net",
-                "sina.com", "sina.cn", "sohu.com", "139.com", "189.cn",
-                "gmail.com", "outlook.com", "hotmail.com", "live.com", "msn.com",
-                "yahoo.com", "icloud.com", "aol.com", "gmx.com", "proton.me"
-        );
-        String emailLower = email.toLowerCase();
-        boolean domainAllowed = allowedDomains.stream().anyMatch(domain -> emailLower.endsWith("@" + domain))
-                || emailLower.endsWith(".edu.cn") || emailLower.endsWith(".edu");
-        user.setStatus(domainAllowed ? "active" : "disabled");
-         */
-
-
         user.setRoleId(2); // Default role, assuming 2 is user
 
         usersService.save(user);
@@ -111,6 +112,13 @@ public class UserController {
         redisTemplate.delete("register:code:" + email);
 
         return R.success("注册成功");
+    }
+
+    private boolean isRegistrationEmailDomainAllowed(String email) {
+        String emailDomain = email.substring(email.lastIndexOf('@') + 1).toLowerCase();
+        return ALLOWED_REGISTER_EMAIL_DOMAINS.stream()
+                .anyMatch(domain -> emailDomain.equals(domain) || emailDomain.endsWith("." + domain))
+                || emailDomain.endsWith(".edu.cn") || emailDomain.endsWith(".edu");
     }
 
     @PostMapping("/send-reset-code")
