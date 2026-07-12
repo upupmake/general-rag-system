@@ -79,6 +79,7 @@ const onLogin = async () => {
           <a-input
               v-model:value="formState.username"
               placeholder="请输入账号"
+              autocomplete="username"
               size="large"
           />
         </a-form-item>
@@ -87,7 +88,9 @@ const onLogin = async () => {
           <a-input-password
               v-model:value="formState.password"
               placeholder="请输入密码"
+              autocomplete="current-password"
               size="large"
+              class="password-input"
           />
         </a-form-item>
 
@@ -179,6 +182,27 @@ const onLogin = async () => {
   border-radius: 12px;
   border-color: #d7deec;
   transition: all 0.25s ease;
+}
+
+.auth-form :deep(.ant-input:not(.ant-input-affix-wrapper .ant-input)) {
+  padding-inline: 14px;
+}
+
+.auth-form :deep(.ant-input-affix-wrapper) {
+  padding-inline: 14px 12px;
+}
+
+.auth-form :deep(.ant-input-affix-wrapper .ant-input) {
+  padding-inline: 0;
+}
+
+.auth-form :deep(.password-input) {
+  padding-inline-start: 10px;
+}
+
+.auth-form :deep(.password-input .ant-input) {
+  min-width: 0;
+  padding-inline-start: 4px;
 }
 
 .auth-form :deep(.ant-input-affix-wrapper:hover),

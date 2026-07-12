@@ -19,10 +19,14 @@ import {fetchAvailableModels, fetchSessionTitle, startChat} from '@/api/chatApi'
 import {models, groupedModels, providerLogos, selectedModel, selectedKb, loadKbs} from "@/vars.js";
 import {events} from "@/events.js";
 import KbSelector from "@/components/KbSelector.vue";
+import KbDocumentBrowser from '@/components/KbDocumentBrowser.vue'
 import {useThemeStore} from '@/stores/theme';
+import {usePasteUpload} from './composables/usePasteUpload.js'
 
 const router = useRouter()
 const themeStore = useThemeStore();
+const {handlePaste} = usePasteUpload()
+const documentBrowserVisible = ref(false)
 
 const loading = ref(false)
 const selectedTools = ref([])
@@ -272,7 +276,13 @@ const onSend = async (text) => {
               <span
                   style="font-size: 12px; color: #999; margin-left: 8px; font-weight: normal; white-space: normal;">请在您需要检索知识库中信息时选用</span>
             </div>
-            <KbSelector size="large" class="config-select kb-config-select" :disabled="!isKbSupported"/>
+            <div class="kb-select-row" :class="{ 'has-file-button': selectedKb }">
+              <KbSelector size="large" class="config-select kb-config-select" :disabled="!isKbSupported"/>
+              <a-button v-if="selectedKb" type="text" class="kb-files-button" @click="documentBrowserVisible = true">
+                <FileSearchOutlined/>
+                <span>查看文件</span>
+              </a-button>
+            </div>
             <div v-if="!isKbSupported && selectedModel" style="color: #faad14; font-size: 12px; margin-top: 4px;">
               当前模型不支持知识库功能
             </div>
@@ -281,9 +291,10 @@ const onSend = async (text) => {
       </a-card>
 
       <!-- 输入区域 -->
-      <div class="input-section">
+      <div class="input-section" @paste="handlePaste">
         <Sender
             :disabled="loading"
+            :auto-size="false"
             placeholder="请输入你的第一条问题，开启智能对话之旅…"
             @submit="onSend"
             class="chat-sender"
@@ -297,6 +308,10 @@ const onSend = async (text) => {
         <div class="tip-item">⚡ 实时流式输出，响应迅速</div>
       </div>
     </div>
+
+    <KbDocumentBrowser
+        v-model:visible="documentBrowserVisible"
+        :kb-id="selectedKb"/>
   </div>
 </template>
 
@@ -411,6 +426,30 @@ const onSend = async (text) => {
   justify-content: flex-start;
 }
 
+.kb-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  background: #f5f7fa;
+  border: 1px solid #e8eaed;
+  border-radius: 10px;
+}
+
+.kb-files-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  color: #1677ff;
+  background: #fff;
+  border-radius: 7px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
 .provider-option-label {
   display: inline-flex;
   align-items: center;
@@ -454,6 +493,7 @@ const onSend = async (text) => {
 }
 
 .input-section {
+  position: relative;
   margin-bottom: 24px;
 }
 
@@ -463,6 +503,12 @@ const onSend = async (text) => {
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
+}
+
+.chat-sender :deep(textarea) {
+  height: 112px !important;
+  overflow-y: auto !important;
+  resize: none;
 }
 
 .chat-sender:hover {
@@ -523,12 +569,46 @@ const onSend = async (text) => {
     width: 100% !important;
   }
 
+  .kb-select-row {
+    display: grid;
+    grid-template-columns: minmax(0, 280px);
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    max-width: 100%;
+    padding: 3px;
+  }
+
+  .kb-select-row.has-file-button {
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+  }
+
+  .kb-config-select {
+    width: auto !important;
+    min-width: 0;
+  }
+
+  .kb-select-row.has-file-button .kb-config-select {
+    width: 100% !important;
+  }
+
+  .kb-files-button {
+    height: 34px;
+    padding: 0 9px;
+    white-space: nowrap;
+  }
+
   .tools-container {
     justify-content: flex-start;
   }
 
   .tool-btn {
     padding: 8px 12px;
+  }
+
+  .chat-sender :deep(textarea) {
+    height: 88px !important;
   }
 }
 </style>
@@ -660,6 +740,17 @@ const onSend = async (text) => {
 
 .new-chat-container.is-dark .chat-sender {
   background: rgba(30, 30, 30, 0.95);
+}
+
+.new-chat-container.is-dark .kb-select-row {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: #434343;
+}
+
+.new-chat-container.is-dark .kb-files-button {
+  color: #40a9ff;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 .new-chat-container.is-dark .tip-item {

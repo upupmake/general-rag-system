@@ -187,6 +187,12 @@
   transition: all 0.3s ease;
 }
 
+.chat-sender :deep(textarea) {
+  height: 96px !important;
+  overflow-y: auto !important;
+  resize: none;
+}
+
 .input-collapsed-bar {
   width: 100%;
   height: 48px;
@@ -249,11 +255,75 @@
   display: none;
 }
 
+.kb-select-row {
+  display: inline-grid;
+  flex-shrink: 0;
+  grid-template-columns: 160px;
+  align-items: center;
+  gap: 3px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px;
+  background: #f5f7fa;
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+}
+
+.kb-select-row.has-file-button {
+  grid-template-columns: 160px 26px;
+}
+
+.kb-config-select {
+  min-width: 0;
+}
+
+.kb-config-select :deep(.ant-select-selector) {
+  height: 26px !important;
+  padding: 0 22px 0 7px !important;
+}
+
+.kb-config-select :deep(.ant-select-selection-search) {
+  inset-inline-start: 7px !important;
+  inset-inline-end: 22px !important;
+}
+
+.kb-config-select :deep(.ant-select-selection-search-input) {
+  height: 26px !important;
+  line-height: 26px !important;
+  vertical-align: top;
+}
+
+.kb-config-select :deep(.ant-select-selection-item),
+.kb-config-select :deep(.ant-select-selection-placeholder) {
+  line-height: 26px !important;
+}
+
+.kb-files-button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: #1677ff;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
 .sender-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-left: 8px;
+}
+
+.collapse-input-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #595959;
 }
 
 .model-select-footer-wrapper {
@@ -272,45 +342,6 @@
 .kb-select-footer {
   min-width: 160px;
   width: 180px; /* Default desktop width */
-}
-
-.kb-tool-item {
-  height: 28px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  padding: 2px 4px 2px 8px;
-  border-radius: 6px;
-  background: #fff;
-  border: 1px solid #d9d9d9;
-  transition: all 0.2s;
-}
-
-.footer-kb-tool {
-  display: inline-flex;
-}
-
-.kb-tool-item:hover {
-  border-color: #1890ff;
-}
-
-.kb-tool-item--active {
-  background: #e6f7ff;
-  border-color: #1890ff;
-}
-
-/* kb-tool-item 内部组件透明背景，融入外层边框 */
-.kb-tool-item :deep(.kb-select .ant-select-selector),
-.kb-tool-item :deep(.ant-segmented) {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-@media (max-width: 768px) {
-  .kb-tool-item :deep(.kb-select) {
-    min-width: 0;
-  }
 }
 
 .sender-header-tools {
@@ -519,6 +550,10 @@
     padding: 8px 16px 12px;
   }
 
+  .chat-sender :deep(textarea) {
+    height: 80px !important;
+  }
+
   .input-wrapper :deep(.ant-sender .ant-sender-footer) {
     padding: 4px 5px !important;
   }
@@ -540,14 +575,14 @@
   }
 
   .model-select-footer-wrapper {
-    flex: 1 1 auto;
-    min-width: 90px;
-    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    width: 0;
   }
 
   .model-select-footer {
     width: 100% !important;
-    min-width: 90px;
+    min-width: 0;
   }
 
   .model-select-footer :deep(.ant-select-selector) {
@@ -567,28 +602,39 @@
     gap: 4px;
   }
 
-  .footer-kb-tool {
-    flex: 0 1 auto;
-    min-width: 82px;
-    max-width: 48%;
-    height: 26px;
-    padding: 0 2px 0 6px;
+  .kb-select-row {
+    flex: 1 1 0;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    width: 0;
+    max-width: none;
   }
 
-  .footer-kb-tool :deep(.kb-selector-wrapper),
-  .footer-kb-tool :deep(.kb-select) {
-    max-width: 100%;
+  .kb-select-row.has-file-button {
+    grid-template-columns: minmax(0, 1fr) 24px;
   }
 
-  .footer-kb-tool :deep(.ant-select-selector) {
+  .kb-config-select,
+  .kb-config-select :deep(.kb-selector-wrapper),
+  .kb-config-select :deep(.kb-select) {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  .kb-config-select :deep(.ant-select-selector),
+  .kb-config-select :deep(.ant-select-selection-search-input) {
     height: 24px !important;
-    padding: 0 22px 0 4px !important;
+    line-height: 24px !important;
   }
 
-  .footer-kb-tool :deep(.ant-select-selection-search-input),
-  .footer-kb-tool :deep(.ant-select-selection-item),
-  .footer-kb-tool :deep(.ant-select-selection-placeholder) {
+  .kb-config-select :deep(.ant-select-selection-item),
+  .kb-config-select :deep(.ant-select-selection-placeholder) {
     line-height: 24px !important;
+  }
+
+  .kb-files-button {
+    width: 24px;
+    height: 24px;
   }
 
   .sender-actions {
@@ -596,6 +642,11 @@
     justify-content: flex-end;
     gap: 6px;
     margin-left: 0;
+  }
+
+  .collapse-input-button {
+    padding: 0 6px;
+    font-size: 12px;
   }
 
   .kb-wrapper {

@@ -14,12 +14,14 @@ import {
   UpOutlined,
   VerticalAlignBottomOutlined,
   PauseOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons-vue'
 import {Bubble, Sender, ThoughtChain} from 'ant-design-x-vue'
 import {useRoute} from 'vue-router'
 import {Typography, theme, Spin} from 'ant-design-vue'
 import {groupedModels, models, providerLogos, selectedKb, selectedModel, contextMultiplier} from '@/vars.js'
 import KbSelector from '@/components/KbSelector.vue'
+import KbDocumentBrowser from '@/components/KbDocumentBrowser.vue'
 import {useThemeStore} from '@/stores/theme'
 
 // Composables
@@ -27,6 +29,7 @@ import {useScroll} from './composables/useScroll.js'
 import {useTools} from './composables/useTools.js'
 import {useChat} from './composables/useChat.js'
 import {useMessageEdit} from './composables/useMessageEdit.js'
+import {usePasteUpload} from './composables/usePasteUpload.js'
 
 // Utils
 import {md} from './markdown.js'
@@ -36,6 +39,10 @@ const route = useRoute()
 const sessionId = ref(route.params.sessionId)
 const {token} = theme.useToken()
 const themeStore = useThemeStore()
+
+// Paste upload
+const {handlePaste} = usePasteUpload()
+const documentBrowserVisible = ref(false)
 
 // Scroll management
 const {
@@ -397,7 +404,7 @@ const confirmContextCustom = () => {
 
     <!-- 输入区域 -->
     <div class="input-container">
-      <div class="input-wrapper" ref="inputWrapper">
+      <div class="input-wrapper" ref="inputWrapper" @paste="handlePaste">
         <button
             v-if="!inputExpanded"
             type="button"
@@ -412,7 +419,7 @@ const confirmContextCustom = () => {
             v-model:value="question"
             :loading="loading || isGenerating || isLastUserMsgGenerating"
             :actions="false"
-            :auto-size="{ minRows: 2, maxRows: 6 }"
+            :auto-size="false"
             @submit="handleSend"
             class="chat-sender"
             placeholder="输入消息，Shift + Enter 换行，Enter 发送"
@@ -491,11 +498,16 @@ const confirmContextCustom = () => {
                     <span>{{ currentModel.modelName }}</span>
                   </div>
                 </div>
-                <a-tooltip v-if="isKbSupported"
-                           title="请在您需要检索知识库中信息时选用"
-                           placement="topLeft">
-                  <KbSelector :class="['kb-tool-item', 'footer-kb-tool', { 'kb-tool-item--active': selectedKb }]" :bordered="false" size="small" width="150px"/>
-                </a-tooltip>
+                <div v-if="isKbSupported" class="kb-select-row" :class="{ 'has-file-button': selectedKb }">
+                  <a-tooltip title="请在您需要检索知识库中信息时选用" placement="topLeft">
+                    <KbSelector size="small" width="160px" class="kb-config-select"/>
+                  </a-tooltip>
+                  <a-tooltip v-if="selectedKb" title="查看知识库文件">
+                    <a-button type="text" size="small" class="kb-files-button" aria-label="查看知识库文件" @click="documentBrowserVisible = true">
+                      <FileSearchOutlined/>
+                    </a-button>
+                  </a-tooltip>
+                </div>
               </div>
               <div class="sender-actions">
                 <!-- 上下文长度控制 -->
@@ -557,9 +569,12 @@ const confirmContextCustom = () => {
                 <a-button
                     type="text"
                     size="small"
+                    class="collapse-input-button"
                     :icon="h(UpOutlined)"
                     title="收起输入区"
-                    @click="collapseInput"/>
+                    @click="collapseInput">
+                  收起输入区
+                </a-button>
 
                 <a-button
                     v-if="isGenerating && streamStarted"
@@ -578,6 +593,10 @@ const confirmContextCustom = () => {
         </Sender>
       </div>
     </div>
+
+    <KbDocumentBrowser
+        v-model:visible="documentBrowserVisible"
+        :kb-id="selectedKb"/>
   </div>
 </template>
 
