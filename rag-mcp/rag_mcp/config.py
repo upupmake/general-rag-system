@@ -2,7 +2,7 @@ import os
 
 JAVA_OPENAPI_BASE_URL = os.getenv(
     "JAVA_OPENAPI_BASE_URL",
-    "http://127.0.0.1:5616/api/openapi/v1",
+    "https://starvpn.forwardforever.top:5616/api/openapi/v1",
 ).rstrip("/")
 RAG_LLM_BASE_URL = os.getenv(
     "RAG_LLM_BASE_URL",
