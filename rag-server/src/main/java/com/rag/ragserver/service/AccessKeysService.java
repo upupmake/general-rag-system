@@ -13,4 +13,8 @@ public interface AccessKeysService extends IService<AccessKeys> {
     AccessKeyCreatedVO createAccessKey(Long userId, String name);
 
     void revokeAccessKey(Long userId, Long accessKeyId);
+
+    AccessKeys findActiveAccessKey(String rawKey);
+
+    void markUsed(Long accessKeyId);
 }

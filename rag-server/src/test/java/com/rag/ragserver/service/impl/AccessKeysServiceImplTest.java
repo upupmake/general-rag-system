@@ -2,6 +2,7 @@ package com.rag.ragserver.service.impl;
 
 import com.rag.ragserver.domain.AccessKeys;
 import com.rag.ragserver.domain.accesskey.vo.AccessKeyCreatedVO;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.rag.ragserver.mapper.AccessKeysMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,8 +14,11 @@ import java.security.MessageDigest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,6 +54,21 @@ class AccessKeysServiceImplTest {
         assertFalse(stored.getKeyHash().contains(created.getAccessKey()));
         assertEquals(sha256(created.getAccessKey()), stored.getKeyHash());
         assertEquals(created.getAccessKey().substring(0, 15), stored.getKeyPrefix());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void findActiveAccessKeyRejectsWrongPrefixAndQueriesHash() {
+        assertNull(service.findActiveAccessKey("wrong_key"));
+
+        AccessKeys stored = new AccessKeys();
+        stored.setId(2L);
+        when(mapper.selectOne(any(Wrapper.class), anyBoolean())).thenReturn(stored);
+
+        AccessKeys result = service.findActiveAccessKey("grs_ak_test");
+
+        assertSame(stored, result);
+        verify(mapper).selectOne(any(Wrapper.class), anyBoolean());
     }
 
     private String sha256(String value) throws Exception {

@@ -1,5 +1,7 @@
 package com.rag.ragserver.service;
 
+import java.util.Map;
+
 /**
  * 知识库权限检查服务
  */
@@ -13,6 +15,16 @@ public interface KbPermissionService {
      * @return true-有权限, false-无权限
      */
     boolean canReadKb(Long kbId, Long userId, Long workspaceId);
+
+    /**
+     * 按所有工作空间成员关系检查读取来源。
+     */
+    String getReadAccessSource(Long kbId, Long userId);
+
+    /**
+     * 获取用户全部可读知识库及其唯一归类。
+     */
+    Map<Long, String> listReadableKbAccessSources(Long userId);
     
     /**
      * 检查用户是否可以写入知识库（上传文档等）

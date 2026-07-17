@@ -1,5 +1,6 @@
 package com.rag.ragserver.configuration;
 
+import com.rag.ragserver.interceptor.AccessKeyInterceptor;
 import com.rag.ragserver.interceptor.JwtInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -24,6 +25,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
      * 配置全局跨域 (允许所有路径跨域)
      */
     private final JwtInterceptor jwtInterceptor;
+    private final AccessKeyInterceptor accessKeyInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -38,7 +40,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/users/register",
                         "/users/send-reset-code",
                         "/users/reset-password",
-                        "/users/login"
+                        "/users/login",
+                        "/openapi/v1/**"
                 );
+        registry.addInterceptor(accessKeyInterceptor)
+                .addPathPatterns("/openapi/v1/**");
     }
 }

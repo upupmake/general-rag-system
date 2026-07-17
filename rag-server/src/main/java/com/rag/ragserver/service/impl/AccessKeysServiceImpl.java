@@ -81,6 +81,26 @@ public class AccessKeysServiceImpl extends ServiceImpl<AccessKeysMapper, AccessK
         }
     }
 
+    @Override
+    public AccessKeys findActiveAccessKey(String rawKey) {
+        if (rawKey == null || !rawKey.startsWith(KEY_PREFIX)) {
+            return null;
+        }
+        LambdaQueryWrapper<AccessKeys> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AccessKeys::getKeyHash, hash(rawKey))
+                .isNull(AccessKeys::getRevokedAt);
+        return this.getOne(wrapper);
+    }
+
+    @Override
+    public void markUsed(Long accessKeyId) {
+        LambdaUpdateWrapper<AccessKeys> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(AccessKeys::getId, accessKeyId)
+                .isNull(AccessKeys::getRevokedAt)
+                .set(AccessKeys::getLastUsedAt, new Date());
+        this.update(wrapper);
+    }
+
     private AccessKeyVO toVO(AccessKeys accessKey) {
         AccessKeyVO result = new AccessKeyVO();
         result.setId(accessKey.getId());
