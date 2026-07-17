@@ -48,3 +48,4 @@ logs/
 *.key
 *.pem
 config/secrets.yaml
+docs/
