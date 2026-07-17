@@ -133,7 +133,7 @@ class OpenAIInstance:
                 extra_body['thinking'] = {"type": "disabled"}
         elif self.model_name.startswith("gpt-"):
             # gpt-* 走 Responses API
-            reasoning = {"effort": "medium"}
+            reasoning = {"effort": "high"}
             if self.enable_web_search:
                 tools.append({"type": "web_search"})
         elif "grok-4" in self.model_name:

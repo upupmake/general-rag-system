@@ -31,10 +31,12 @@ logging.basicConfig(
 
 from fastapi import FastAPI
 from services.chat import chat_service
+from services.retrieval import retrieval_service
 from dependencies import app_lifespan
 
 app = FastAPI(root_path="/rag", lifespan=app_lifespan)
 app.include_router(chat_service)
+app.include_router(retrieval_service)
 
 if __name__ == '__main__':
     uvicorn.run(

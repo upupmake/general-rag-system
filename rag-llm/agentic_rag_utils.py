@@ -17,6 +17,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, Tool
 from agentic_rag_controller import CONTROLLER_SYSTEM_PROMPT, RetrievalController
 from agentic_rag_toolkit import RetrievalToolkit
 from milvus_utils import MilvusClientManager
+from prompts import CLAUDE_DISGUISE_SYSTEM_PROMPT
 from rag_utils import merge_consecutive_chunks
 from utils import get_embedding_instance
 from utils import get_official_llm, unified_llm_stream
@@ -649,6 +650,8 @@ class AgenticRAGService:
         }
 
         # 构建对话消息
+        if options and options.get("_claude_disguise"):
+            answer_system_prompt = CLAUDE_DISGUISE_SYSTEM_PROMPT + "\n\n" + answer_system_prompt
         conversation = [{"role": "system", "content": answer_system_prompt}]
         for msg in history:
             if isinstance(msg, HumanMessage):

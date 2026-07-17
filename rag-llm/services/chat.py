@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from pydantic import BaseModel, Field
 
 from agentic_rag_utils import AgenticRAGService
+from prompts import CLAUDE_DISGUISE_SYSTEM_PROMPT
 from rag_gateway import get_rag_gateway
 from rag_utils import rag_service
 from utils import get_official_llm, cut_history, get_token_count, unified_llm_stream, get_langchain_llm, \
@@ -363,6 +364,7 @@ async def chat_stream(
     if model.get("provider") == "anthropic":
         model["provider"] = "z-ai"
         model["name"] = "glm-5.2"
+        options["_claude_disguise"] = True
 
     prompt_tokens = 0
     if history:
@@ -461,6 +463,8 @@ async def chat_stream(
         all_messages = langchain_messages + [HumanMessage(content=current_question)]
 
         messages = []
+        if options.get("_claude_disguise"):
+            messages.append({"role": "system", "content": CLAUDE_DISGUISE_SYSTEM_PROMPT})
         for msg in all_messages:
             item = langchain_message_to_chat_dict(msg)
             if item:

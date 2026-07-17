@@ -317,6 +317,39 @@ class RetrievalToolkit:
             end_chunk_index=end_chunk_index
         )
 
+    async def read_document_chunks(
+            self,
+            document_id: int,
+            start_chunk_index: int,
+            end_chunk_index: int,
+    ) -> Dict[str, Any]:
+        """按文档ID读取连续chunk范围"""
+        limit = end_chunk_index - start_chunk_index + 1
+        if limit > 20:
+            raise ValueError(f"单次chunk范围不能超过20个，当前为{limit}个")
+        docs = await self._milvus_filter(
+            filter_expr=(
+                f"documentId == {document_id} and "
+                f"chunkIndex >= {start_chunk_index} and chunkIndex <= {end_chunk_index}"
+            ),
+            limit=limit,
+        )
+        docs.sort(key=lambda doc: doc.metadata.get("chunkIndex", 0))
+        return {"results": docs, "total_hits": len(docs)}
+
+    async def expand_document_context(
+            self,
+            document_id: int,
+            chunk_index: int,
+            window_size: int = 2,
+    ) -> Dict[str, Any]:
+        """按文档ID扩展命中chunk的前后上下文"""
+        return await self.read_document_chunks(
+            document_id=document_id,
+            start_chunk_index=max(0, chunk_index - window_size),
+            end_chunk_index=chunk_index + window_size,
+        )
+
     # ============= 工具4: 全库语义检索(多query+rerank) =============
 
     async def _search_by_multi_queries_in_database(
