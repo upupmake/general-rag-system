@@ -116,6 +116,19 @@ onMounted(loadAccessKeys)
       message="Access Key 等同于账户凭证，请勿提交到代码仓库或发送给他人。"
     />
 
+    <section class="mcp-example" aria-labelledby="mcp-example-title">
+      <div class="mcp-example-heading">
+        <div>
+          <h2 id="mcp-example-title">用于 MCP 知识库检索</h2>
+          <p>当前 Access Key 可用于配置 MCP 检索服务。请将示例中的占位内容替换为创建时保存的完整 Key。</p>
+        </div>
+        <a-tag color="blue">MCP</a-tag>
+      </div>
+      <div class="command-box">
+        <code>mcp-add kb --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer grs_ak_你的完整AccessKey"</code>
+      </div>
+    </section>
+
     <section class="key-table" aria-label="Access Key 列表">
       <a-table
         :columns="columns"
@@ -253,6 +266,42 @@ onMounted(loadAccessKeys)
   margin-bottom: 16px;
 }
 
+.mcp-example {
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border: 1px solid rgba(22, 119, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(22, 119, 255, 0.035);
+}
+
+.mcp-example-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.mcp-example h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.mcp-example p {
+  margin: 4px 0 0;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.command-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid rgba(5, 5, 5, 0.1);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.04);
+  white-space: nowrap;
+}
+
 .key-table {
   overflow: hidden;
   border: 1px solid rgba(5, 5, 5, 0.08);
@@ -293,15 +342,23 @@ code {
 }
 
 :global(body[data-theme='dark']) .page-header p,
+:global(body[data-theme='dark']) .mcp-example p,
 :global(body[data-theme='dark']) .revoked-time {
   color: rgba(255, 255, 255, 0.55);
 }
 
+:global(body[data-theme='dark']) .mcp-example {
+  border-color: rgba(22, 119, 255, 0.35);
+  background: rgba(22, 119, 255, 0.08);
+}
+
 :global(body[data-theme='dark']) .key-table,
+:global(body[data-theme='dark']) .command-box,
 :global(body[data-theme='dark']) .created-key-box {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+:global(body[data-theme='dark']) .command-box,
 :global(body[data-theme='dark']) .created-key-box {
   background: rgba(255, 255, 255, 0.04);
 }
