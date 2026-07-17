@@ -103,9 +103,10 @@ onMounted(loadAccessKeys)
         </div>
         <p>管理用于外部服务访问个人资产的永久凭证。</p>
       </div>
-      <a-button type="primary" @click="openCreate">
+      <a-button class="create-key-button" type="primary" @click="openCreate">
         <template #icon><plus-outlined /></template>
-        创建 Access Key
+        <span class="create-label-desktop">创建 Access Key</span>
+        <span class="create-label-mobile">新建</span>
       </a-button>
     </header>
 
@@ -174,6 +175,42 @@ onMounted(loadAccessKeys)
           </template>
         </template>
       </a-table>
+    </section>
+
+    <section class="key-cards" aria-label="Access Key 列表">
+      <a-spin :spinning="loading">
+        <a-empty v-if="!loading && accessKeys.length === 0" description="暂无 Access Key" />
+        <article v-for="record in accessKeys" :key="record.id" class="key-card">
+          <div class="key-card-header">
+            <div class="key-card-title">
+              <span class="key-name">{{ record.name }}</span>
+              <a-tag :color="record.active ? 'green' : 'default'">
+                {{ record.active ? '有效' : '已撤销' }}
+              </a-tag>
+            </div>
+            <a-button
+              v-if="record.active"
+              type="text"
+              danger
+              aria-label="撤销 Access Key"
+              @click="handleRevoke(record)"
+            >
+              <template #icon><stop-outlined /></template>
+            </a-button>
+          </div>
+          <code class="key-prefix">{{ record.keyPrefix }}••••••••</code>
+          <dl class="key-meta">
+            <div>
+              <dt>创建时间</dt>
+              <dd>{{ formatTime(record.createdAt) }}</dd>
+            </div>
+            <div>
+              <dt>{{ record.active ? '最后使用' : '撤销时间' }}</dt>
+              <dd>{{ formatTime(record.active ? record.lastUsedAt : record.revokedAt) }}</dd>
+            </div>
+          </dl>
+        </article>
+      </a-spin>
     </section>
 
     <a-modal
@@ -308,6 +345,11 @@ onMounted(loadAccessKeys)
   border-radius: 6px;
 }
 
+.key-cards,
+.create-label-mobile {
+  display: none;
+}
+
 .key-name {
   font-weight: 600;
 }
@@ -353,33 +395,190 @@ code {
 }
 
 :global(body[data-theme='dark']) .key-table,
+:global(body[data-theme='dark']) .key-card,
 :global(body[data-theme='dark']) .command-box,
 :global(body[data-theme='dark']) .created-key-box {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+:global(body[data-theme='dark']) .key-card,
 :global(body[data-theme='dark']) .command-box,
 :global(body[data-theme='dark']) .created-key-box {
   background: rgba(255, 255, 255, 0.04);
 }
 
+:global(body[data-theme='dark']) .key-meta dt {
+  color: rgba(255, 255, 255, 0.45);
+}
+
 @media (max-width: 768px) {
   .access-key-page {
-    padding: 20px 16px 36px;
+    padding: 18px 14px 32px;
   }
 
   .page-header {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 16px;
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .page-header > div {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .title-row {
+    flex-wrap: wrap;
+    gap: 6px 8px;
+  }
+
+  .title-row h1 {
+    font-size: 21px;
+    line-height: 28px;
+  }
+
+  .title-icon {
+    font-size: 20px;
   }
 
   .page-header p {
-    margin-left: 0;
+    margin: 5px 0 0;
+    font-size: 13px;
+    line-height: 20px;
   }
 
-  .page-header > .ant-btn {
-    align-self: flex-start;
+  .create-key-button {
+    flex: none;
+    margin-left: auto;
+  }
+
+  .create-label-desktop {
+    display: none;
+  }
+
+  .create-label-mobile {
+    display: inline;
+  }
+
+  .security-alert {
+    margin-bottom: 12px;
+  }
+
+  .mcp-example {
+    margin-bottom: 12px;
+    padding: 14px;
+  }
+
+  .mcp-example-heading {
+    gap: 10px;
+  }
+
+  .mcp-example h2 {
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .mcp-example p {
+    margin-top: 3px;
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  .command-box {
+    margin-top: 10px;
+    padding: 10px 12px;
+    overflow-x: visible;
+    white-space: normal;
+  }
+
+  .command-box code {
+    overflow-wrap: anywhere;
+    line-height: 20px;
+    user-select: all;
+  }
+
+  .key-table {
+    display: none;
+  }
+
+  .key-cards {
+    display: block;
+  }
+
+  .key-card {
+    padding: 14px;
+    border: 1px solid rgba(5, 5, 5, 0.08);
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .key-card + .key-card {
+    margin-top: 10px;
+  }
+
+  .key-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .key-card-title {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .key-card-title .key-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .key-prefix {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 9px;
+    padding: 5px 8px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.04);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .key-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 13px 0 0;
+    padding-top: 11px;
+    border-top: 1px solid rgba(5, 5, 5, 0.06);
+  }
+
+  .key-meta dt {
+    margin-bottom: 3px;
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 11px;
+    line-height: 16px;
+  }
+
+  .key-meta dd {
+    margin: 0;
+    font-size: 12px;
+    line-height: 18px;
+    overflow-wrap: anywhere;
+  }
+
+  :global(body[data-theme='dark']) .key-prefix {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  :global(body[data-theme='dark']) .key-meta {
+    border-top-color: rgba(255, 255, 255, 0.08);
   }
 }
 </style>
