@@ -9,7 +9,8 @@ import {
   UserOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  GithubOutlined
+  GithubOutlined,
+  KeyOutlined
 } from '@ant-design/icons-vue';
 // 引入本地静态资源 URL
 import lightThemeUrl from '@/assets/github-markdown.min.css?url';
@@ -142,6 +143,7 @@ const pageTitleMap = {
   '/dashboard': 'Dashboard',
   '/kb': '知识库',
   '/search': '搜索对话',
+  '/access-keys': 'Access Key',
   '/workspaces': '工作空间',
 }
 
@@ -173,6 +175,8 @@ watch(
         selectedKeys.value = ['kb']
       } else if (route.path.startsWith('/search')) {
         selectedKeys.value = ['search']
+      } else if (route.path.startsWith('/access-keys')) {
+        selectedKeys.value = ['access-keys']
       } else if (route.path.startsWith('/workspaces')) {
         selectedKeys.value = ['workspaces']
       } else {
@@ -266,6 +270,12 @@ const go = (path) => {
               <span style="font-size: 16px;">🔍</span>
             </template>
             搜索对话
+          </a-menu-item>
+          <a-menu-item key="access-keys" @click="go('/access-keys')">
+            <template #icon>
+              <key-outlined />
+            </template>
+            Access Key
           </a-menu-item>
         </a-menu>
 

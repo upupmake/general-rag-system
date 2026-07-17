@@ -57,6 +57,11 @@ const routes = [
                 component: () => import('@/views/SearchSessions.vue')
             },
             {
+                path: 'access-keys',
+                name: 'AccessKeys',
+                component: () => import('@/views/AccessKeys.vue')
+            },
+            {
                 path: 'workspaces',
                 name: 'WorkspaceManagement',
                 component: () => import('@/views/workspace/WorkspaceManagement.vue')
