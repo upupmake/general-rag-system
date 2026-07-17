@@ -3,6 +3,7 @@ import {computed, onMounted, ref} from 'vue'
 import {message, Modal} from 'ant-design-vue'
 import {
   CopyOutlined,
+  DownloadOutlined,
   KeyOutlined,
   PlusOutlined,
   StopOutlined
@@ -121,12 +122,23 @@ onMounted(loadAccessKeys)
       <div class="mcp-example-heading">
         <div>
           <h2 id="mcp-example-title">用于 MCP 知识库检索</h2>
-          <p>当前 Access Key 可用于配置 MCP 检索服务。请将示例中的占位内容替换为创建时保存的完整 Key。</p>
+          <p>将示例中的占位内容替换为创建时保存的完整 Key，然后复制整条命令，在 Agent 的对话框中运行。</p>
         </div>
         <a-tag color="blue">MCP</a-tag>
       </div>
       <div class="command-box">
-        <code>mcp-add kb --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer grs_ak_你的完整AccessKey"</code>
+        <code>/mcp-add kb --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer grs_ak_你的完整AccessKey"</code>
+      </div>
+      <div class="agent-download">
+        <span>还没有可使用 MCP 的 Agent？</span>
+        <a-button
+          href="https://makecode.forwardforever.top/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <template #icon><download-outlined /></template>
+          前往下载 Agent
+        </a-button>
       </div>
     </section>
 
@@ -339,6 +351,16 @@ onMounted(loadAccessKeys)
   white-space: nowrap;
 }
 
+.agent-download {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 13px;
+}
+
 .key-table {
   overflow: hidden;
   border: 1px solid rgba(5, 5, 5, 0.08);
@@ -385,6 +407,7 @@ code {
 
 :global(body[data-theme='dark']) .page-header p,
 :global(body[data-theme='dark']) .mcp-example p,
+:global(body[data-theme='dark']) .agent-download,
 :global(body[data-theme='dark']) .revoked-time {
   color: rgba(255, 255, 255, 0.55);
 }
@@ -496,6 +519,17 @@ code {
     overflow-wrap: anywhere;
     line-height: 20px;
     user-select: all;
+  }
+
+  .agent-download {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 10px;
+  }
+
+  .agent-download .ant-btn {
+    width: 100%;
   }
 
   .key-table {
