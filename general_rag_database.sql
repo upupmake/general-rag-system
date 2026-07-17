@@ -1,3 +1,18 @@
+CREATE TABLE `access_keys` (
+  `id` BIGINT AUTO_INCREMENT NOT NULL COMMENT 'Access Key ID',
+  `user_id` BIGINT NOT NULL COMMENT '所属用户 ID',
+  `name` VARCHAR(100) NOT NULL COMMENT 'Access Key 名称',
+  `key_hash` CHAR(64) NOT NULL COMMENT 'Access Key SHA-256 哈希',
+  `key_prefix` VARCHAR(20) NOT NULL COMMENT '用于界面识别的 Key 前缀',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `last_used_at` DATETIME NULL COMMENT '最后使用时间',
+  `revoked_at` DATETIME NULL COMMENT '撤销时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_access_key_hash` (`key_hash`),
+  KEY `idx_access_keys_user_created` (`user_id`, `created_at`)
+)
+ENGINE = InnoDB
+COMMENT = '用户 Access Key 表';
 CREATE TABLE `audit_logs` ( 
   `id` BIGINT AUTO_INCREMENT NOT NULL COMMENT '审计日志 ID' ,
   `user_id` BIGINT NOT NULL COMMENT '操作用户 ID' ,
