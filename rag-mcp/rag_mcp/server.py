@@ -18,6 +18,7 @@ from rag_mcp.clients import (
     authorize_knowledge_base,
     java_delete,
     java_get,
+    java_post,
     java_upload_file,
     rag_retrieve,
     verify_access_key,
@@ -49,8 +50,9 @@ class AccessKeyVerifier(TokenVerifier):
 mcp = FastMCP(
     "General RAG Retrieval",
     instructions=(
-        "提供知识库检索以及个人私有知识库文件管理工具。先调用 list_knowledge_bases 获取 knowledge_base_id，"
-        "检索任务选择对应检索工具；上传或删除文件仅支持调用者本人创建的个人私有知识库。"
+        "提供知识库创建、检索以及个人私有知识库文件管理工具。可创建私有或公开知识库；"
+        "先调用 list_knowledge_bases 获取 knowledge_base_id，检索任务选择对应检索工具；"
+        "上传或删除文件仅支持调用者本人创建的个人私有知识库。"
     ),
     auth=AccessKeyVerifier(),
 )
@@ -200,7 +202,11 @@ async def _audit_tool(
             "userId": user_id,
             "accessKeyId": access_key_id,
             "toolName": tool_name,
-            "knowledgeBaseId": knowledge_base_id,
+            "knowledgeBaseId": (
+                knowledge_base_id
+                if knowledge_base_id is not None
+                else result.get("knowledgeBaseId") if isinstance(result, dict) else None
+            ),
             "documentId": document_id,
             "requestSummary": request_summary,
             "resultSummary": _result_summary(result),
@@ -227,6 +233,41 @@ async def list_knowledge_bases() -> dict:
         {},
         lambda: java_get("/knowledge-bases", _access_key()),
     )
+
+
+@mcp.tool
+async def create_knowledge_base(
+    name: Annotated[str, Field(description="知识库名称，最多100个字符。", min_length=1, max_length=100)],
+    visibility: Annotated[
+        Literal["private", "public"],
+        Field(description="知识库可见性：private 私有，public 公开；暂不支持工作空间共享。"),
+    ] = "private",
+    description: Annotated[
+        str | None,
+        Field(description="知识库描述，最多200个字符。", max_length=200),
+    ] = None,
+) -> dict:
+    """创建一个当前 Access Key 用户拥有的私有或公开知识库。"""
+    request_summary = {
+        "name": name,
+        "visibility": visibility,
+        "descriptionLength": len(description) if description else 0,
+    }
+
+    async def operation() -> dict:
+        result = await java_post(
+            "/knowledge-bases",
+            _access_key(),
+            {"name": name, "description": description, "visibility": visibility},
+        )
+        return {
+            "knowledgeBaseId": result["id"],
+            "name": result["name"],
+            "description": result.get("description"),
+            "visibility": result["visibility"],
+        }
+
+    return await _audit_tool("create_knowledge_base", request_summary, operation)
 
 
 @mcp.tool

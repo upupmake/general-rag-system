@@ -1,15 +1,19 @@
 package com.rag.ragserver.controller;
 
 import com.rag.ragserver.common.R;
+import com.rag.ragserver.domain.openapi.dto.OpenApiKnowledgeBaseCreateDTO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiDocumentVO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseAccessVO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseListVO;
+import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseVO;
 import com.rag.ragserver.service.OpenApiKnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,6 +33,13 @@ public class OpenApiKnowledgeBasesController {
     public R<OpenApiKnowledgeBaseListVO> list() {
         Long userId = (Long) request.getAttribute("userId");
         return R.success(openApiKnowledgeBaseService.listReadableKnowledgeBases(userId));
+    }
+
+    @PostMapping
+    public R<OpenApiKnowledgeBaseVO> create(
+            @RequestBody @Validated OpenApiKnowledgeBaseCreateDTO createDTO) {
+        Long userId = (Long) request.getAttribute("userId");
+        return R.success(openApiKnowledgeBaseService.createKnowledgeBase(createDTO, userId));
     }
 
     @GetMapping("/{kbId}/access")

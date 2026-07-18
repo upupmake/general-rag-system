@@ -36,6 +36,18 @@ async def java_get(path: str, access_key: str) -> Any:
     return payload.get("data")
 
 
+async def java_post(path: str, access_key: str, body: dict[str, Any]) -> Any:
+    payload = await _request(
+        "POST",
+        f"{JAVA_OPENAPI_BASE_URL}{path}",
+        headers={"Authorization": f"Bearer {access_key}"},
+        json=body,
+    )
+    if payload.get("code") != 200:
+        raise ServiceError(payload.get("message") or "请求处理失败")
+    return payload.get("data")
+
+
 async def java_upload_file(path: str, access_key: str, file_name: str, content: bytes) -> Any:
     try:
         async with httpx.AsyncClient(timeout=60) as client:

@@ -2,6 +2,7 @@ package com.rag.ragserver.service.impl;
 
 import com.rag.ragserver.domain.KnowledgeBases;
 import com.rag.ragserver.domain.Workspaces;
+import com.rag.ragserver.domain.openapi.dto.OpenApiKnowledgeBaseCreateDTO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiDocumentVO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseAccessVO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseListVO;
@@ -90,6 +91,21 @@ public class OpenApiKnowledgeBaseServiceImpl implements OpenApiKnowledgeBaseServ
         result.setInvited(invited);
         result.setPublicKnowledgeBases(publicKnowledgeBases);
         return result;
+    }
+
+    @Override
+    public OpenApiKnowledgeBaseVO createKnowledgeBase(OpenApiKnowledgeBaseCreateDTO createDTO, Long userId) {
+        String visibility = createDTO.getVisibility();
+        if (!"private".equals(visibility) && !"public".equals(visibility)) {
+            throw new com.rag.ragserver.exception.BusinessException(400, "目前仅支持创建私有或公开知识库");
+        }
+        KnowledgeBases knowledgeBase = new KnowledgeBases();
+        knowledgeBase.setName(createDTO.getName());
+        knowledgeBase.setDescription(createDTO.getDescription());
+        knowledgeBase.setOwnerUserId(userId);
+        knowledgeBase.setVisibility(visibility);
+        KnowledgeBases created = knowledgeBasesService.createKnowledgeBase(knowledgeBase);
+        return toVO(created, "owned", null);
     }
 
     @Override
