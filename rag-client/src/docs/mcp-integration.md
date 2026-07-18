@@ -54,8 +54,25 @@ https://starvpn.forwardforever.top:7777/mcp
   <figcaption><strong>图 2 · 选择工作区</strong><span>使用方向键选择，按 Enter 确认；也可以选择“输入自定义路径”。</span></figcaption>
 </figure>
 
+<a id="create-kb"></a>
+## 第二步：在网页端创建知识库
+
+接入 Agent 前，可以先在 General RAG 网页端准备好要检索的资料：
+
+1. 登录 General RAG，进入 [知识库管理页](/kb)。
+2. 点击右上角的“新建知识库”，填写名称、描述和可见性后完成创建。
+3. 在“我创建的知识库”中点击刚创建的知识库卡片，进入详情页并上传需要检索的文件。
+4. 等待文件处理完成后，再继续配置 Access Key 和 Agent。
+
+如果后续需要通过 MCP 上传或删除文件，目标知识库必须是**本人创建的个人私有知识库**；只做检索时，也可以使用自己有权访问的工作空间共享、受邀或公开知识库。
+
+<figure class="doc-shot">
+  <img src="./images/13.png" alt="General RAG 网页端知识库管理页，展示新建知识库入口和我创建的知识库列表" />
+  <figcaption><strong>图 3 · 在网页端准备知识库</strong><span>点击右上角“新建知识库”；创建后从红框中的“我创建的知识库”进入详情页上传资料。</span></figcaption>
+</figure>
+
 <a id="access-key"></a>
-## 第二步：创建并保存 Access Key
+## 第三步：创建并保存 Access Key
 
 1. 登录 General RAG，进入 [Access Key 管理页](/access-keys)。
 2. 点击右上角的“创建 Access Key”。
@@ -64,23 +81,23 @@ https://starvpn.forwardforever.top:7777/mcp
 
 <figure class="doc-shot">
   <img src="./images/3.png" alt="General RAG 左侧导航栏中的 Access Key 管理入口" />
-  <figcaption><strong>图 3 · 进入 Access Key 管理页</strong><span>在左侧导航栏点击“Access Key”。</span></figcaption>
+  <figcaption><strong>图 4 · 进入 Access Key 管理页</strong><span>在左侧导航栏点击“Access Key”。</span></figcaption>
 </figure>
 
 <figure class="doc-shot">
   <img src="./images/4.png" alt="创建 Access Key 弹窗，填写凭证名称" />
-  <figcaption><strong>图 4 · 创建 Access Key</strong><span>填写易于识别的名称，之后可以据此区分不同 Agent 使用的凭证。</span></figcaption>
+  <figcaption><strong>图 5 · 创建 Access Key</strong><span>填写易于识别的名称，之后可以据此区分不同 Agent 使用的凭证。</span></figcaption>
 </figure>
 
 <figure class="doc-shot">
   <img src="./images/5.png" alt="Access Key 创建成功后的一次性展示弹窗" />
-  <figcaption><strong>图 5 · 立即复制完整 Key</strong><span>完整 Key 关闭后无法再次查看。图中用于演示的 Key 已撤销。</span></figcaption>
+  <figcaption><strong>图 6 · 立即复制完整 Key</strong><span>完整 Key 关闭后无法再次查看。图中用于演示的 Key 已撤销。</span></figcaption>
 </figure>
 
 > **Access Key 只展示一次。** 完整 Key 等同于账户凭证。不要将它提交到代码仓库、写入公开文档、放在 URL 中、截图分享或发送给他人。若怀疑泄露，请立即在 Access Key 管理页撤销，并创建新 Key。
 
 <a id="mcp-config"></a>
-## 第三步：添加并启用 MCP 服务
+## 第四步：添加并启用 MCP 服务
 
 在 Access Key 管理页复制配置命令，将占位内容替换为刚刚保存的完整 Access Key：
 
@@ -92,21 +109,21 @@ https://starvpn.forwardforever.top:7777/mcp
 
 <figure class="doc-shot">
   <img src="./images/6.png" alt="在 MakeCode Agent 对话输入框中运行 mcp-add 命令" />
-  <figcaption><strong>图 6 · 运行添加命令</strong><span>按 Enter 发送命令。截图中用于演示的 Access Key 已撤销。</span></figcaption>
+  <figcaption><strong>图 7 · 运行添加命令</strong><span>按 Enter 发送命令。截图中用于演示的 Access Key 已撤销。</span></figcaption>
 </figure>
 
 添加完成后，点击 Agent 上方快捷面板中的 **MCP配置**，进入 MCP 服务开关面板。
 
 <figure class="doc-shot">
   <img src="./images/7.png" alt="MakeCode 快捷面板中的 MCP 配置入口" />
-  <figcaption><strong>图 7 · 打开 MCP 配置面板</strong><span>后台显示成功连接并加载 8 个工具，表示服务地址和认证信息有效。</span></figcaption>
+  <figcaption><strong>图 8 · 打开 MCP 配置面板</strong><span>后台显示成功连接并加载 8 个工具，表示服务地址和认证信息有效。</span></figcaption>
 </figure>
 
 使用上下方向键选中刚添加的 `kb` 服务，按 Space 切换为启用状态，再移动到“确认应用”并按 Enter。保存后，Agent 会按配置连接服务并加载工具。
 
 <figure class="doc-shot">
   <img src="./images/8.png" alt="MakeCode MCP 服务开关面板中选择 kb 服务并确认应用" />
-  <figcaption><strong>图 8 · 启用 kb 服务</strong><span>确认草稿状态为“启用”，然后选择“确认应用”。</span></figcaption>
+  <figcaption><strong>图 9 · 启用 kb 服务</strong><span>确认草稿状态为“启用”，然后选择“确认应用”。</span></figcaption>
 </figure>
 
 <div class="doc-callout success">
@@ -127,31 +144,31 @@ https://starvpn.forwardforever.top:7777/mcp
 不同客户端的配置字段名称可能不同，请以对应客户端文档为准。不要把包含完整 Key 的配置文件提交到版本控制系统。
 
 <a id="model-config"></a>
-## 第四步：完成首次模型配置
+## 第五步：完成首次模型配置
 
 首次使用 Agent 时，还需要添加一个可用的大语言模型。点击顶部快捷面板中的 **模型**，进入模型管理页面。
 
 <figure class="doc-shot">
   <img src="./images/9.png" alt="通过 MakeCode 顶部快捷面板进入模型配置页面" />
-  <figcaption><strong>图 9 · 打开模型配置</strong><span>点击快捷面板中的“模型”；也可以根据界面提示使用 <code>/models</code>。</span></figcaption>
+  <figcaption><strong>图 10 · 打开模型配置</strong><span>点击快捷面板中的“模型”；也可以根据界面提示使用 <code>/models</code>。</span></figcaption>
 </figure>
 
 选择“添加模型”，依次填写模型供应商提供的 Base URL、API Key 和 Model ID。下图以 DeepSeek 兼容接口以及 `deepseek-v4-flash`、`deepseek-v4-pro` 两个模型为例；请以你的供应商实际提供的信息为准。
 
 <figure class="doc-shot">
   <img src="./images/10.png" alt="MakeCode 添加 DeepSeek 供应商模型的配置弹窗" />
-  <figcaption><strong>图 10 · 添加供应商模型</strong><span>API Key 输入框会以密文显示；多个 Model ID 使用英文逗号分隔。</span></figcaption>
+  <figcaption><strong>图 11 · 添加供应商模型</strong><span>API Key 输入框会以密文显示；多个 Model ID 使用英文逗号分隔。</span></figcaption>
 </figure>
 
 添加完成后，使用上下方向键选择模型，按 Enter 将其设为当前模型；使用左右方向键调节思考强度。思考强度越高，复杂任务通常会使用更多时间和 Token。
 
 <figure class="doc-shot">
   <img src="./images/11.png" alt="MakeCode 模型管理面板中选择模型并调节思考强度" />
-  <figcaption><strong>图 11 · 选择模型和思考强度</strong><span>截图选择了 <code>deepseek-v4-flash</code>，并将 effort 调整为 max。</span></figcaption>
+  <figcaption><strong>图 12 · 选择模型和思考强度</strong><span>截图选择了 <code>deepseek-v4-flash</code>，并将 effort 调整为 max。</span></figcaption>
 </figure>
 
 <a id="first-search"></a>
-## 第五步：开始知识库检索
+## 第六步：开始知识库检索
 
 配置完成后，直接用自然语言告诉 Agent 你的目标。Agent 会先识别可访问的知识库，再组合检索和原文阅读工具完成任务。
 
@@ -161,7 +178,7 @@ https://starvpn.forwardforever.top:7777/mcp
 
 <figure class="doc-shot">
   <img src="./images/12.png" alt="MakeCode Agent 调用 MCP 工具列出知识库和文件的最终效果" />
-  <figcaption><strong>图 12 · 最终效果</strong><span>Agent 已连接 kb 服务，并通过 MCP 工具获取知识库和文件列表。</span></figcaption>
+  <figcaption><strong>图 13 · 最终效果</strong><span>Agent 已连接 kb 服务，并通过 MCP 工具获取知识库和文件列表。</span></figcaption>
 </figure>
 
 ### 更多提问示例

@@ -17,6 +17,7 @@ import image9 from '@/docs/images/9.png'
 import image10 from '@/docs/images/10.png'
 import image11 from '@/docs/images/11.png'
 import image12 from '@/docs/images/12.png'
+import image13 from '@/docs/images/13.png'
 
 const router = useRouter()
 const tocOpen = ref(false)
@@ -26,17 +27,18 @@ const activeSection = ref('before-start')
 const sections = [
   {id: 'before-start', label: '开始之前'},
   {id: 'install-agent', label: '1. 安装 Agent'},
-  {id: 'access-key', label: '2. 创建 Access Key'},
-  {id: 'mcp-config', label: '3. 添加 MCP'},
-  {id: 'model-config', label: '4. 配置模型'},
-  {id: 'first-search', label: '5. 开始检索'},
+  {id: 'create-kb', label: '2. 创建知识库'},
+  {id: 'access-key', label: '3. 创建 Access Key'},
+  {id: 'mcp-config', label: '4. 添加 MCP'},
+  {id: 'model-config', label: '5. 配置模型'},
+  {id: 'first-search', label: '6. 开始检索'},
   {id: 'tools', label: '8 个可用工具'},
   {id: 'file-management', label: '管理私有文件'},
   {id: 'troubleshooting', label: '常见问题排查'},
   {id: 'security', label: '安全建议'}
 ]
 
-const images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10, image11, image12]
+const images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10, image11, image12, image13]
 const contentWithImages = images.reduce(
   (content, image, index) => content.replaceAll(`./images/${index + 1}.png`, image),
   source
