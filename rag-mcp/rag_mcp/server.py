@@ -16,14 +16,14 @@ from rag_mcp.clients import (
     rag_retrieve,
     verify_access_key,
 )
-from rag_mcp.config import MCP_HOST, MCP_PORT, MCP_PUBLIC_URL
+from rag_mcp.config import MCP_HOST, MCP_PORT
 
 logger = logging.getLogger(__name__)
 
 
 class AccessKeyVerifier(TokenVerifier):
     def __init__(self) -> None:
-        super().__init__(base_url=MCP_PUBLIC_URL)
+        super().__init__()
 
     async def verify_token(self, token: str) -> AccessToken | None:
         if not token.startswith("grs_ak_"):

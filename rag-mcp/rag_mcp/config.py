@@ -11,8 +11,6 @@ RAG_LLM_BASE_URL = os.getenv(
 ).rstrip("/")
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8858"))
-# MCP_PUBLIC_URL = os.getenv("MCP_PUBLIC_URL", f"http://127.0.0.1:{MCP_PORT}")
-MCP_PUBLIC_URL = os.getenv("MCP_PUBLIC_URL", f"https://starvpn.forwardforever.top:7777")
 
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "192.168.188.6")
 RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5678"))
