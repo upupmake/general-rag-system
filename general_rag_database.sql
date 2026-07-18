@@ -29,6 +29,28 @@ CREATE TABLE `audit_logs` (
 )
 ENGINE = InnoDB
 COMMENT = '系统操作审计日志表';
+CREATE TABLE `mcp_tool_logs` (
+  `id` BIGINT AUTO_INCREMENT NOT NULL COMMENT '日志 ID',
+  `invocation_id` CHAR(36) NOT NULL COMMENT '一次 MCP 工具调用的唯一 ID',
+  `user_id` BIGINT NOT NULL COMMENT '调用用户 ID',
+  `access_key_id` BIGINT NULL COMMENT '使用的 Access Key ID',
+  `tool_name` VARCHAR(64) NOT NULL COMMENT 'MCP 工具名称',
+  `knowledge_base_id` BIGINT NULL COMMENT '知识库 ID',
+  `document_id` BIGINT NULL COMMENT '文档 ID',
+  `request_summary` JSON NULL COMMENT '输入参数摘要',
+  `result_summary` JSON NULL COMMENT '返回结果摘要',
+  `status` ENUM('SUCCESS', 'FAIL') NOT NULL COMMENT '调用状态',
+  `error_message` VARCHAR(512) NULL COMMENT '脱敏后的错误信息',
+  `duration_ms` BIGINT NULL COMMENT '工具执行耗时（毫秒）',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '调用完成时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_mcp_tool_logs_invocation_id` (`invocation_id`),
+  KEY `idx_mcp_tool_logs_user_time` (`user_id`, `created_at`, `id`),
+  KEY `idx_mcp_tool_logs_kb_time` (`knowledge_base_id`, `created_at`, `id`),
+  KEY `idx_mcp_tool_logs_tool_time` (`tool_name`, `created_at`, `id`)
+)
+ENGINE = InnoDB
+COMMENT = 'MCP 工具调用日志表';
 CREATE TABLE `conversation_messages` ( 
   `id` BIGINT AUTO_INCREMENT NOT NULL COMMENT '对话消息 ID' ,
   `session_id` BIGINT NOT NULL COMMENT '所属会话 ID，对应 query_sessions.id' ,
