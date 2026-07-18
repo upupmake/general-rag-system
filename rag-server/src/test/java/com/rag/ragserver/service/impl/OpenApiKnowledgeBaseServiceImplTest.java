@@ -2,6 +2,7 @@ package com.rag.ragserver.service.impl;
 
 import com.rag.ragserver.domain.KnowledgeBases;
 import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseAccessVO;
+import com.rag.ragserver.service.DocumentsService;
 import com.rag.ragserver.service.KbPermissionService;
 import com.rag.ragserver.service.KnowledgeBasesService;
 import com.rag.ragserver.service.WorkspacesService;
@@ -20,7 +21,8 @@ class OpenApiKnowledgeBaseServiceImplTest {
     private final OpenApiKnowledgeBaseServiceImpl service = new OpenApiKnowledgeBaseServiceImpl(
             permissionService,
             knowledgeBasesService,
-            mock(WorkspacesService.class)
+            mock(WorkspacesService.class),
+            mock(DocumentsService.class)
     );
 
     @Test
@@ -36,6 +38,21 @@ class OpenApiKnowledgeBaseServiceImplTest {
         assertTrue(result.isAccessible());
         assertEquals("invited", result.getAccessSource());
         assertEquals(42L, result.getOwnerUserId());
+    }
+
+    @Test
+    void privateAccessRequiresOwnerAndPrivateVisibility() {
+        KnowledgeBases knowledgeBase = new KnowledgeBases();
+        knowledgeBase.setId(123L);
+        knowledgeBase.setOwnerUserId(7L);
+        knowledgeBase.setVisibility("private");
+        when(knowledgeBasesService.getById(123L)).thenReturn(knowledgeBase);
+
+        OpenApiKnowledgeBaseAccessVO result = service.checkPrivateAccess(123L, 7L);
+
+        assertTrue(result.isAccessible());
+        assertEquals("owned_private", result.getAccessSource());
+        assertEquals(7L, result.getOwnerUserId());
     }
 
     @Test

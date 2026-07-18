@@ -36,6 +36,34 @@ async def java_get(path: str, access_key: str) -> Any:
     return payload.get("data")
 
 
+async def java_upload_file(path: str, access_key: str, file_name: str, content: bytes) -> Any:
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                f"{JAVA_OPENAPI_BASE_URL}{path}",
+                headers={"Authorization": f"Bearer {access_key}"},
+                files={"files": (file_name, content, "application/octet-stream")},
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise ServiceError("下游文档服务当前不可用") from exc
+    if payload.get("code") != 200:
+        raise ServiceError(payload.get("message") or "文档上传失败")
+    return payload.get("data")
+
+
+async def java_delete(path: str, access_key: str) -> Any:
+    payload = await _request(
+        "DELETE",
+        f"{JAVA_OPENAPI_BASE_URL}{path}",
+        headers={"Authorization": f"Bearer {access_key}"},
+    )
+    if payload.get("code") != 200:
+        raise ServiceError(payload.get("message") or "文档删除失败")
+    return payload.get("data")
+
+
 async def verify_access_key(access_key: str) -> dict[str, int]:
     identity = await java_get("/auth/verify", access_key)
     if not identity or not identity.get("valid"):

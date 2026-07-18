@@ -144,7 +144,7 @@ public class KbController {
         if (!kbPermissionService.canModifyDocument(docId, userId)) {
             throw new BusinessException(403, "没有权限删除该文档");
         }
-        documentsService.deleteDocument(docId, userId);
+        documentsService.deleteDocument(kbId, docId, userId);
         return R.success();
     }
 

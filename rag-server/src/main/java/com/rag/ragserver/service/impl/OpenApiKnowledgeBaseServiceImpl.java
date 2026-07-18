@@ -2,16 +2,19 @@ package com.rag.ragserver.service.impl;
 
 import com.rag.ragserver.domain.KnowledgeBases;
 import com.rag.ragserver.domain.Workspaces;
+import com.rag.ragserver.domain.openapi.vo.OpenApiDocumentVO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseAccessVO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseListVO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiKnowledgeBaseVO;
 import com.rag.ragserver.domain.openapi.vo.OpenApiWorkspaceKnowledgeBasesVO;
+import com.rag.ragserver.service.DocumentsService;
 import com.rag.ragserver.service.KbPermissionService;
 import com.rag.ragserver.service.KnowledgeBasesService;
 import com.rag.ragserver.service.OpenApiKnowledgeBaseService;
 import com.rag.ragserver.service.WorkspacesService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,6 +31,7 @@ public class OpenApiKnowledgeBaseServiceImpl implements OpenApiKnowledgeBaseServ
     private final KbPermissionService kbPermissionService;
     private final KnowledgeBasesService knowledgeBasesService;
     private final WorkspacesService workspacesService;
+    private final DocumentsService documentsService;
 
     @Override
     public OpenApiKnowledgeBaseListVO listReadableKnowledgeBases(Long userId) {
@@ -98,6 +102,41 @@ public class OpenApiKnowledgeBaseServiceImpl implements OpenApiKnowledgeBaseServ
                 accessSource,
                 kb == null ? null : kb.getOwnerUserId()
         );
+    }
+
+    @Override
+    public OpenApiKnowledgeBaseAccessVO checkPrivateAccess(Long kbId, Long userId) {
+        KnowledgeBases kb = knowledgeBasesService.getById(kbId);
+        boolean accessible = kb != null
+                && userId.equals(kb.getOwnerUserId())
+                && "private".equals(kb.getVisibility());
+        return new OpenApiKnowledgeBaseAccessVO(
+                kbId,
+                accessible,
+                accessible ? "owned_private" : null,
+                accessible ? userId : null
+        );
+    }
+
+    @Override
+    public List<OpenApiDocumentVO> uploadPrivateDocuments(Long kbId, MultipartFile[] files, Long userId) {
+        requirePrivateOwner(kbId, userId);
+        return documentsService.uploadDocuments(kbId, files, userId).stream()
+                .map(OpenApiDocumentVO::from)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void deletePrivateDocument(Long kbId, Long docId, Long userId) {
+        requirePrivateOwner(kbId, userId);
+        documentsService.deleteDocument(kbId, docId, userId);
+    }
+
+    private void requirePrivateOwner(Long kbId, Long userId) {
+        KnowledgeBases kb = knowledgeBasesService.getById(kbId);
+        if (kb == null || !userId.equals(kb.getOwnerUserId()) || !"private".equals(kb.getVisibility())) {
+            throw new com.rag.ragserver.exception.BusinessException(403, "仅支持操作本人创建的个人私有知识库");
+        }
     }
 
     private OpenApiKnowledgeBaseVO toVO(KnowledgeBases kb, String accessSource, Workspaces workspace) {

@@ -18,8 +18,7 @@ from agentic_rag_controller import CONTROLLER_SYSTEM_PROMPT, RetrievalController
 from agentic_rag_toolkit import RetrievalToolkit
 from milvus_utils import MilvusClientManager
 from prompts import CLAUDE_DISGUISE_SYSTEM_PROMPT
-from rag_utils import merge_consecutive_chunks
-from utils import get_embedding_instance
+from utils import merge_consecutive_chunks, get_embedding_instance
 from utils import get_official_llm, unified_llm_stream
 
 logger = logging.getLogger(__name__)

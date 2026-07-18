@@ -16,9 +16,9 @@ public interface DocumentsService extends IService<Documents> {
 
     List<Documents> listByKbId(Long kbId);
 
-    void uploadDocuments(Long kbId, MultipartFile[] files, Long userId);
+    List<Documents> uploadDocuments(Long kbId, MultipartFile[] files, Long userId);
 
-    void deleteDocument(Long docId, Long userId);
+    void deleteDocument(Long kbId, Long docId, Long userId);
 
     void previewDocument(Long docId, Long userId, HttpServletResponse response);
 }

@@ -35,19 +35,16 @@ class KeywordSearchInput(BaseModel):
         )
     )
     top_k: int = Field(default=15, description="返回结果数量上限，默认15条")
-    file_names: Optional[List[str]] = Field(
+    document_ids: Optional[List[int]] = Field(
         default=None,
-        description=(
-            "限定检索范围的文件名列表。为空则全库检索。"
-            "示例：['研究生手册.pdf', '学籍管理规定.docx', '学位授予办法.pdf', '培养方案.docx', '课程设置.xlsx']"
-        )
+        description="限定检索范围的 documentId 列表；为空则全库检索。"
     )
 
 
 class ReadFileChunksInput(BaseModel):
-    """read_file_chunks: 按文件名读取连续chunk范围"""
-    file_name: str = Field(
-        description="精确文件名，可通过 find_files 工具获取"
+    """read_file_chunks: 按 documentId 读取连续chunk范围"""
+    document_id: int = Field(
+        description="文档 ID，可通过 find_files 或其他检索结果获取"
     )
     start_chunk_index: int = Field(
         description="起始chunk索引（包含），从0开始"
@@ -58,9 +55,9 @@ class ReadFileChunksInput(BaseModel):
 
 
 class ExpandContextInput(BaseModel):
-    """expand_context: 扩展已命中chunk的上下文窗口"""
-    file_name: str = Field(
-        description="精确文件名，必须来自已检索到的文档"
+    """expand_context: 按 documentId 扩展已命中chunk的上下文窗口"""
+    document_id: int = Field(
+        description="命中文档的 documentId，必须来自已检索到的文档"
     )
     chunk_index: int = Field(
         description="中心chunk索引，必须来自已命中的chunk"
@@ -230,23 +227,21 @@ class RetrievalToolkit:
             keywords: List[str],
             match_mode: str = "OR",
             top_k: int = 15,
-            file_names: Optional[List[str]] = None,
+            document_ids: Optional[List[int]] = None,
             exclude_pks: Optional[set] = None,
     ) -> Dict[str, Any]:
-        """关键词检索（grep风格），支持全库检索或指定文件范围"""
-        if file_names:
-            file_names = [fn.replace(" ", "") for fn in file_names if fn.strip()]
-        scope = "全库" if not file_names else f"{len(file_names)}个文件"
+        """关键词检索（grep风格），支持全库检索或指定文档范围"""
+        scope = "全库" if not document_ids else f"{len(document_ids)}个文件"
         logger.info(
-            f"🔍 [1.grep检索] keywords={keywords}, mode={match_mode}, top_k={top_k}, scope={scope}, files={file_names}")
+            f"🔍 [1.grep检索] keywords={keywords}, mode={match_mode}, top_k={top_k}, scope={scope}, document_ids={document_ids}")
 
         keyword_conditions = [f'text like "%{self._escape(kw)}%"' for kw in keywords]
         keyword_expr = f" {match_mode} ".join(keyword_conditions)
 
-        if file_names:
-            file_conditions = [f'fileName == "{self._escape(fn)}"' for fn in file_names]
-            file_expr = " OR ".join(file_conditions)
-            filter_expr = f'({file_expr}) and ({keyword_expr})'
+        if document_ids:
+            document_conditions = [f"documentId == {document_id}" for document_id in document_ids]
+            document_expr = " OR ".join(document_conditions)
+            filter_expr = f'({document_expr}) and ({keyword_expr})'
         else:
             filter_expr = keyword_expr
 
@@ -264,22 +259,21 @@ class RetrievalToolkit:
             "total_hits": len(docs)
         }
 
-    # ============= 工具2: 按文件名获取连续chunk范围 =============
+    # ============= 工具2: 按 documentId 获取连续chunk范围 =============
 
-    async def _search_by_filename_and_chunk_range(
+    async def _search_by_document_id_and_chunk_range(
             self,
-            file_name: str,
+            document_id: int,
             start_chunk_index: int,
             end_chunk_index: int,
     ) -> Dict[str, Any]:
-        """按文件名获取连续chunk范围"""
-        file_name = file_name.replace(" ", "")
-        logger.info(f"🔍 [2.文件chunk范围] file='{file_name}', range=[{start_chunk_index}, {end_chunk_index}]")
+        """按 documentId 获取连续chunk范围"""
+        logger.info(f"🔍 [2.文件chunk范围] documentId='{document_id}', range=[{start_chunk_index}, {end_chunk_index}]")
 
-        filter_expr = f'fileName == "{self._escape(file_name)}" and chunkIndex >= {start_chunk_index} and chunkIndex <= {end_chunk_index}'
+        filter_expr = f'documentId == {document_id} and chunkIndex >= {start_chunk_index} and chunkIndex <= {end_chunk_index}'
 
         limit = end_chunk_index - start_chunk_index + 1
-        if limit > 21:
+        if limit > 20:
             raise RuntimeError(f"单次chunk范围不能超过20个，当前为{limit}个，请缩小范围或分多次调用")
 
         docs = await self._milvus_filter(
@@ -298,21 +292,20 @@ class RetrievalToolkit:
 
     # ============= 工具3: 快速扩展chunk上下文窗口 =============
 
-    async def _extend_file_chunk_context_window(
+    async def _extend_document_chunk_context_window(
             self,
-            file_name: str,
+            document_id: int,
             chunk_index: int,
             window_size: int = 2,
     ) -> Dict[str, Any]:
-        """围绕某个已命中的chunk，快速查看前后上下文"""
-        file_name = file_name.replace(" ", "")
-        logger.info(f"🔍 [3.扩展上下文] file='{file_name}', chunk_index={chunk_index}, window={window_size}")
+        """围绕某个已命中的chunk，按 documentId 查看前后上下文"""
+        logger.info(f"🔍 [3.扩展上下文] documentId='{document_id}', chunk_index={chunk_index}, window={window_size}")
 
         start_chunk_index = max(0, chunk_index - window_size)
         end_chunk_index = chunk_index + window_size
 
-        return await self._search_by_filename_and_chunk_range(
-            file_name=file_name,
+        return await self._search_by_document_id_and_chunk_range(
+            document_id=document_id,
             start_chunk_index=start_chunk_index,
             end_chunk_index=end_chunk_index
         )
@@ -520,25 +513,23 @@ class RetrievalToolkit:
             StructuredTool(
                 name="read_file_chunks",
                 description=(
-                    "按文件名和chunk范围顺序读取正文内容。"
-                    "【适用场景】已知文件名，需要读取连续段落或章节。"
+                    "按 documentId 和chunk范围顺序读取正文内容。"
+                    "【适用场景】已知 documentId，需要读取连续段落或章节。"
                     "【优点】按顺序读取，适合连续阅读。"
                     "【限制】单次最多20个chunk，超出需分次调用。"
-                    "【典型用法】读取'研究生手册.pdf'的第10-15个chunk。"
                 ),
                 args_schema=ReadFileChunksInput,
-                coroutine=self._search_by_filename_and_chunk_range,
+                coroutine=self._search_by_document_id_and_chunk_range,
             ),
             StructuredTool(
                 name="expand_context",
                 description=(
-                    "围绕某个已命中的chunk，扩展查看前后上下文。"
+                    "围绕某个已命中的chunk，按 documentId 扩展查看前后上下文。"
                     "【适用场景】已找到关键chunk，需要查看其上下文。"
                     "【限制】只能基于已命中的chunk扩展，不适合大范围通读。"
-                    "【典型用法】找到第5个chunk后，扩展查看第3-7个chunk。"
                 ),
                 args_schema=ExpandContextInput,
-                coroutine=self._extend_file_chunk_context_window,
+                coroutine=self._extend_document_chunk_context_window,
             ),
             StructuredTool(
                 name="semantic_search",

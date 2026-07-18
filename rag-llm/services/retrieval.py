@@ -20,7 +20,7 @@ class KeywordSearchRequest(RetrievalTarget):
     keywords: list[str] = Field(min_length=1)
     matchMode: Literal["AND", "OR"] = "OR"
     topK: int = Field(default=15, ge=1, le=50)
-    fileNames: Optional[list[str]] = None
+    documentIds: Optional[list[int]] = None
 
 
 class SemanticSearchRequest(RetrievalTarget):
@@ -98,7 +98,7 @@ async def search_by_keywords(body: KeywordSearchRequest) -> dict[str, Any]:
         "keywords": body.keywords,
         "match_mode": body.matchMode,
         "top_k": body.topK,
-        "file_names": body.fileNames,
+        "document_ids": body.documentIds,
     })
     return _format_chunks(body.knowledgeBaseId, result)
 

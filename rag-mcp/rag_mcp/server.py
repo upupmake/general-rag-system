@@ -1,5 +1,9 @@
+import asyncio
 import logging
+import os
+import tempfile
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
@@ -12,7 +16,9 @@ from rag_mcp.audit import new_invocation_id, now_millis, publish_tool_log
 from rag_mcp.clients import (
     ServiceError,
     authorize_knowledge_base,
+    java_delete,
     java_get,
+    java_upload_file,
     rag_retrieve,
     verify_access_key,
 )
@@ -43,8 +49,8 @@ class AccessKeyVerifier(TokenVerifier):
 mcp = FastMCP(
     "General RAG Retrieval",
     instructions=(
-        "提供可组合的知识库检索工具。先调用 list_knowledge_bases 获取 knowledge_base_id，"
-        "再根据任务选择关键词检索、语义检索、文件查找、连续片段读取或上下文扩展。"
+        "提供知识库检索以及个人私有知识库文件管理工具。先调用 list_knowledge_bases 获取 knowledge_base_id，"
+        "检索任务选择对应检索工具；上传或删除文件仅支持调用者本人创建的个人私有知识库。"
     ),
     auth=AccessKeyVerifier(),
 )
@@ -79,6 +85,45 @@ async def _target(knowledge_base_id: int) -> dict[str, Any]:
         "ownerUserId": access["ownerUserId"],
         "knowledgeBaseId": knowledge_base_id,
     }
+
+
+async def _private_target(knowledge_base_id: int) -> None:
+    try:
+        access = await java_get(
+            f"/knowledge-bases/{knowledge_base_id}/private-access",
+            _access_key(),
+        )
+    except ServiceError as exc:
+        raise ToolError(str(exc)) from exc
+    if not access or not access.get("accessible"):
+        raise ToolError("仅支持操作本人创建的个人私有知识库")
+
+
+def _validate_file_name(file_name: str) -> None:
+    if not file_name or "\x00" in file_name:
+        raise ToolError("文件名不能为空且不能包含非法字符")
+    normalized = file_name.replace("\\", "/")
+    if (normalized.startswith("/") or Path(normalized).drive
+            or any(part in {"", ".", ".."} for part in normalized.split("/"))):
+        raise ToolError("文件名必须是相对路径，且不能包含 . 或 .. 路径段")
+
+
+async def _write_upload_file(file_name: str, content: str) -> tuple[str, bytes]:
+    _validate_file_name(file_name)
+    suffix = Path(file_name).suffix
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=suffix, delete=False) as temp_file:
+            temp_path = temp_file.name
+            temp_file.write(content.encode("utf-8"))
+        return temp_path, await asyncio.to_thread(Path(temp_path).read_bytes)
+    except Exception:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+        raise
 
 
 async def _retrieve(path: str, body: dict) -> dict:
@@ -196,13 +241,13 @@ async def search_knowledge_base_by_keywords(
         Field(description="关键词组合方式：AND 要求同时匹配全部关键词，OR 匹配任一关键词。"),
     ] = "OR",
     top_k: Annotated[int, Field(description="最多返回的匹配片段数，取值范围 1 到 50。", ge=1, le=50)] = 15,
-    file_names: Annotated[
-        list[str] | None,
-        Field(description="可选的文件名列表；提供后仅在这些文件中检索。"),
+    document_ids: Annotated[
+        list[int] | None,
+        Field(description="可选的 documentId 列表；提供后仅在这些文档中检索。"),
     ] = None,
 ) -> dict:
     """使用明确术语、配置项、错误码或原文短语在知识库中执行关键词精确检索。"""
-    request_summary = {"keywords": keywords, "matchMode": match_mode, "topK": top_k, "fileNames": file_names}
+    request_summary = {"keywords": keywords, "matchMode": match_mode, "topK": top_k, "documentIds": document_ids}
 
     async def operation() -> dict:
         body = await _target(knowledge_base_id)
@@ -315,6 +360,60 @@ async def expand_knowledge_base_context(
         return await _retrieve("/retrieval/context", body)
 
     return await _audit_tool("expand_knowledge_base_context", request_summary, operation, knowledge_base_id, document_id)
+
+
+@mcp.tool
+async def upload_private_knowledge_base_file(
+    knowledge_base_id: Annotated[int, Field(description="必须是当前 Access Key 用户本人创建的个人私有知识库 ID。")],
+    file_name: Annotated[str, Field(description="要上传的相对文件路径和名称，例如 docs/说明.md；不能是绝对路径，不能包含 . 或 .. 路径段。", min_length=1)],
+    content: Annotated[str, Field(description="文件的 UTF-8 文本内容。")],
+) -> dict:
+    """向本人创建的个人私有知识库上传一个文本文件。"""
+    request_summary = {"fileName": file_name, "contentLength": len(content)}
+
+    async def operation() -> dict:
+        await _private_target(knowledge_base_id)
+        temp_path, file_bytes = await _write_upload_file(file_name, content)
+        try:
+            result = await java_upload_file(
+                f"/knowledge-bases/{knowledge_base_id}/documents",
+                _access_key(),
+                file_name.replace("\\", "/"),
+                file_bytes,
+            )
+            return {"knowledgeBaseId": knowledge_base_id, "documents": result}
+        finally:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+    return await _audit_tool("upload_private_knowledge_base_file", request_summary, operation, knowledge_base_id)
+
+
+@mcp.tool
+async def delete_private_knowledge_base_file(
+    knowledge_base_id: Annotated[int, Field(description="必须是当前 Access Key 用户本人创建的个人私有知识库 ID。")],
+    document_id: Annotated[int, Field(description="要删除的文档 ID，必须属于指定知识库。")],
+) -> dict:
+    """从本人创建的个人私有知识库删除一个文件。"""
+    request_summary = {"documentId": document_id}
+
+    async def operation() -> dict:
+        await _private_target(knowledge_base_id)
+        await java_delete(
+            f"/knowledge-bases/{knowledge_base_id}/documents/{document_id}",
+            _access_key(),
+        )
+        return {"knowledgeBaseId": knowledge_base_id, "documentId": document_id, "deleted": True}
+
+    return await _audit_tool(
+        "delete_private_knowledge_base_file",
+        request_summary,
+        operation,
+        knowledge_base_id,
+        document_id,
+    )
 
 
 app = mcp.http_app(path="/mcp", stateless_http=True, json_response=True)

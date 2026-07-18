@@ -32,15 +32,9 @@ rag-llm/
 │   ├── document_embedding.py        # 文档向量化消费者（rag.document.process.queue）
 │   └── session_name.py              # 会话名称生成消费者（session.name.generate.producer.queue）
 │
-├── agentic_rag_controller.py        # LangGraph 状态机控制器（max 5 轮检索）
-├── agentic_rag_toolkit.py           # 5 种检索工具 + PROMPT（TOOL_DEFINE/TOOL_SELECT）
+├── agentic_rag_controller.py        # Agentic RAG 多轮检索决策控制器
+├── agentic_rag_toolkit.py           # Agentic RAG 检索工具 + PROMPT
 ├── agentic_rag_utils.py             # Agentic RAG 核心服务（generate_workflow_id 等）
-│
-├── rag_utils.py                     # 传统 RAG 工具函数
-│   ├── 文档解析（PDF、TXT、Markdown）
-│   ├── 文本分块（RecursiveCharacterTextSplitter）
-│   ├── 向量化（Embedding）
-│   └── 检索增强生成
 │
 ├── milvus_utils.py                  # Milvus 向量数据库操作
 │   ├── MilvusClientManager         # 客户端生命周期管理（30min 自动释放）
@@ -201,18 +195,20 @@ curl http://localhost:8888/rag/
 
 ### 1. Agentic RAG 工作流
 
-**5 种检索工具**（`agentic_rag_toolkit.py`）
-1. **search_by_grep** - 关键词精确匹配（全库/单文件/多文件）
-2. **search_by_filename_and_chunk_range** - 通过文件名获取指定 chunk
-3. **extend_file_chunk_windows** - 快速扩展 chunk 上下文窗口
-4. **search_by_multi_queries_in_database** - 多角度语义检索 + Rerank
-5. **list_filename_by_like** - 文件名模糊匹配（SQL LIKE 语法）
+**Agentic RAG 检索工具**（`agentic_rag_toolkit.py`）
+1. **keyword_search** - 关键词精确匹配，可按 `documentId` 限定文档范围
+2. **read_file_chunks** - 按 `documentId` 和 chunk 索引读取连续片段
+3. **expand_context** - 按 `documentId` 扩展命中片段的前后上下文
+4. **semantic_search** - 多角度语义检索和 Rerank
+5. **find_files** - 按文件名模式发现文件并返回 `documentId`
+6. **stop_search** - 控制器判断无需继续检索时结束检索
 
 **状态机控制**（`agentic_rag_controller.py`）
-- 最多 5 轮检索（max_rounds=5）
-- 自动评分机制（grade_score_threshold=0.4）
-- 动态工具选择（TOOL_SELECT_PROMPT）
-- 结果引用（citations）
+- RAG Gateway 需要检索时固定进入 Agentic RAG，不再维护传统一次检索 RAG
+- 默认最多 10 轮检索（`maxRounds=10`）
+- 文件定位统一使用 `documentId`；Milvus 检索结果仍保留 `fileName` 用于展示和来源归因
+- 关键词和语义检索可传递已命中的 chunk PK；连续读取和上下文扩展按文档与 chunk 范围读取
+- 支持动态工具选择、结果去重和最终引用构建
 
 ### 2. 文档向量化流程
 

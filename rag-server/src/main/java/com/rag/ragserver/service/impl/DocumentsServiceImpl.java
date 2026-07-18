@@ -9,6 +9,7 @@ import com.rag.ragserver.domain.KnowledgeBases;
 import com.rag.ragserver.exception.BusinessException;
 import com.rag.ragserver.mapper.DocumentsMapper;
 import com.rag.ragserver.rabbit.entity.DocumentProcessMessage;
+import com.rag.ragserver.service.DocumentChunksService;
 import com.rag.ragserver.service.DocumentsService;
 import com.rag.ragserver.service.KnowledgeBasesService;
 import io.milvus.v2.service.collection.request.GetLoadStateReq;
@@ -54,6 +55,7 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
     private final MilvusClientV2 milvusClientV2;
     private final RabbitTemplate rabbitTemplate;
     private final KnowledgeBasesService knowledgeBasesService;
+    private final DocumentChunksService documentChunksService;
 
     @PostConstruct
     public void init() {
@@ -79,7 +81,7 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void uploadDocuments(Long kbId, MultipartFile[] files, Long userId) {
+    public List<Documents> uploadDocuments(Long kbId, MultipartFile[] files, Long userId) {
         LambdaQueryWrapper<KnowledgeBases> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(KnowledgeBases::getId, kbId)
                 .eq(KnowledgeBases::getOwnerUserId, userId);
@@ -87,6 +89,7 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
         if (kb == null) {
             throw new BusinessException(403, "没有权限操作该知识库");
         }
+        List<Documents> uploadedDocuments = new java.util.ArrayList<>();
         for (MultipartFile file : files) {
             try {
                 String originalFilename = file.getOriginalFilename();
@@ -120,10 +123,10 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
 
                 long count = this.count(new LambdaQueryWrapper<Documents>()
                         .eq(Documents::getKbId, kbId)
-                        .eq(Documents::getFileName, originalFilename));
+                        .eq(Documents::getChecksum, checksum));
 
                 if (count > 0) {
-                    throw new BusinessException(400, "文件 '" + originalFilename + "' 已存在");
+                    throw new BusinessException(400, "文件内容已存在");
                 }
 
                 try (InputStream is = file.getInputStream()) {
@@ -142,6 +145,7 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
                 // document.setCreatedAt(new Date());
                 // document.setUpdatedAt(new Date());
                 this.save(document);
+                uploadedDocuments.add(document);
                 DocumentProcessMessage message = DocumentProcessMessage.builder().documentId(document.getId()).kbId(kbId).userId(userId).filePath(objectName).fileName(originalFilename).bucketName(minioConfig.getBucketName()).build();
                 rabbitTemplate.convertAndSend("server.interact.llm.exchange", "rag.document.process.key", message, msg -> {
                     log.info("Document processing message sent: {}", msg);
@@ -156,16 +160,21 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
                 throw new BusinessException(500, "文件上传失败: " + file.getOriginalFilename());
             }
         }
+        return uploadedDocuments;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void deleteDocument(Long docId, Long userId) {
+    public void deleteDocument(Long kbId, Long docId, Long userId) {
         LambdaQueryWrapper<Documents> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Documents::getId, docId).eq(Documents::getUploaderId, userId);
+        queryWrapper.eq(Documents::getId, docId).eq(Documents::getKbId, kbId);
         Documents document = this.getOne(queryWrapper);
         if (document == null) {
             throw new BusinessException(404, "删除失败，文档不存在或没有权限");
+        }
+        KnowledgeBases kb = knowledgeBasesService.getById(kbId);
+        if (kb == null || (!userId.equals(document.getUploaderId()) && !userId.equals(kb.getOwnerUserId()))) {
+            throw new BusinessException(403, "没有权限删除该文档");
         }
 
         long groupId = document.getUploaderId() / 1000;
@@ -191,7 +200,18 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
             throw new BusinessException(500, "向量化内容删除失败");
         }
 
-        this.removeById(docId);
+        try {
+            documentChunksService.remove(new LambdaQueryWrapper<com.rag.ragserver.domain.DocumentChunks>()
+                    .eq(com.rag.ragserver.domain.DocumentChunks::getDocumentId, docId));
+            this.removeById(docId);
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(minioConfig.getBucketName())
+                    .object(document.getFilePath())
+                    .build());
+        } catch (Exception e) {
+            log.error("Failed to delete document data: docId={}, error={}", docId, e.getMessage());
+            throw new BusinessException(500, "文档数据删除失败");
+        }
     }
 
     @Override
