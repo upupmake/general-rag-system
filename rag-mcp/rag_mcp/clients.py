@@ -36,14 +36,29 @@ async def java_get(path: str, access_key: str) -> Any:
     return payload.get("data")
 
 
-async def authorize_knowledge_base(knowledge_base_id: int, access_key: str) -> int:
+async def verify_access_key(access_key: str) -> dict[str, int]:
+    identity = await java_get("/auth/verify", access_key)
+    if not identity or not identity.get("valid"):
+        raise ServiceError("Access Key 无效")
+    if identity.get("userId") is None or identity.get("accessKeyId") is None:
+        raise ServiceError("Access Key 鉴权信息不完整")
+    return {
+        "userId": int(identity["userId"]),
+        "accessKeyId": int(identity["accessKeyId"]),
+    }
+
+
+async def authorize_knowledge_base(knowledge_base_id: int, access_key: str) -> dict[str, int | str | None]:
     access = await java_get(
         f"/knowledge-bases/{knowledge_base_id}/access",
         access_key,
     )
     if not access or not access.get("accessible") or access.get("ownerUserId") is None:
         raise ServiceError("没有权限访问该知识库")
-    return int(access["ownerUserId"])
+    return {
+        "ownerUserId": int(access["ownerUserId"]),
+        "accessSource": access.get("accessSource"),
+    }
 
 
 async def rag_retrieve(path: str, body: dict[str, Any]) -> dict[str, Any]:
