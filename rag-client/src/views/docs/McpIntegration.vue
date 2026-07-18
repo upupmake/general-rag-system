@@ -32,7 +32,7 @@ const sections = [
   {id: 'mcp-config', label: '4. 添加 MCP'},
   {id: 'model-config', label: '5. 配置模型'},
   {id: 'first-search', label: '6. 开始检索'},
-  {id: 'tools', label: '8 个可用工具'},
+  {id: 'tools', label: '9 个可用工具'},
   {id: 'file-management', label: '管理私有文件'},
   {id: 'troubleshooting', label: '常见问题排查'},
   {id: 'security', label: '安全建议'}
