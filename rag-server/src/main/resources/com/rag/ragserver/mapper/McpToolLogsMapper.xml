@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.rag.ragserver.mapper.McpToolLogsMapper">
+    <insert id="insertIgnore" parameterType="com.rag.ragserver.domain.McpToolLogs">
+        INSERT IGNORE INTO mcp_tool_logs
+        (invocation_id, user_id, access_key_id, tool_name, knowledge_base_id,
+         document_id, request_summary, result_summary, status, error_message,
+         duration_ms, created_at)
+        VALUES
+        (#{log.invocationId}, #{log.userId}, #{log.accessKeyId}, #{log.toolName}, #{log.knowledgeBaseId},
+         #{log.documentId}, #{log.requestSummary}, #{log.resultSummary}, #{log.status}, #{log.errorMessage},
+         #{log.durationMs}, #{log.createdAt})
+    </insert>
+</mapper>
