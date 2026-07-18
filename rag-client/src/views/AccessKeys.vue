@@ -130,6 +130,7 @@ onMounted(loadAccessKeys)
         <code>/mcp-add kb --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer grs_ak_你的完整AccessKey"</code>
       </div>
       <div class="agent-download">
+        <router-link class="mcp-doc-link" to="/docs/mcp">查看完整接入文档</router-link>
         <span>还没有可使用 MCP 的 Agent？</span>
         <a-button
           href="https://makecode.forwardforever.top/"
@@ -361,6 +362,10 @@ onMounted(loadAccessKeys)
   font-size: 13px;
 }
 
+.mcp-doc-link {
+  margin-right: auto;
+}
+
 .key-table {
   overflow: hidden;
   border: 1px solid rgba(5, 5, 5, 0.08);
@@ -526,6 +531,10 @@ code {
     flex-direction: column;
     gap: 7px;
     margin-top: 10px;
+  }
+
+  .mcp-doc-link {
+    margin-right: 0;
   }
 
   .agent-download .ant-btn {

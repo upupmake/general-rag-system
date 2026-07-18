@@ -21,6 +21,12 @@ const routes = [
         meta: {public: true}
     },
     {
+        path: '/docs/mcp',
+        name: 'McpIntegration',
+        component: () => import('@/views/docs/McpIntegration.vue'),
+        meta: {public: true}
+    },
+    {
         path: '/',
         component: MainLayout,
         meta: {requiresAuth: true},

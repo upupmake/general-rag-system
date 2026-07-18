@@ -49,3 +49,9 @@ logs/
 *.pem
 config/secrets.yaml
 docs/
+!rag-client/src/docs/
+!rag-client/src/docs/mcp-integration.md
+!rag-client/src/docs/images/
+!rag-client/src/docs/images/*.png
+!rag-client/src/views/docs/
+!rag-client/src/views/docs/McpIntegration.vue
