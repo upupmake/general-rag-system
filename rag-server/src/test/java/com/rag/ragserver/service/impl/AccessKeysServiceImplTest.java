@@ -1,9 +1,12 @@
 package com.rag.ragserver.service.impl;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.rag.ragserver.domain.AccessKeys;
 import com.rag.ragserver.domain.accesskey.vo.AccessKeyCreatedVO;
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.rag.ragserver.mapper.AccessKeysMapper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -29,6 +32,7 @@ class AccessKeysServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), AccessKeys.class);
         mapper = mock(AccessKeysMapper.class);
         service = new AccessKeysServiceImpl();
         ReflectionTestUtils.setField(service, "baseMapper", mapper);
@@ -69,6 +73,18 @@ class AccessKeysServiceImplTest {
 
         assertSame(stored, result);
         verify(mapper).selectOne(any(Wrapper.class), anyBoolean());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void listByUserIdExcludesRevokedAccessKeys() {
+        when(mapper.selectList(any(Wrapper.class))).thenReturn(java.util.Collections.emptyList());
+
+        service.listByUserId(42L);
+
+        ArgumentCaptor<Wrapper<AccessKeys>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(mapper).selectList(captor.capture());
+        assertTrue(captor.getValue().getSqlSegment().toUpperCase().contains("REVOKED_AT IS NULL"));
     }
 
     private String sha256(String value) throws Exception {

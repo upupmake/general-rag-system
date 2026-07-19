@@ -393,10 +393,21 @@ def test_other_gemini_stream_uses_ainvoke_once():
     assert calls == [("ainvoke", [{"role": "user", "content": "hello"}])]
 
 
+async def _collect_unified_stream(llm):
+    return [item async for item in utils.unified_llm_stream(llm, [])]
+
+
+def test_unified_stream_ignores_empty_response_wrapper_chunks():
+    llm = FakeLLM(events=["", "answer"])
+    assert asyncio.run(_collect_unified_stream(llm)) == [
+        {"type": "content", "payload": "answer"}
+    ]
+
+
 def _run_tests():
     tests = [
         test_old_dict_config_merges_to_single_candidate,
-        test_list_config_orders_model_candidates_before_settings,
+        test_list_config_uses_model_candidates_before_settings_fallback,
         test_stream_fallback_before_first_chunk,
         test_stream_does_not_fallback_after_first_chunk,
         test_ainvoke_fallbacks_on_error_response,
@@ -408,6 +419,7 @@ def _run_tests():
         test_openai_candidate_build_uses_provider_and_candidate_settings,
         test_gemini_candidate_build_uses_gemini_instance,
         test_other_gemini_stream_uses_ainvoke_once,
+        test_unified_stream_ignores_empty_response_wrapper_chunks,
     ]
     for test in tests:
         test()

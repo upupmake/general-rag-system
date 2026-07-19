@@ -623,13 +623,12 @@ def get_display_docs(documents: list, max_tokens: int = 2048, min_docs: int = 1)
 
 
 def reasoning_content_wrapper(chunk):
-    if chunk.response_metadata:
-        response_metadata = chunk.response_metadata
-        if response_metadata.get("model_provider", ""):
-            additional_kwargs = chunk.additional_kwargs
-            reasoning_content = additional_kwargs.get("reasoning_content", "")
-            if reasoning_content:
-                return [{"type": "reasoning", "text": reasoning_content}]
+    response_metadata = getattr(chunk, "response_metadata", None)
+    if response_metadata and response_metadata.get("model_provider", ""):
+        additional_kwargs = getattr(chunk, "additional_kwargs", {})
+        reasoning_content = additional_kwargs.get("reasoning_content", "")
+        if reasoning_content:
+            return [{"type": "reasoning", "text": reasoning_content}]
     return ""
 
 

@@ -34,6 +34,7 @@ public class AccessKeysServiceImpl extends ServiceImpl<AccessKeysMapper, AccessK
     public List<AccessKeyVO> listByUserId(Long userId) {
         LambdaQueryWrapper<AccessKeys> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AccessKeys::getUserId, userId)
+                .isNull(AccessKeys::getRevokedAt)
                 .orderByDesc(AccessKeys::getCreatedAt);
         return this.list(wrapper).stream()
                 .map(this::toVO)
