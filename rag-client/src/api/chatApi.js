@@ -63,14 +63,34 @@ function streamRequest(url, body, onOpen, onMessage, onError, onClose, logTag = 
         },
         body: JSON.stringify(body),
         signal: controller.signal,
-        onopen(response) {
-            if (response.ok) {
+        async onopen(response) {
+            const contentType = response.headers.get('content-type') || ''
+            if (response.ok && contentType.includes('text/event-stream')) {
                 console.log(`${logTag} SSE connected`)
                 if (onOpen) onOpen(response)
                 return
             }
-            message.error("今日Token使用已达上限 或 网络发生错误").then()
-            throw new Error(`${logTag} SSE Connection failed`)
+
+            let errorMessage = ''
+            try {
+                const errorBody = await response.clone().json()
+                errorMessage = errorBody?.message || ''
+            } catch (e) {
+                // 非 JSON 响应使用状态码提示
+            }
+
+            if (!errorMessage) {
+                errorMessage = response.status >= 500
+                    ? '服务器异常，请稍后重试'
+                    : response.ok
+                        ? '服务端未返回有效的 SSE 响应'
+                        : `请求失败（HTTP ${response.status}）`
+            }
+
+            const error = new Error(errorMessage)
+            error.status = response.status
+            message.error(errorMessage).then()
+            throw error
         },
         onmessage(ev) {
             try {

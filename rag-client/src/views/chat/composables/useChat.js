@@ -165,13 +165,15 @@ export function useChat(
                     finalizeStopped()
                     return
                 }
-                assistantMsg.content += `\n[Error: 请求发起失败！]`
+                const errorMessage = err?.message || '网络异常，请检查连接后重试'
+                assistantMsg.content += `\n[Error: ${errorMessage}]`
                 assistantMsg.loading = false
+                assistantMsg.status = 'error'
                 assistantMsg.streamPhase = null
                 isGenerating.value = false
                 streamStarted.value = false
                 if (userMsg) {
-                    userMsg.status = 'pending'
+                    userMsg.status = 'completed'
                 }
                 abortController.value = null
                 currentAssistantMsg.value = null

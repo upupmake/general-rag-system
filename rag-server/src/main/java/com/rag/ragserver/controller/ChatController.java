@@ -387,20 +387,20 @@ public class ChatController {
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
                 })
                 .doOnSubscribe(a -> updateMessageStatus(sessionId, currentUserMessageId, "generating"))
+                .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo))
+                .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, saved))
                 .doOnError(e -> {
                     if (saved.compareAndSet(false, true)) {
-                        saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo)
+                        saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, false)
                                 .subscribeOn(Schedulers.boundedElastic()).subscribe();
                     }
                 })
                 .doOnCancel(() -> {
                     if (saved.compareAndSet(false, true)) {
-                        saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo)
+                        saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, true)
                                 .subscribeOn(Schedulers.boundedElastic()).subscribe();
                     }
-                })
-                .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo))
-                .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, saved));
+                });
 
         RequestLimitations requestLimitations = requestLimitationsService.getOne(
                 new LambdaQueryWrapper<RequestLimitations>()
@@ -578,12 +578,13 @@ public class ChatController {
 
     private Mono<String> saveStoppedMessage(Long sessionId, Long userId, ChatStream chatStream,
                                             Long currentUserMessageId, StringBuffer sb, StringBuffer thinkingSb,
-                                            List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper, Map<String, Object> usageInfo) {
+                                            List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper, Map<String, Object> usageInfo,
+                                            boolean clientCancelled) {
         return Mono.defer(() -> Mono.fromCallable(() -> {
-            // 客户端主动中断：user msg -> completed，assistant msg 保存部分内容（可能为空），status=completed
+            String messageStatus = clientCancelled ? "completed" : "error";
             ConversationMessages userMessage = conversationMessagesService.getById(currentUserMessageId);
             if (userMessage != null) {
-                userMessage.setStatus("completed");
+                userMessage.setStatus(messageStatus);
                 conversationMessagesService.updateById(userMessage);
             }
 
@@ -596,7 +597,7 @@ public class ChatController {
                 aiMessage.setThinking(thinkingSb.toString());
             }
             aiMessage.setKbId(chatStream.getKbId());
-            aiMessage.setStatus("completed");
+            aiMessage.setStatus(messageStatus);
             aiMessage.setModelId(chatStream.getModelId());
 
             if (usageInfo.containsKey("latency_ms")) {
@@ -628,7 +629,11 @@ public class ChatController {
             }
 
             conversationMessagesService.save(aiMessage);
-            log.info("客户端中断，已保存部分内容为 assistant 消息，messageId={}, contentLength={}", aiMessage.getId(), sb.length());
+            if (clientCancelled) {
+                log.info("客户端中断，已保存部分内容为 assistant 消息，messageId={}, contentLength={}", aiMessage.getId(), sb.length());
+            } else {
+                log.error("流式请求异常，已保存部分内容为 error assistant 消息，messageId={}, contentLength={}", aiMessage.getId(), sb.length());
+            }
 
             return "";
         }).subscribeOn(Schedulers.boundedElastic()));

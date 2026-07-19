@@ -6,6 +6,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import javax.servlet.http.HttpServletResponse;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,8 +18,9 @@ public class GlobalExceptionHandler {
      * 捕获自定义业务异常
      */
     @ExceptionHandler(BusinessException.class)
-    public Map<String, Object> handleBusinessException(BusinessException e) {
+    public Map<String, Object> handleBusinessException(BusinessException e, HttpServletResponse response) {
         log.warn("业务异常: {}", e.getMessage());
+        response.setStatus(e.getCode());
         return buildResponse(e.getCode(), e.getMessage());
     }
 
