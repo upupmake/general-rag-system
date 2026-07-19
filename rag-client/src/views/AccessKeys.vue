@@ -60,14 +60,22 @@ const handleCreate = async () => {
   }
 }
 
-const copyCreatedKey = async () => {
+const mcpCommand = computed(() => {
+  if (!createdKey.value?.accessKey) return ''
+  return `/mcp-add kb --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer ${createdKey.value.accessKey}"`
+})
+
+const copyText = async (text, successMessage) => {
   try {
-    await navigator.clipboard.writeText(createdKey.value.accessKey)
-    message.success('Access Key 已复制')
+    await navigator.clipboard.writeText(text)
+    message.success(successMessage)
   } catch (error) {
     message.error('复制失败，请手动复制')
   }
 }
+
+const copyCreatedKey = () => copyText(createdKey.value.accessKey, 'Access Key 已复制')
+const copyMcpCommand = () => copyText(mcpCommand.value, 'MCP 命令已复制')
 
 const closeCreatedKey = () => {
   createdKey.value = null
@@ -267,6 +275,14 @@ onMounted(loadAccessKeys)
           </a-button>
         </a-tooltip>
       </div>
+      <div v-if="createdKey" class="created-command-box">
+        <div class="created-command-label">MCP 配置命令</div>
+        <code>{{ mcpCommand }}</code>
+        <a-button type="primary" ghost @click="copyMcpCommand">
+          <template #icon><copy-outlined /></template>
+          复制 MCP 命令
+        </a-button>
+      </div>
       <template #footer>
         <a-button type="primary" @click="closeCreatedKey">我已保存</a-button>
       </template>
@@ -410,6 +426,27 @@ code {
   user-select: all;
 }
 
+.created-command-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(22, 119, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(22, 119, 255, 0.04);
+}
+
+.created-command-label {
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 12px;
+}
+
+.created-command-box code {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 :global(body[data-theme='dark']) .page-header p,
 :global(body[data-theme='dark']) .mcp-example p,
 :global(body[data-theme='dark']) .agent-download,
@@ -431,8 +468,13 @@ code {
 
 :global(body[data-theme='dark']) .key-card,
 :global(body[data-theme='dark']) .command-box,
-:global(body[data-theme='dark']) .created-key-box {
+:global(body[data-theme='dark']) .created-key-box,
+:global(body[data-theme='dark']) .created-command-box {
   background: rgba(255, 255, 255, 0.04);
+}
+
+:global(body[data-theme='dark']) .created-command-label {
+  color: rgba(255, 255, 255, 0.55);
 }
 
 :global(body[data-theme='dark']) .key-meta dt {

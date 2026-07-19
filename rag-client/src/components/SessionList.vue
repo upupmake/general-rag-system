@@ -3,7 +3,14 @@ import {ref, onMounted, computed, h, watch, onUnmounted} from 'vue'
 import {useRouter, useRoute} from 'vue-router'
 import {message, Button, Typography, Modal, Input} from 'ant-design-vue'
 import {Conversations} from 'ant-design-x-vue'
-import {CommentOutlined, ClockCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined} from '@ant-design/icons-vue'
+import {
+  CommentOutlined,
+  ClockCircleOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  EditOutlined,
+  SearchOutlined
+} from '@ant-design/icons-vue'
 import {deleteSession, fetchSessions, fetchSessionMessages, renameSession} from '@/api/chatApi'
 import {events} from '@/events.js';
 
@@ -17,21 +24,51 @@ const hasMore = ref(true)
 const activeKey = ref(route.params.sessionId)
 const renameState = ref({visible: false, sessionId: null, title: ''})
 const renameLoading = ref(false)
+const searchQuery = ref('')
+let searchTimer = null
+let searchRequestId = 0
 
-const loadData = async () => {
-  if (loading.value || !hasMore.value) return
+const loadData = async ({reset = false, keyword = searchQuery.value} = {}) => {
+  if ((loading.value && !reset) || (!hasMore.value && !reset)) return
+  if (reset) {
+    cursor.value = null
+    hasMore.value = true
+  }
   loading.value = true
+  const requestId = ++searchRequestId
 
-  const res = await fetchSessions({
-    lastActiveAt: cursor.value?.lastActiveAt,
-    lastId: cursor.value?.lastId,
-    pageSize: 20
-  })
+  try {
+    const res = await fetchSessions({
+      lastActiveAt: reset ? undefined : cursor.value?.lastActiveAt,
+      lastId: reset ? undefined : cursor.value?.lastId,
+      pageSize: 20,
+      keyword: keyword.trim() || undefined
+    })
 
-  groups.value.push(...(res.groups || []))
-  cursor.value = res.nextCursor
-  hasMore.value = res.hasMore
-  loading.value = false
+    if (requestId !== searchRequestId) return
+    if (reset) {
+      groups.value = []
+    }
+    groups.value.push(...(res.groups || []))
+    cursor.value = res.nextCursor
+    hasMore.value = res.hasMore
+  } catch (error) {
+    if (requestId === searchRequestId) {
+      message.error('加载历史会话失败，请重试')
+    }
+  } finally {
+    if (requestId === searchRequestId) {
+      loading.value = false
+    }
+  }
+}
+
+const handleSearch = value => {
+  searchQuery.value = value
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    loadData({reset: true, keyword: value})
+  }, 300)
 }
 
 const conversationItems = computed(() =>
@@ -45,6 +82,7 @@ const conversationItems = computed(() =>
         }))
     )
 )
+
 const exportSession = async (sessionId) => {
   try {
     const messages = await fetchSessionMessages(sessionId)
@@ -213,15 +251,11 @@ watch(
 onMounted(() => {
   loadData()
   events.on('sessionListRefresh', () => {
-    // ⭐ 核心逻辑
-    groups.value = []
-    cursor.value = null
-    hasMore.value = true
-    loadData()
+    loadData({reset: true})
   })
   events.on('sessionTitleUpdated', ({sessionId, title}) => {
     for (const g of groups.value) {
-      const item = g.items.find(i => i.id === sessionId)
+      const item = g.items.find(i => String(i.id) === String(sessionId))
       if (item) {
         item.title = title
         break
@@ -230,13 +264,29 @@ onMounted(() => {
   })
 })
 onUnmounted(() => {
+  clearTimeout(searchTimer)
   events.off('sessionListRefresh')
   events.off('sessionTitleUpdated')
 })
 </script>
 
 <template>
-  <div style='display: flex; flex-direction: column; height: 100%;'>
+  <div class="session-list" style='display: flex; flex-direction: column; height: 100%;'>
+    <div class="session-search">
+      <Input
+          :value="searchQuery"
+          class="session-search-input"
+          allow-clear
+          :bordered="false"
+          placeholder="搜索聊天"
+          aria-label="搜索全部聊天"
+          @update:value="handleSearch"
+      >
+        <template #prefix>
+          <SearchOutlined class="session-search-icon" />
+        </template>
+      </Input>
+    </div>
     <div style='flex: 1; overflow-y: auto;'>
       <Conversations
           :items='conversationItems'
@@ -274,6 +324,80 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.session-search {
+  padding: 3px 6px 9px;
+}
+
+.session-search-input {
+  height: 32px;
+  padding-inline: 10px;
+  background: rgba(0, 0, 0, 0.035);
+  border: 1px solid transparent;
+  border-radius: 9px;
+  box-shadow: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.session-search-input:hover {
+  background: rgba(0, 0, 0, 0.055);
+}
+
+.session-search-input:focus-within {
+  background: #fff;
+  border-color: rgba(22, 119, 255, 0.45);
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.08);
+}
+
+.session-search-icon {
+  color: rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  transition: color 0.2s ease;
+}
+
+.session-search-input:focus-within .session-search-icon {
+  color: #1677ff;
+}
+
+.session-search-input :deep(.ant-input) {
+  color: rgba(0, 0, 0, 0.78);
+  background: transparent;
+  font-size: 13px;
+}
+
+.session-search-input :deep(.ant-input::placeholder) {
+  color: rgba(0, 0, 0, 0.38);
+}
+
+:global(body[data-theme='dark']) .session-search-input {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:global(body[data-theme='dark']) .session-search-input:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+:global(body[data-theme='dark']) .session-search-input:focus-within {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(64, 169, 255, 0.55);
+  box-shadow: 0 0 0 2px rgba(64, 169, 255, 0.1);
+}
+
+:global(body[data-theme='dark']) .session-search-icon {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+:global(body[data-theme='dark']) .session-search-input:focus-within .session-search-icon {
+  color: #40a9ff;
+}
+
+:global(body[data-theme='dark']) .session-search-input :deep(.ant-input) {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+:global(body[data-theme='dark']) .session-search-input :deep(.ant-input::placeholder) {
+  color: rgba(255, 255, 255, 0.38);
+}
+
 :deep(.ant-conversations) {
   .ant-conversations-group-title {
     padding-inline-start: 0 !important;

@@ -262,6 +262,31 @@
 }
 
 /* ================= 输入区域 & Sender ================= */
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shortcut-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.shortcut-list kbd {
+  min-width: 120px;
+  padding: 3px 6px;
+  color: #475467;
+  background: #f2f4f7;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
+}
+
 .input-container {
   flex-shrink: 0;
   padding: 12px 24px 16px;

@@ -25,9 +25,9 @@ export function fetchSessionMessages(sessionId) {
     return commonApi.get(`/chat/sessions/${sessionId}/messages`)
 }
 
-export function fetchSessions({lastActiveAt, lastId, pageSize = 20}) {
+export function fetchSessions({lastActiveAt, lastId, pageSize = 20, keyword}) {
     return commonApi.post('/sessions/list', {
-        lastActiveAt, lastId, pageSize
+        lastActiveAt, lastId, pageSize, keyword
     })
 }
 

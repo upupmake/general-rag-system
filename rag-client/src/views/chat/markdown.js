@@ -1,6 +1,5 @@
 import markdownit from 'markdown-it'
 import taskLists from 'markdown-it-task-lists'
-import mj from 'markdown-it-mathjax3'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-light.css'
 
@@ -15,7 +14,7 @@ const langAliases = {
 }
 
 export const md = markdownit({
-  html: true,
+  html: false,
   linkify: true,
   typographer: true,
   highlight: function (str, lang) {
@@ -30,15 +29,5 @@ export const md = markdownit({
     }
     const result = hljs.highlightAuto(str)
     return '<pre class="hljs"><code>' + result.value + '</code></pre>'
-  }
-}).use(mj, {
-  tex: {
-    inlineMath: [['$', '$'], ['\\(', '\\)']],
-    displayMath: [['$$', '$$'], ['\\[', '\\]']],
-    processEscapes: true
-  },
-  options: {
-    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
-    ignoreHtmlClass: 'tex2jax_ignore'
   }
 }).use(taskLists)

@@ -145,6 +145,20 @@ const {
 const isMobile = ref(false)
 const inputExpanded = ref(false)
 const inputWrapper = ref(null)
+const shortcutHelpVisible = ref(false)
+const draftStorageKey = computed(() => `chat-draft:${sessionId.value}`)
+
+const restoreDraft = () => {
+  question.value = localStorage.getItem(draftStorageKey.value) || ''
+}
+
+watch(question, (value) => {
+  if (value) {
+    localStorage.setItem(draftStorageKey.value, value)
+  } else {
+    localStorage.removeItem(draftStorageKey.value)
+  }
+})
 const checkIsMobile = () => {
   isMobile.value = window.innerWidth <= 768
 }
@@ -164,10 +178,29 @@ const collapseInput = () => {
   inputExpanded.value = false
 }
 
+const handleKeyboardShortcut = (event) => {
+  const modifier = event.ctrlKey || event.metaKey
+  if (modifier && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    inputExpanded.value = true
+    focusSenderInput()
+  } else if (event.key === 'Escape' && isGenerating.value && streamStarted.value) {
+    event.preventDefault()
+    stopGeneration()
+  } else if (modifier && event.shiftKey && event.key.toLowerCase() === 'c') {
+    event.preventDefault()
+    onCopy(lastAssistantMessage.value?.content)
+  } else if (modifier && event.key === '/') {
+    event.preventDefault()
+    shortcutHelpVisible.value = true
+  }
+}
+
 const handleSend = (text) => {
   const value = typeof text === 'string' ? text : question.value
   if (!value) return
   onSend(value)
+  localStorage.removeItem(draftStorageKey.value)
   inputExpanded.value = false
 }
 
@@ -185,11 +218,14 @@ const handleThinkingChange = (msg, keys) => {
 onMounted(() => {
   checkIsMobile()
   window.addEventListener('resize', checkIsMobile)
+  window.addEventListener('keydown', handleKeyboardShortcut)
   loadSession(sessionId.value)
+  restoreDraft()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkIsMobile)
+  window.removeEventListener('keydown', handleKeyboardShortcut)
 })
 
 watch(selectedModel, () => {
@@ -203,8 +239,9 @@ watch(
     (newId, oldId) => {
       if (newId && newId !== oldId) {
         userScrolledUp.value = false
-        loadSession(newId)
         sessionId.value = newId
+        loadSession(newId)
+        nextTick(restoreDraft)
       }
     }
 )
@@ -437,6 +474,17 @@ const confirmContextCustom = () => {
       </transition>
     </div>
 
+    <a-modal v-model:open="shortcutHelpVisible" title="键盘快捷键" :footer="null">
+      <div class="shortcut-list">
+        <div><kbd>Enter</kbd><span>发送消息</span></div>
+        <div><kbd>Shift + Enter</kbd><span>换行</span></div>
+        <div><kbd>Ctrl/Cmd + K</kbd><span>聚焦输入框</span></div>
+        <div><kbd>Esc</kbd><span>停止生成</span></div>
+        <div><kbd>Ctrl/Cmd + Shift + C</kbd><span>复制最后一条回答</span></div>
+        <div><kbd>Ctrl/Cmd + /</kbd><span>打开此面板</span></div>
+      </div>
+    </a-modal>
+
     <!-- 输入区域 -->
     <div class="input-container">
       <div class="input-wrapper" ref="inputWrapper" @paste="handlePaste">
@@ -600,6 +648,14 @@ const confirmContextCustom = () => {
                     </div>
                   </template>
                 </a-popover>
+
+                <a-button
+                    type="text"
+                    size="small"
+                    title="键盘快捷键"
+                    @click="shortcutHelpVisible = true">
+                  快捷键
+                </a-button>
 
                 <a-button
                     type="text"

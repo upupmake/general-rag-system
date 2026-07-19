@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { BookOutlined, FileTextOutlined, MessageOutlined, ThunderboltOutlined, NotificationOutlined, CloseOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { fetchRecentActivities } from '@/api/logApi'
@@ -10,9 +11,10 @@ import { providerLogos } from '@/vars.js'
 import md from '@/utils/markdown'
 import markdownit from 'markdown-it'
 
-const noticeMd = markdownit({ html: true, linkify: true, breaks: true })
+const noticeMd = markdownit({ html: false, linkify: true, breaks: true })
 
 const userStore = useUserStore()
+const router = useRouter()
 const activities = ref([])
 const loading = ref(false)
 const notification = ref(null)
@@ -20,6 +22,7 @@ const notificationModalVisible = ref(false)
 
 const performanceData = ref([])
 const performanceLoading = ref(false)
+const performanceError = ref(false)
 
 const providerPerformance = computed(() => {
   const groups = {}
@@ -85,11 +88,14 @@ const fetchNotification = async () => {
 
 const fetchPerformance = async () => {
   performanceLoading.value = true
+  performanceError.value = false
   try {
     const data = await fetchModelPerformance(24)
     performanceData.value = data || []
   } catch (e) {
     console.error('Failed to fetch model performance', e)
+    performanceData.value = []
+    performanceError.value = true
   } finally {
     performanceLoading.value = false
   }
@@ -98,6 +104,8 @@ const fetchPerformance = async () => {
 const formatTime = (time) => {
   return new Date(time).toLocaleString()
 }
+
+const goTo = path => router.push(path)
 
 
 onMounted(() => {
@@ -149,7 +157,7 @@ onMounted(() => {
     <!-- 核心统计 -->
     <a-row :gutter="[12, 12]" class="stats-row">
       <a-col :xs="12" :sm="6">
-        <a-card class="stat-mini-card" :bordered="true">
+        <a-card class="stat-mini-card stat-mini-card--actionable" :bordered="true" role="button" tabindex="0" @click="goTo('/kb')" @keydown.enter="goTo('/kb')">
           <div class="stat-icon stat-icon--kb">
             <BookOutlined />
           </div>
@@ -157,7 +165,7 @@ onMounted(() => {
         </a-card>
       </a-col>
       <a-col :xs="12" :sm="6">
-        <a-card class="stat-mini-card" :bordered="true">
+        <a-card class="stat-mini-card stat-mini-card--actionable" :bordered="true" role="button" tabindex="0" @click="goTo('/kb')" @keydown.enter="goTo('/kb')">
           <div class="stat-icon stat-icon--doc">
             <FileTextOutlined />
           </div>
@@ -165,7 +173,7 @@ onMounted(() => {
         </a-card>
       </a-col>
       <a-col :xs="12" :sm="6">
-        <a-card class="stat-mini-card" :bordered="true">
+        <a-card class="stat-mini-card stat-mini-card--actionable" :bordered="true" role="button" tabindex="0" @click="goTo('/search')" @keydown.enter="goTo('/search')">
           <div class="stat-icon stat-icon--chat">
             <MessageOutlined />
           </div>
@@ -201,7 +209,14 @@ onMounted(() => {
       </div>
 
       <a-spin :spinning="performanceLoading">
-        <div v-if="providerPerformance.length === 0 && !performanceLoading" class="perf-empty">
+        <div v-if="performanceError && !performanceLoading" class="perf-empty perf-error">
+          <a-result status="warning" title="模型性能数据加载失败" sub-title="请检查网络连接后重试">
+            <template #extra>
+              <a-button type="primary" @click="fetchPerformance">重新加载</a-button>
+            </template>
+          </a-result>
+        </div>
+        <div v-else-if="providerPerformance.length === 0 && !performanceLoading" class="perf-empty">
           <a-empty description="暂无性能数据" />
         </div>
         <div v-else class="provider-grid">
@@ -245,7 +260,9 @@ onMounted(() => {
         <h3 class="section-title">最近活动</h3>
       </div>
       <a-card class="activities-card" :loading="loading" :bordered="true">
-        <a-empty v-if="activities.length === 0" description="暂无活动记录" />
+        <a-empty v-if="activities.length === 0" description="暂无活动记录">
+            <template #extra><a-button type="link" @click="goTo('/chat/new')">开始新的对话</a-button></template>
+          </a-empty>
         <div v-else class="activities-list">
           <div v-for="(item, index) in activities" :key="item.id" class="activity-item" :style="{ animationDelay: index * 0.05 + 's' }">
             <div class="activity-time">{{ formatTime(item.createdAt) }}</div>
@@ -310,6 +327,15 @@ onMounted(() => {
 .stat-mini-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.stat-mini-card--actionable {
+  cursor: pointer;
+}
+
+.stat-mini-card--actionable:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: 2px;
 }
 
 .stat-mini-card :deep(.ant-card-body) {

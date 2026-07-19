@@ -29,8 +29,28 @@ const {handlePaste} = usePasteUpload()
 const documentBrowserVisible = ref(false)
 
 const loading = ref(false)
+const question = ref('')
 const selectedTools = ref([])
 const thinkingEnabled = ref(false)
+const promptTemplates = [
+  '总结下面这段内容，并提炼出关键结论',
+  '解释这段代码的作用、风险和改进方向',
+  '请润色下面的内容，使表达更清晰专业',
+  '根据下面的信息生成一份结构化会议纪要'
+]
+const newChatDraftKey = 'chat-draft:new'
+
+const restoreDraft = () => {
+  question.value = localStorage.getItem(newChatDraftKey) || ''
+}
+
+watch(question, value => {
+  if (value) {
+    localStorage.setItem(newChatDraftKey, value)
+  } else {
+    localStorage.removeItem(newChatDraftKey)
+  }
+})
 
 // 工具配置映射
 const toolConfigs = {
@@ -38,6 +58,7 @@ const toolConfigs = {
 }
 
 onMounted(async () => {
+  restoreDraft()
   // 默认选择 provider 为 minimax 的第一个模型
   models.value = await fetchAvailableModels().then()
 
@@ -152,10 +173,11 @@ const onSend = async (text) => {
       kbId: isKbSupported.value ? (selectedKb.value || undefined) : undefined,
       options: options
     })
-    let {sessionId} = res
+    const {sessionId} = res
     if (sessionId) {
       events.emit('sessionListRefresh')
       router.replace(`/chat/${res.sessionId}`).then(() => {
+        question.value = ''
         message.success('新聊天已创建')
       })
       fetchSessionTitle(sessionId).then(titleRes => {
@@ -165,6 +187,8 @@ const onSend = async (text) => {
         })
       })
     }
+  } catch (error) {
+    message.error('创建聊天失败，请检查网络连接后重试')
   } finally {
     loading.value = false
   }
@@ -292,7 +316,17 @@ const onSend = async (text) => {
 
       <!-- 输入区域 -->
       <div class="input-section" @paste="handlePaste">
+        <div class="prompt-template-row" aria-label="问题模板">
+          <button
+              v-for="template in promptTemplates"
+              :key="template"
+              type="button"
+              class="prompt-template"
+              @click="question = template"
+          >{{ template }}</button>
+        </div>
         <Sender
+            v-model:value="question"
             :disabled="loading"
             :auto-size="false"
             placeholder="请输入你的第一条问题，开启智能对话之旅…"
@@ -497,6 +531,38 @@ const onSend = async (text) => {
   margin-bottom: 24px;
 }
 
+.prompt-template-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.prompt-template-row::-webkit-scrollbar {
+  display: none;
+}
+
+.prompt-template {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  color: #52606d;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(22, 119, 255, 0.16);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.prompt-template:hover,
+.prompt-template:focus-visible {
+  color: #1677ff;
+  background: rgba(255, 255, 255, 0.95);
+  border-color: #1677ff;
+  outline: none;
+}
+
 .chat-sender {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
@@ -547,6 +613,19 @@ const onSend = async (text) => {
 
 .new-chat-container.is-dark .tip-item:hover {
   background: rgba(255, 255, 255, 0.15);
+}
+
+.new-chat-container.is-dark .prompt-template {
+  color: #b7c3d0;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(64, 169, 255, 0.35);
+}
+
+.new-chat-container.is-dark .prompt-template:hover,
+.new-chat-container.is-dark .prompt-template:focus-visible {
+  color: #69c0ff;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #40a9ff;
 }
 
 
