@@ -45,9 +45,7 @@ public class DashboardController {
         kbWrapper.eq(KnowledgeBases::getOwnerUserId, userId);
         summary.setKbCount(knowledgeBasesService.count(kbWrapper));
 
-        LambdaQueryWrapper<Documents> docWrapper = new LambdaQueryWrapper<>();
-        docWrapper.eq(Documents::getUploaderId, userId);
-        summary.setDocumentCount(documentsService.count(docWrapper));
+        summary.setDocumentCount(documentsService.countActiveByUploaderId(userId));
 
         LambdaQueryWrapper<QuerySessions> sessionWrapper = new LambdaQueryWrapper<>();
         sessionWrapper.eq(QuerySessions::getUserId, userId);

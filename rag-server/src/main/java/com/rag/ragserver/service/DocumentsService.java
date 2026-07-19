@@ -16,6 +16,8 @@ public interface DocumentsService extends IService<Documents> {
 
     List<Documents> listByKbId(Long kbId);
 
+    Long countActiveByUploaderId(Long uploaderId);
+
     List<Documents> uploadDocuments(Long kbId, MultipartFile[] files, Long userId);
 
     void deleteDocument(Long kbId, Long docId, Long userId);

@@ -80,6 +80,11 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
     }
 
     @Override
+    public Long countActiveByUploaderId(Long uploaderId) {
+        return this.baseMapper.countActiveByUploaderId(uploaderId);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public List<Documents> uploadDocuments(Long kbId, MultipartFile[] files, Long userId) {
         LambdaQueryWrapper<KnowledgeBases> queryWrapper = new LambdaQueryWrapper<>();
