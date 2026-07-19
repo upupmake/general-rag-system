@@ -218,7 +218,7 @@ def get_official_llm(
         model_info: dict,
         enable_web_search: bool = False,
         enable_thinking: bool = False,
-        timeout: int = 20,
+        timeout: int = 60,
         max_retries: int = 1,
 ):
     """根据模型信息加载配置并初始化 LLM"""

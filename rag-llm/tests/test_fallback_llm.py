@@ -224,7 +224,7 @@ def test_stream_all_candidates_fail():
     assert chunks == [[{"type": "error", "text": "All LLM candidates failed: bad-2 failed"}]]
 
 
-def test_official_llm_default_timeout_is_30():
+def test_official_llm_default_timeout_is_60():
     original_load_config = utils._load_config
     try:
         utils._load_config = lambda: {
@@ -235,7 +235,7 @@ def test_official_llm_default_timeout_is_30():
             }
         }
         llm = utils.get_official_llm({"provider": "deepseek", "name": "deepseek-v4-flash"})
-        assert llm.timeout == 30
+        assert llm.timeout == 60
     finally:
         utils._load_config = original_load_config
 
@@ -412,7 +412,7 @@ def _run_tests():
         test_stream_does_not_fallback_after_first_chunk,
         test_ainvoke_fallbacks_on_error_response,
         test_stream_all_candidates_fail,
-        test_official_llm_default_timeout_is_30,
+        test_official_llm_default_timeout_is_60,
         test_langchain_default_timeout_is_30,
         test_langchain_llm_uses_first_candidate,
         test_langchain_llm_falls_back_to_request_provider,
