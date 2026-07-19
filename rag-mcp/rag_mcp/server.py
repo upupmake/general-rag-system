@@ -407,9 +407,9 @@ async def expand_knowledge_base_context(
 async def upload_private_knowledge_base_file(
     knowledge_base_id: Annotated[int, Field(description="必须是当前 Access Key 用户本人创建的个人私有知识库 ID。")],
     file_name: Annotated[str, Field(description="要上传的相对文件路径和名称，例如 docs/说明.md；仅支持文本文件（如 .txt、.md）和各类代码文件；不能是绝对路径，不能包含 . 或 .. 路径段。", min_length=1)],
-    content: Annotated[str, Field(description="文件的 UTF-8 文本内容。PDF 文件请前往网页端上传。")],
+    content: Annotated[str, Field(description="文件的 UTF-8 文本内容。PDF 或其他类型文件请前往网页端上传。")],
 ) -> dict:
-    """向本人创建的个人私有知识库上传文本文件（如 txt、md）或各类代码文件；如需上传 PDF 文件，请前往网页端操作。"""
+    """向本人创建的个人私有知识库上传文本文件（如 txt、md）或各类代码文件；如需上传 PDF 或其他类型文件，请前往网页端操作。"""
     request_summary = {"fileName": file_name, "contentLength": len(content)}
 
     async def operation() -> dict:
