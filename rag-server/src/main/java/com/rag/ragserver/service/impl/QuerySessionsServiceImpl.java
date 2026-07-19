@@ -156,9 +156,15 @@ public class QuerySessionsServiceImpl extends ServiceImpl<QuerySessionsMapper, Q
         LambdaQueryWrapper<QuerySessions> qw = Wrappers.lambdaQuery();
         qw.eq(QuerySessions::getUserId, userId)
                 .eq(QuerySessions::getWorkspaceId, workspaceId)
+                .eq(QuerySessions::getIsDeleted, 0)
                 .orderByDesc(QuerySessions::getLastActiveAt)
                 .orderByDesc(QuerySessions::getId)
                 .last("limit " + (query.getPageSize() + 1));
+
+        String keyword = query.getKeyword() == null ? "" : query.getKeyword().trim();
+        if (!keyword.isEmpty()) {
+            qw.like(QuerySessions::getSessionKey, keyword);
+        }
 
         if (query.getLastActiveAt() != null) {
             qw.and(w -> w
