@@ -209,6 +209,25 @@ watch(
     }
 )
 
+const streamPhaseText = {
+  connecting: {
+    title: '正在建立连接',
+    description: '等待模型开始处理'
+  },
+  retrieving: {
+    title: '正在检索知识库',
+    description: '分析问题并查找相关资料'
+  },
+  thinking: {
+    title: '正在思考',
+    description: '整理信息与推理'
+  },
+  generating: {
+    title: '正在生成回复',
+    description: '内容将持续更新'
+  }
+}
+
 const roles = computed(() => ({
   user: {
     placement: 'end',
@@ -267,6 +286,22 @@ const confirmContextCustom = () => {
             </template>
             <template #message="{ item: msg, index }">
               <div v-if="msg.role === 'assistant'" class="assistant-message">
+                <div
+                    v-if="msg.streamPhase"
+                    class="assistant-activity"
+                    :class="`stream-phase-${msg.streamPhase}`"
+                    role="status"
+                    aria-live="polite"
+                >
+                  <span class="activity-indicator" aria-hidden="true">
+                    <span class="activity-indicator-dot"/>
+                  </span>
+                  <span class="activity-copy">
+                    <strong>{{ streamPhaseText[msg.streamPhase]?.title }}</strong>
+                    <span>{{ streamPhaseText[msg.streamPhase]?.description }}</span>
+                  </span>
+                </div>
+
                 <!-- 显示检索过程 -->
                 <ThoughtChain
                     v-if="msg.ragProcess && msg.ragProcess.length > 0"

@@ -38,6 +38,7 @@ export function useChat(
         if (assistantMsg) {
             assistantMsg.loading = false
             assistantMsg.status = 'completed'
+            assistantMsg.streamPhase = null
             if (assistantMsg.thinking) {
                 nextTick(() => {
                     assistantMsg.thinkingCollapseKeys = []
@@ -77,12 +78,14 @@ export function useChat(
         streamStarted.value = false
         currentAssistantMsg.value = assistantMsg
         currentUserMsg.value = userMsg
+        assistantMsg.streamPhase = 'connecting'
         return {
             onOpen: () => {
             },
             onMessage: (data) => {
                 streamStarted.value = true
                 if (data.type === 'content') {
+                    assistantMsg.streamPhase = 'generating'
                     if (assistantMsg.loading) assistantMsg.loading = false
                     if (assistantMsg.thinking && assistantMsg.thinkingCollapseKeys?.length) {
                         nextTick(() => {
@@ -91,6 +94,7 @@ export function useChat(
                     }
                     assistantMsg.content += data.content
                 } else if (data.type === 'thinking') {
+                    assistantMsg.streamPhase = 'thinking'
                     if (assistantMsg.loading) assistantMsg.loading = false
                     // 收到思考内容时，自动展开
                     if (!assistantMsg.thinkingCollapseKeys || assistantMsg.thinkingCollapseKeys.length === 0) {
@@ -110,6 +114,7 @@ export function useChat(
                         assistantMsg.ragProcess = []
                     }
                     const processInfo = data.payload
+                    assistantMsg.streamPhase = processInfo.step === 'generation' ? 'generating' : 'retrieving'
 
                     const existingIndex = assistantMsg.ragProcess.findIndex(
                         p => p.step === processInfo.step && p.status === processInfo.status
@@ -132,6 +137,7 @@ export function useChat(
                     }
                     assistantMsg.status = 'completed'
                     assistantMsg.loading = false
+                    assistantMsg.streamPhase = null
                     // 思考结束，立即收起面板
                     if (assistantMsg.thinking) {
                         nextTick(() => {
@@ -161,6 +167,7 @@ export function useChat(
                 }
                 assistantMsg.content += `\n[Error: 请求发起失败！]`
                 assistantMsg.loading = false
+                assistantMsg.streamPhase = null
                 isGenerating.value = false
                 streamStarted.value = false
                 if (userMsg) {
@@ -178,6 +185,7 @@ export function useChat(
                 }
                 assistantMsg.loading = false
                 assistantMsg.status = 'completed'
+                assistantMsg.streamPhase = null
 
                 // 思考结束，确保收起面板
                 if (assistantMsg.thinking) {

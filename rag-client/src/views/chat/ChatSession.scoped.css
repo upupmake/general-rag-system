@@ -114,6 +114,98 @@
   animation: messageSlideIn 0.3s ease-out;
 }
 
+.assistant-activity {
+  --activity-color: #1677ff;
+  --activity-glow: rgba(22, 119, 255, 0.16);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+  margin-bottom: 14px;
+  padding: 9px 12px 9px 10px;
+  color: #475467;
+  background: color-mix(in srgb, var(--activity-color) 6%, #fff);
+  border: 1px solid color-mix(in srgb, var(--activity-color) 18%, #e6eaf0);
+  border-radius: 10px;
+  box-shadow: 0 5px 16px var(--activity-glow);
+}
+
+.assistant-activity.stream-phase-connecting {
+  --activity-color: #6b7280;
+  --activity-glow: rgba(107, 114, 128, 0.12);
+}
+
+.assistant-activity.stream-phase-retrieving {
+  --activity-color: #0f8f7a;
+  --activity-glow: rgba(15, 143, 122, 0.14);
+}
+
+.assistant-activity.stream-phase-thinking {
+  --activity-color: #d97706;
+  --activity-glow: rgba(217, 119, 6, 0.14);
+}
+
+.activity-indicator {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid color-mix(in srgb, var(--activity-color) 30%, transparent);
+  border-radius: 50%;
+}
+
+.activity-indicator::before {
+  position: absolute;
+  inset: 3px;
+  border: 1px solid var(--activity-color);
+  border-radius: 50%;
+  content: '';
+  animation: activityPulse 1.6s ease-out infinite;
+}
+
+.activity-indicator-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: var(--activity-color);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 3px var(--activity-glow);
+}
+
+.activity-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.35;
+}
+
+.activity-copy strong {
+  color: var(--activity-color);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.activity-copy span {
+  color: #7b8494;
+  font-size: 12px;
+}
+
+@keyframes activityPulse {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.55);
+  }
+  75%,
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
 @keyframes messageSlideIn {
   from {
     opacity: 0;
@@ -492,6 +584,16 @@
   color: #d9d9d9;
 }
 
+.chat-session-container.is-dark .assistant-activity {
+  background: color-mix(in srgb, var(--activity-color) 12%, #1e1e1e);
+  border-color: color-mix(in srgb, var(--activity-color) 30%, #303030);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.22);
+}
+
+.chat-session-container.is-dark .activity-copy span {
+  color: #9ca3af;
+}
+
 /* 工具项暗色适配 */
 .chat-session-container.is-dark .header-tool-item {
   background: rgba(255, 255, 255, 0.05);
@@ -544,6 +646,11 @@
 
   .messages-wrapper {
     padding: 16px;
+  }
+
+  .assistant-activity {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .input-container {
@@ -696,4 +803,12 @@
     text-overflow: ellipsis;
   }
 
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-indicator::before {
+    animation: none;
+    opacity: 0.45;
+    transform: none;
+  }
 }
