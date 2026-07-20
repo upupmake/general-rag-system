@@ -538,21 +538,15 @@ def cut_history(history: list, model: dict, context_multiplier: int = None):
     base_token = 10240  # 10k
 
     # 按模型计算默认上限
-    default_max_tokens = base_token * 6
+    default_max_tokens = base_token * 8
     if model_name.startswith("gpt-"):
-        default_max_tokens = base_token * 4
+        default_max_tokens = base_token * 6
 
     elif model_name.startswith("gemini-"):
-        if "flash" in model_name.lower():
-            default_max_tokens = base_token * 6
-        elif "pro" in model_name.lower():
-            default_max_tokens = base_token * 4
+        default_max_tokens = base_token * 6
 
     elif model_name.startswith("claude-"):
-        if "haiku" in model_name.lower():
-            default_max_tokens = base_token * 4
-        elif "sonnet" in model_name.lower():
-            default_max_tokens = base_token * 3
+        default_max_tokens = base_token * 4
 
     # 用户手动设置时，取用户值与模型默认值中的较小值，避免超出模型能力
     if context_multiplier is not None:
