@@ -2,801 +2,282 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.7.6-brightgreen)
-![Vue.js](https://img.shields.io/badge/Vue.js-3.x-42b883)
-![Python](https://img.shields.io/badge/Python-3.8+-3776ab)
+![Vue.js](https://img.shields.io/badge/Vue.js-3.5-42b883)
 
 **企业级 Agentic RAG 知识库问答系统**
 
-支持多用户、多工作空间、智能代理检索、文档向量化等功能
+多用户 · 多工作空间 · 智能代理检索 · 文档向量化 · MCP 开放协议
 
-[功能特性](#-功能特性) • [快速开始](#-快速开始) • [系统架构](#-系统架构) • [配置指南](#-配置指南) • [Agentic RAG](#-agentic-rag-智能代理检索)
+[系统架构](#系统架构) · [核心机制](#核心机制) · [快速开始](#快速开始) · [模块文档](#模块文档) · [部署边界](#部署边界)
 
 </div>
 
 ---
 
-## 📖 项目简介
+## 项目简介
 
-General RAG System 是一个基于**检索增强生成（Retrieval-Augmented Generation）**和**智能代理（Agentic AI）**技术的企业级知识库问答系统。通过将文档向量化存储，结合 LangGraph 状态机和大语言模型的决策能力，实现自主、精准、可靠的智能问答服务。
+General RAG System 是一个**企业级 Agentic RAG 知识库问答系统**。它使用 LangChain 原生工具调用和自定义多轮控制器，让 LLM 根据问题与检索历史选择检索工具、补充上下文并判断何时停止。系统还通过 MCP 协议向外部 Agent 开放经过授权的知识库能力。
 
-### 核心优势
+### 产品特点
 
-- 🤖 **Agentic RAG**：基于 LangGraph 的智能代理检索，自主决策、多轮迭代、动态优化
-- 🎯 **精准检索**：5种检索工具（语义+关键词+文件探索+上下文补全），智能选择最优策略
-- 🔄 **多轮优化**：支持最多5轮检索迭代，自动补全不连续文档片段
-- 🤖 **多模型支持**：兼容 OpenAI、DeepSeek、通义千问、Gemini、Claude 等多种 LLM
-- 👥 **多租户架构**：支持工作空间隔离，权限精细化管理
-- 📚 **文档管理**：支持 PDF、TXT 等多种格式，自动解析和分块
-- 💬 **对话管理**：会话持久化，上下文记忆，历史回溯
-- 🔐 **安全可靠**：JWT 认证，数据加密，操作审计
+**Agentic RAG 引擎**
+- 基于 LangChain Function Calling 的可控多轮检索编排，LLM 自主选择 6 个工具
+- 对话入口默认最多 10 轮检索，支持结果去重、连续片段读取和上下文扩展
+- RAG Gateway 判断是否需要检索；不需要知识库时直接进入纯 LLM 模式
+- Agentic RAG 是当前唯一知识库检索路径，传统单次 RAG 已移除
 
-## 🏗️ 系统架构
+**MCP 开放协议**
+- 基于 FastMCP 3 实现 Streamable HTTP 协议
+- 提供 9 个标准化工具：知识库列出与创建、关键词/语义检索、文件发现与上下文读取、文件上传/删除
+- Access Key 鉴权（`grs_ak_` + unpadded Base64URL），仅返回一次明文，服务端存储 SHA-256
+- 每次工具调用异步发布审计消息到 RabbitMQ（Access Key 明文不进入消息体）
+- 公网通过 Nginx TLS 代理 `/mcp` 路径，不设 `MCP_PUBLIC_URL`
+
+**多租户与权限**
+- 工作空间（Workspace）隔离，支持 owned / workspace_shared / invited / public 四级分类
+- 知识库可见性：私有、公开、工作空间共享
+- 成员角色管理，操作审计日志
+
+**文档管理**
+- 文件上传请求限制为 100MB，解析 PDF、纯文本、Markdown、JSON、常见代码与标记文件及图片
+- 文档以 `kbId + MD5 checksum` 去重；文件名空格转 `_`，反斜杠转 `/`
+- 按文件类型解析和分块，批量向量化后写入 Milvus
+
+**安全机制**
+- JWT 认证与 Redis 登录状态校验，前端路由守卫配合 401 拦截处理
+- `/rag/retrieval/*` 内部接口无公开鉴权，必须部署在受控内网
+- `rag-mcp` 不直接访问 MySQL/Milvus，权限判断和所有变更操作由 Java 后端负责
+- CORS、Druid 连接池与 MCP 工具调用审计
+
+## 系统架构
+
+### 模块组成
 
 ```
 general-rag-system/
-├── rag-client/          # 前端界面（Vue 3.5 + Vite 7.2 + Ant Design Vue 4.2）
+├── rag-client/          # 前端（Vue 3.5 + Vite 7.2 + Ant Design Vue 4.2 + ant-design-x-vue 1.5）
 ├── rag-server/          # 业务后端（Spring Boot 2.7 + MyBatis Plus 3.5 + Java 11）
-├── rag-llm/             # AI 服务（FastAPI + LangChain + LangGraph，端口 8888）
-└── embedding_rerank/    # 本地向量化与重排序服务（vLLM 0.8.5+ + FastAPI，可选）
+├── rag-llm/             # AI 服务（FastAPI + LangChain，端口 8848）
+├── rag-mcp/             # MCP 服务（FastMCP 3，端口 8858）
+└── embedding_rerank/    # 本地模型服务（Embedding 当前检索路径必需；Rerank 为独立服务）
 ```
 
 ### 技术选型
 
 | 模块 | 技术栈 | 端口 | 说明 |
 |------|--------|------|------|
-| **前端** | Vue 3.5、Vite 7.2、Ant Design Vue 4.2、Pinia 3.0 | 5173 | Hash 路由，localStorage 持久化 |
-| **后端** | Spring Boot 2.7、MyBatis Plus 3.5、JWT、Java 11 | 8080 | RESTful API，/api 统一前缀 |
-| **AI 服务** | FastAPI、LangChain、LangGraph、Pydantic | 8888 | root_path="/rag"，SSE 流式响应 |
-| **向量化服务** | vLLM 0.8.5+、FastAPI、PyTorch、Qwen3 模型 | 8890/8891 | 本地 Embedding 与 Rerank（可选） |
-| **向量数据库** | Milvus 2.6+ | 19530 | 按 kbId 创建集合，30min 自动释放 |
-| **对象存储** | MinIO 8.x | 9000 | S3 兼容，文档文件存储 |
-| **关系数据库** | MySQL 8.0+ | 3306 | 业务数据持久化，15+ 表 |
-| **缓存** | Redis 6.x/7.x | 6379 | Session、Token、JWT 黑名单 |
-| **消息队列** | RabbitMQ 3.x | 5672 | DirectExchange，异步任务处理 |
+| **前端** | Vue 3.5、Vite 7.2、Ant Design Vue 4.2、ant-design-x-vue 1.5、Pinia 3.0 | 5173 | History 路由、localStorage 状态、SSE 流式 |
+| **后端** | Spring Boot 2.7、MyBatis Plus 3.5、JWT (jjwt 0.11.5)、Java 11 | 8080 | REST API，`/api` 前缀，权限与持久化 |
+| **AI 服务** | FastAPI、LangChain、Pydantic | 8848 | `root_path="/rag"`，Agentic RAG 与 SSE |
+| **MCP 服务** | FastMCP 3、Streamable HTTP | 8858 | `/mcp` 端点，Access Key 鉴权编排与审计 |
+| **本地模型服务** | vLLM、FastAPI | 8890/8891 | Embedding 1024 维；Rerank 独立服务 |
+| **向量数据库** | Milvus Java/Python 客户端 | 按部署配置 | 知识库向量与文档 chunk 元数据 |
+| **对象存储** | MinIO | 按部署配置 | 原始文档对象存储 |
+| **关系数据库** | MySQL | 按部署配置 | 用户、权限、会话和业务数据 |
+| **缓存** | Redis | 按部署配置 | JWT `jti` 登录状态与验证码 |
+| **消息队列** | RabbitMQ | 按部署配置 | 文档处理状态与 MCP 审计 |
 
-### 模块详细文档
+### 系统拓扑
 
-📚 **各模块详细技术文档**：
-- [rag-client 前端文档](./rag-client/README.md) - Vue 3 开发指南、页面路由、状态管理
-- [rag-server 后端文档](./rag-server/README.md) - Spring Boot 配置、API 路由、MyBatis 使用
-- [rag-llm AI 服务文档](./rag-llm/README.md) - Agentic RAG 实现、LLM 集成、RabbitMQ 消费者
-- [embedding_rerank 本地向量化文档](./embedding_rerank/) - vLLM 部署、性能调优
+```text
+浏览器 ──HTTPS──► Nginx ──► rag-client
+                           │
+                           ▼
+                     rag-server:8080/api
+                     │      │       │
+                     ▼      ▼       ▼
+                  MySQL   MinIO  RabbitMQ
+                     │              │
+                     └──────┬───────┘
+                            ▼
+                     rag-llm:8848/rag
+                     │      │       │
+                     ▼      ▼       ▼
+                  Milvus  LLM API  Embedding:8890
 
-### 系统架构图
-
-```
-┌─────────────┐
-│  浏览器      │
-└──────┬──────┘
-       │ HTTP
-       ▼
-┌─────────────┐      ┌──────────────┐
-│  rag-client │      │  rag-server  │
-│  (Vue.js)   │◄────►│ (Spring Boot)│
-└─────────────┘      └──────┬───────┘
-                            │
-        ┌───────────────────┼───────────────────┐
-        │                   │                   │
-        ▼                   ▼                   ▼
-┌──────────────┐   ┌─────────────┐   ┌──────────────┐
-│  rag-llm     │   │   MySQL     │   │   MinIO      │
-│  (FastAPI)   │   │ (业务数据)   │   │ (文件存储)    │
-└──────┬───────┘   └─────────────┘   └──────────────┘
-       │
-       ├──────────┬────────────┬──────────────┐
-       ▼          ▼            ▼              ▼
-┌──────────┐ ┌─────────┐ ┌─────────┐  ┌──────────┐
-│  Milvus  │ │  Redis  │ │RabbitMQ │  │   LLM    │
-│(向量检索) │ │ (缓存)  │ │ (队列)  │  │ API(s)   │
-└──────────┘ └─────────┘ └─────────┘  └──────────┘
+第三方 Agent/客户端 ──HTTPS──► Nginx /mcp ──► rag-mcp:8858/mcp
+                                                   │
+                                      ┌────────────┴────────────┐
+                                      ▼                         ▼
+                              Java OpenAPI              rag-llm 内网检索 API
+                              /api/openapi/v1           /rag/retrieval/*
 ```
 
-## ✨ 功能特性
+## 核心机制
 
-### 核心功能
+### Agentic RAG 检索循环
 
-- 📄 **文档管理**
-  - 支持 PDF、TXT、Markdown 等多种格式
-  - 自动解析文档内容和结构
-  - 智能分块（Chunk）和向量化
-  - 文档版本管理和更新
-  - MinIO 对象存储，支持大文件
+知识库对话首先由 RAG Gateway 判断是否需要检索。需要检索时，系统进入唯一的 Agentic RAG 路径；控制器根据用户问题、对话历史和已有工具结果，逐轮选择以下工具：
 
-- 🤖 **Agentic RAG（智能代理检索）**
-  - **自主决策检索策略**：基于 LangGraph 状态机，LLM 自主选择最优检索工具
-  - **5种检索工具**：
-    1. `search_by_grep` - 关键词精确检索（支持全库/单文件/多文件）
-    2. `search_by_document_and_chunk_range` - 按文档ID获取chunk范围
-    3. `search_by_filename_and_chunk_range` - 按文件名获取chunk范围
-    4. `search_by_multi_queries_in_database` - 多角度语义检索+Rerank
-    5. `list_filename_by_like` - 文件名模糊匹配列表
-  - **多轮迭代优化**：支持最多5轮检索，自动补全上下文
-  - **智能停止机制**：检索到足够信息后自动停止，节省资源
-  - **实时过程反馈**：检索过程、工具调用、决策理由实时流式输出
+| 工具 | 作用 |
+| --- | --- |
+| `keyword_search` | 用明确术语、函数名、配置项或错误码精确检索正文 |
+| `read_file_chunks` | 按 `documentId` 和索引范围连续读取原文，单次最多 20 个 chunk |
+| `expand_context` | 围绕已命中 chunk 扩展前后文 |
+| `semantic_search` | 多查询语义召回、去重、Rerank 与相关性过滤 |
+| `find_files` | 使用文件名模式发现文件及其 `documentId` |
+| `stop_search` | 信息足够或继续检索无收益时终止循环 |
 
-- 🔍 **智能检索**
-  - **Agentic RAG**: 基于 LangGraph 的智能代理检索系统
-    - 自主决策检索策略（5种工具自动选择）
-    - 多轮迭代检索优化
-    - 动态上下文补全
-  - 语义相似度搜索（向量检索 + 自动关键词融合）
-  - 关键词精确检索（grep风格，支持全库/单文件/多文件）
-  - 混合检索与重排序（Rerank）优化
-  - 智能文档分块与范围获取
+对话入口从 `options.maxRounds` 读取轮次，默认值为 10。关键词和语义检索会排除已进入参考集合的 chunk，连续读取与上下文扩展则保留原文连续性；最终引用按 chunk 主键去重，并以 `fileName` 标注来源。
 
-- 💬 **对话问答**
-  - 基于 RAG 的准确回答
-  - 流式输出（SSE）
-  - 多轮对话上下文
-  - 引用来源标注
+### 文档入库链路
 
-- 👥 **多租户管理**
-  - 工作空间隔离
-  - 成员权限控制
-  - 知识库共享
-  - 操作审计日志
-
-- 🎨 **用户体验**
-  - Markdown 渲染（markdown-it）
-  - 代码高亮（highlight.js）
-  - 数学公式支持（MathJax3）
-  - 任务列表、Emoji 支持
-  - 深色/浅色主题
-  - 响应式布局
-
-## 🚀 快速开始
-
-### 前置要求
-
-| 软件 | 版本要求 | 说明 |
-|------|----------|------|
-| Node.js | 18+ | 前端开发环境 |
-| Java | **11**（必须） | 后端运行环境（不支持其他版本） |
-| Python | 3.8+ | AI 服务运行环境 |
-| Maven | 3.6+ | Java 项目构建工具 |
-| Docker | 20+ | 依赖服务容器化（推荐）|
-| GPU | 可选 | vLLM 本地向量化（embedding_rerank，推荐 4GB+ 显存）|
-
-### 依赖服务部署
-
-使用 Docker Compose 一键部署所有依赖服务（推荐）：
-
-```bash
-# 创建 docker-compose.yml 后执行
-docker-compose up -d
+```text
+网页或 OpenAPI 上传
+        │
+        ▼
+rag-server：权限校验、MD5 去重、MinIO 保存、写入 processing 状态
+        │ RabbitMQ: rag.document.process.key
+        ▼
+rag-llm：下载文件、按扩展名解析与分块、调用 Embedding
+        │
+        ├──► Milvus：保存向量和 documentId/chunkIndex/fileName 元数据
+        └──► RabbitMQ：回传成功或失败以及 chunk 信息
 ```
 
-或手动安装：
-- **MySQL 8.0+** - 业务数据库
-- **Redis 6.x/7.x** - 缓存、Session、JWT 黑名单
-- **Milvus 2.6+** - 向量数据库（需配置认证）
-- **MinIO Latest** - 对象存储（S3 兼容）
-- **RabbitMQ 3.x** - 消息队列（需配置用户名密码）
+上传以知识库为去重边界，使用 `kbId + MD5 checksum` 判断重复内容。文件名先把反斜杠转换为 `/`，再把空格转换为 `_`。Java 服务负责业务记录与对象存储，Python 服务负责异步解析、向量化和状态回传。
 
-### 配置文件
+### 权限与外部访问
 
-⚠️ **重要：配置敏感信息**
+网页业务接口使用 JWT，JWT 的 `jti` 必须同时存在于 Redis 登录状态中。MCP/OpenAPI 使用用户创建的 Access Key：格式是 `grs_ak_` 加 32 个安全随机字节的无填充 Base64URL 编码；明文只在创建响应中返回一次，服务端只保存 SHA-256 摘要。
 
-本项目的配置文件包含敏感信息（API 密钥、数据库密码等），已被 `.gitignore` 排除。您需要手动创建配置文件：
+知识库读取来源按 `owned > workspace_shared > invited > public` 确定唯一分类。`rag-mcp` 只承担协议、参数校验和调用编排：身份验证、知识库授权、创建、上传和删除都由 Java OpenAPI 执行；检索才会在授权后转发给内网 `rag-llm`。因此 `rag-mcp` 不需要也不应获得 MySQL 或 Milvus 访问权限。
 
-#### 1. 后端配置（rag-server）
+### SSE 生命周期
 
-```bash
-cd rag-server/src/main/resources
-# 编辑 application-dev.yml，填入真实的：
-# - MySQL 连接信息（端口 3306）
-# - JWT 密钥（至少 32 字符，可用 openssl rand -base64 32 生成）
-# - MinIO 访问密钥（endpoint, access-key, secret-key）
-# - Redis 密码（端口 6379）
-# - RabbitMQ 凭据（端口 5672）
-# - Milvus 认证信息（uri, token）
-```
+`rag-llm` 通过 SSE 输出检索过程、思考内容、回答内容和用量。Java 后端代理该流并持久化消息：正常完成、异常和客户端取消共用一个 `AtomicBoolean saved`，保证终止路径最多保存一次。前端主动停止时使用 `AbortController.abort()`，并立即调用幂等的 `finalizeStopped()`，因为中止请求不保证触发流的错误或关闭回调。
 
-📖 详细配置说明：[rag-server/README.md](./rag-server/README.md)
+前端还保留以下流式交互约束：消息区距离底部 50px 以内才自动跟随；滚轮操作或 `touchstart` 暂停跟随；离开底部后提供返回底部按钮。
 
-#### 2. AI 服务配置（rag-llm）
+### 模型与回退
 
-```bash
-cd rag-llm
-# 1. 编辑 model_config.json（参考 model_config.json.example）
-# 填入各 LLM 的 API Key：
-# - OpenAI (gpt-5.2, gpt-5.2-codex)
-# - DeepSeek (deepseek-chat, deepseek-reasoner)
-# - 通义千问 (qwen3-max, text-embedding-v4)
-# - Gemini (gemini-3-flash-preview)
-# - Claude (claude-4.5-sonnet)
-# - 其他模型服务
+- 会话标题：`glm-5.2/z-ai`。
+- RAG Gateway：`glm-5.2/z-ai`。
+- 检索决策控制器：`MiniMax-M3/minimax`。
+- 当前 Embedding 执行路径：本地 `Qwen/Qwen3-Embedding-0.6B` 服务；配置标识为 `text-embedding-v4/qwen`。
+- Rerank：`qwen3-rerank/qwen`。
 
-# 2. 编辑 main.py 中的基础设施连接配置（约第 30-40 行）：
-# - RabbitMQ 连接信息（host, port, username, password）
-# - MinIO 访问密钥（endpoint, access-key, secret-key）
-# - Milvus 认证令牌（uri, token）
-# 生产环境建议使用环境变量替代硬编码
-```
+`model_config.json` 每次使用时从磁盘读取，不使用进程内缓存。官方聊天 LLM 默认超时 60 秒；候选回退只允许发生在流开始之前，已经输出有效内容后不会切换候选。特定 OpenAI 兼容 Gemini 路径通过 `ainvoke` 完成非流式调用。
 
-⚠️ **注意**：
-- `model_config.json` 不要提交到 Git
-- `main.py` 中的基础设施配置为硬编码，生产环境需修改或使用环境变量
+## 快速开始
 
-📖 详细配置说明：[rag-llm/README.md](./rag-llm/README.md)
+### 运行前准备
 
-📚 **安全配置指南**：[SECURITY.md](./SECURITY.md)
+完整系统依赖 MySQL、Redis、RabbitMQ、MinIO 和 Milvus。数据库结构脚本为根目录的 `general_rag_database.sql`。各服务的地址和凭据需要按部署环境修改；不要直接复用仓库中的开发环境值。
+
+后端必须使用 Java 11。当前项目约定的本机 JDK 路径是 `D:\JDK-11`，JDK 21 会触发当前 Lombok 与编译器组合的 `JCTree$JCImport.qualid` 错误。
+
+当前 `rag-llm` 的 Embedding 入口固定连接本地 `8890` 服务，因此运行知识库向量化与检索前需要启动 `embedding_rerank` 的 Embedding 服务。`8891` 的本地 Rerank 服务是独立实现；当前 `rag-llm` 的 Rerank 执行路径仍使用 `model_config.json` 中的 `qwen3-rerank/qwen` endpoint。
+
+### 配置入口
+
+- `rag-client/src/consts.js`：Java API 基础地址。
+- `rag-server/src/main/resources/application-*.yml`：MySQL、Redis、RabbitMQ、MinIO、Milvus、邮件、JWT 和 `rag-llm` 地址。
+- `rag-llm/main.py`：当前入口在导入服务前直接设置 RabbitMQ、MinIO、Milvus 连接值；部署时必须修改该入口或先改造为不覆盖外部配置。
+- `rag-llm/model_config.json`：聊天模型候选和 Rerank 配置；每次使用时重新从磁盘读取。
+- `rag-mcp/rag_mcp/config.py` 或同名环境变量：Java OpenAPI、内网 `rag-llm`、监听地址和审计消息配置。
+- `embedding_rerank/config/*.py`：本地 Embedding/Rerank 模型和服务参数；当前实现直接读取类属性。
+
+详细字段和约束见各模块 README。
 
 ### 启动服务
 
-#### 1. 启动前端（端口 5173）
+以下命令均从仓库根目录执行。先启动基础设施，再启动模型服务、AI 服务、Java 后端和前端。
 
 ```bash
+# 本地 Embedding：8890
+cd embedding_rerank
+python embedding_start.py
+```
+
+```bash
+# AI 服务：8848，root_path=/rag
+cd rag-llm
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8848
+```
+
+```powershell
+# Java 后端：8080，context-path=/api
+cd rag-server
+$env:JAVA_HOME = "D:\JDK-11"
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+mvn spring-boot:run
+```
+
+```bash
+# 前端：Vite 默认端口 5173
 cd rag-client
 npm install
 npm run dev
-# 访问 http://localhost:5173
 ```
 
-📖 详细配置请参考：[rag-client/README.md](./rag-client/README.md)
-
-#### 2. 启动后端（端口 8080，context-path /api）
+可选服务：
 
 ```bash
-cd rag-server
-# 编辑 src/main/resources/application-dev.yml 配置数据库等信息
-mvn clean install
-mvn spring-boot:run
-# 后端运行在 http://localhost:8080/api
-```
+# MCP：8858/mcp
+cd rag-mcp
+python -m pip install -r requirements.txt
+python -m rag_mcp.server
 
-⚠️ **注意**：必须使用 Java 11（不支持其他版本）
-
-📖 详细配置请参考：[rag-server/README.md](./rag-server/README.md)
-
-#### 3. 启动 LLM 服务（端口 8888，root_path /rag）
-
-```bash
-cd rag-llm
-# 编辑 model_config.json 配置各 LLM 的 API Key
-# 编辑 main.py 中的 RabbitMQ、MinIO、Milvus 连接信息
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8888 --workers 2
-# LLM 服务运行在 http://localhost:8888
-```
-
-📖 详细配置请参考：[rag-llm/README.md](./rag-llm/README.md)
-
-#### 4. 启动本地向量化服务（可选，需 GPU）
-
-如果需要使用本地向量化和重排序服务（不依赖外部 API），需要 GPU 支持：
-
-```bash
+# 独立本地 Rerank：8891
 cd embedding_rerank
-
-# 启动 Embedding 服务（端口 8890）
-python embedding_start.py
-
-# 启动 Rerank 服务（端口 8891）
 python rerank_start.py
 ```
 
-**系统要求**：
-- GPU: NVIDIA GPU（推荐 4GB+ 显存，最佳 8GB+）
-- CUDA: 11.8+
-- Python: 3.8+
-- vLLM: 0.8.5+
-
-📖 详细配置请参考：
-- [Embedding 服务文档](./embedding_rerank/EmbeddingREADME.md)
-- [Rerank 服务文档](./embedding_rerank/RerankREADME.md)
+服务配置、运行目录和生产部署要求分别见各模块文档。
 
 ### 数据库初始化
 
-```sql
--- 创建数据库
-CREATE DATABASE general_rag DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+先创建数据库，再导入根目录脚本：
 
--- 导入表结构和初始数据
-source 1_general_rag.sql
+```bash
+mysql -u root -p -e "CREATE DATABASE general_rag DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root -p general_rag < general_rag_database.sql
 ```
 
-**说明**：`1_general_rag.sql` 文件位于项目根目录，包含完整的数据库表结构定义，包括：
-- 用户表（users）
-- 工作空间表（workspaces）
-- 知识库表（knowledgebases）
-- 文档表（documents）
-- 会话表（conversations、conversation_messages）
-- 审计日志表（audit_logs）
-- 等更多表...
+## 项目结构
 
-## 📁 项目结构
-
-<details>
-<summary>点击展开详细结构</summary>
-
-```
+```text
 general-rag-system/
-├── rag-client/                      # 前端项目（Vue 3.5 + Vite 7.2）
-│   ├── src/
-│   │   ├── api/                     # API 接口封装（chatApi, kbApi, workspaceApi 等）
-│   │   ├── stores/                  # Pinia 状态管理（user, theme, search, workspace, kb）
-│   │   ├── router/                  # 路由配置（beforeEach 认证守卫）
-│   │   ├── views/                   # 页面组件
-│   │   │   ├── Login.vue            # 登录页
-│   │   │   ├── Register.vue         # 注册页
-│   │   │   ├── Dashboard.vue        # 仪表盘
-│   │   │   ├── SearchSessions.vue   # 搜索会话
-│   │   │   ├── chat/                # 对话页面（NewChat, ChatSession）
-│   │   │   ├── kb/                  # 知识库页面（KnowledgeBases, KnowledgeDetails）
-│   │   │   └── workspace/           # 工作空间页面（WorkspaceManagement）
-│   │   ├── components/              # 公共组件（ChatMessage, DocumentList 等）
-│   │   ├── layouts/                 # 布局组件（MainLayout）
-│   │   ├── utils/                   # 工具函数（auth, markdown, format）
-│   │   └── consts.js                # 常量定义（API_BASE_URL）
-│   ├── package.json
-│   ├── vite.config.js
-│   └── README.md                    # 前端详细文档
-│
-├── rag-server/                      # 后端项目（Spring Boot 2.7 + Java 11）
-│   ├── src/main/java/com/rag/ragserver/
-│   │   ├── controller/              # 9 个 REST 控制器
-│   │   │   ├── UserController.java
-│   │   │   ├── WorkspaceController.java
-│   │   │   ├── KbController.java
-│   │   │   ├── ChatController.java
-│   │   │   ├── QuerySessionController.java
-│   │   │   ├── DashboardController.java
-│   │   │   ├── ModelsController.java
-│   │   │   ├── AuditLogsController.java
-│   │   │   └── NotificationsController.java
-│   │   ├── service/                 # 业务逻辑（接口 + impl/）
-│   │   ├── mapper/                  # 15 个 MyBatis Mapper 接口
-│   │   ├── domain/                  # 实体类 + VO 包
-│   │   ├── dto/                     # 请求/响应 DTO
-│   │   ├── configuration/           # Spring 配置类（CORS, JWT, MyBatis, Milvus 等）
-│   │   ├── interceptor/             # JWT 拦截器（excludes /users/*）
-│   │   ├── aspect/                  # AOP 切面（审计日志）
-│   │   ├── exception/               # 全局异常处理
-│   │   ├── rabbit/                  # RabbitMQ 消费者
-│   │   ├── assembler/               # 对象转换器
-│   │   └── utils/                   # 工具类
-│   ├── src/main/resources/
-│   │   ├── application.yml          # 主配置（port 8080, context-path /api）
-│   │   ├── application-dev.yml      # 开发环境配置
-│   │   ├── application-prod.yml     # 生产环境配置
-│   │   └── com/rag/ragserver/mapper/  # ⚠️ MyBatis XML 映射文件（15 个）
-│   ├── pom.xml
-│   └── README.md                    # 后端详细文档
-│
-├── rag-llm/                         # LLM 服务（FastAPI，端口 8888）
-│   ├── services/
-│   │   └── chat.py                  # 聊天服务路由（/chat）
-│   ├── mq/                          # RabbitMQ 消息队列
-│   │   ├── connection.py            # 连接管理
-│   │   ├── document_embedding.py    # 文档向量化消费者
-│   │   └── session_name.py          # 会话名称生成消费者
-│   ├── agentic_rag_controller.py    # LangGraph 状态机控制器（max 5 轮）
-│   ├── agentic_rag_toolkit.py       # 5 种检索工具 + PROMPT
-│   ├── agentic_rag_utils.py         # Agentic RAG 核心服务
-│   ├── main.py                      # FastAPI 入口（root_path="/rag"）
-│   ├── dependencies.py              # Lifespan 管理（RabbitMQ、Milvus 初始化）
-│   ├── rag_utils.py                 # 传统 RAG 工具函数
-│   ├── milvus_utils.py              # Milvus 操作（MilvusClientManager，30min 自动释放）
-│   ├── minio_utils.py               # MinIO 对象存储操作
-│   ├── utils.py                     # 通用工具（LLM 初始化、模型配置加载）
-│   ├── openai_utils.py              # OpenAI API 封装
-│   ├── gemini_utils.py              # Gemini API 封装
-│   ├── requirements.txt             # Python 依赖
-│   ├── model_config.json.example    # 模型配置模板
-│   └── README.md                    # AI 服务详细文档
-│
-├── embedding_rerank/                # 本地向量化与重排序服务（可选）
-│   ├── service/                     # 服务实现
-│   │   ├── embedding_service.py     # Embedding 服务（Qwen3-Embedding-0.6B）
-│   │   └── rerank_service.py        # Rerank 服务（Qwen3-Reranker-0.6B）
-│   ├── config/                      # 配置模块
-│   │   ├── embedding_config.py
-│   │   └── rerank_config.py
-│   ├── test/                        # 测试套件
-│   ├── embedding_start.py           # Embedding 启动入口（端口 8890）
-│   ├── rerank_start.py              # Rerank 启动入口（端口 8891）
-│   ├── EmbeddingREADME.md          # Embedding 完整文档
-│   ├── RerankREADME.md             # Rerank 完整文档
-│   └── ...（API 文档、快速开始）
-│
-├── 1_general_rag.sql                # 数据库初始化 SQL（15+ 表）
-├── .gitignore                       # Git 忽略配置
-├── README.md                        # 项目主文档（本文件）
-├── SECURITY.md                      # 安全配置指南
-├── CONTRIBUTING.md                  # 贡献指南
-└── LICENSE                          # Apache 2.0 开源协议
+├── rag-client/              # Vue 浏览器端：页面、SSE 交互、知识库与 Access Key 管理
+├── rag-server/              # Java 业务后端：认证、权限、持久化、OpenAPI 与审计
+├── rag-llm/                 # Python AI 服务：文档处理、Agentic RAG 与聊天流
+├── rag-mcp/                 # FastMCP 服务：外部 Agent 工具、Access Key 鉴权编排
+├── embedding_rerank/        # 本地 Embedding 与 Rerank 模型服务
+├── general_rag_database.sql # 数据库结构脚本
+├── CONTRIBUTING.md
+├── LICENSE
+└── README.md
 ```
 
-</details>
+模块之间的边界如下：
 
-📚 **各模块详细文档**：
-- [rag-client/README.md](./rag-client/README.md) - 前端开发指南（页面路由、状态管理、API 通信）
-- [rag-server/README.md](./rag-server/README.md) - 后端开发指南（API 路由、MyBatis 配置、JWT 认证）
-- [rag-llm/README.md](./rag-llm/README.md) - AI 服务指南（Agentic RAG、LLM 集成、RabbitMQ 消费者）
-- [embedding_rerank/](./embedding_rerank/) - 本地向量化服务（vLLM 部署、性能调优）
+- `rag-client` 只访问 Java API，不直接调用内部检索接口。
+- `rag-server` 拥有用户身份、工作空间、知识库权限和所有变更操作。
+- `rag-llm` 处理 AI 工作负载；其中 `/rag/retrieval/*` 只面向受信任内网调用。
+- `rag-mcp` 使用 Access Key 请求 Java OpenAPI，获得授权路由后再调用 `rag-llm`。
+- `embedding_rerank` 提供独立模型服务；当前 `rag-llm` 的 Embedding 路径连接本地 `8890`。
 
-## 🔧 配置指南
+## 部署边界
 
-### 环境变量方式（推荐生产环境）
+- Java 生产构建必须使用 `D:\JDK-11`。
+- `/rag/retrieval/*` 没有公共鉴权，不得暴露到公网。
+- MCP 公网入口由 Nginx 终止 TLS，并将 `/mcp` 原路径代理到 `rag-mcp:8858/mcp`；当前服务不配置 `MCP_PUBLIC_URL`。
+- Access Key、JWT Secret、模型 API Key、数据库和基础设施密码不得写入 README、日志或前端代码。
+- MCP 审计发布到 `rag.audit.exchange`，路由键为 `rag.mcp.tool.log.v1`，由 `rag.mcp.tool.log.queue` 消费，并配置死信交换机与死信队列。
+- 前端使用 History 路由，静态站点必须把未知路径回退到 `index.html`。
 
-```bash
-# 后端服务环境变量
-export MYSQL_PASSWORD=your_password
-export JWT_SECRET=your_jwt_secret_key
-export MINIO_SECRET_KEY=your_minio_key
-export REDIS_PASSWORD=your_redis_password
+## 模块文档
 
-# LLM服务环境变量
-export OPENAI_API_KEY=sk-xxxxx
-export DEEPSEEK_API_KEY=sk-xxxxx
-export QWEN_API_KEY=sk-xxxxx
-```
+- [rag-client/README.md](./rag-client/README.md)：依赖、路由、SSE 交互、页面实现、配置与构建。
+- [rag-server/README.md](./rag-server/README.md)：接口、认证、权限、配置、数据库、RabbitMQ 与 Java 11 构建。
+- [rag-llm/README.md](./rag-llm/README.md)：聊天 API、六工具 Agentic RAG、内部检索接口、模型配置和回退机制。
+- [rag-mcp/README.md](./rag-mcp/README.md)：九个 MCP 工具、环境变量、Access Key、审计和 Nginx 部署。
+- [embedding_rerank/README.md](./embedding_rerank/README.md)：Embedding/Rerank 统一入口及 API、配置、快速开始文档。
 
-### 密钥生成建议
+## 开源协议
 
-```bash
-# 生成32位JWT密钥
-openssl rand -base64 32
-
-# 生成强密码
-openssl rand -base64 16
-```
-
-## 🧠 Agentic RAG 智能代理检索
-
-### 什么是 Agentic RAG？
-
-Agentic RAG 是本系统的核心检索引擎，基于 **LangGraph 状态机** 和 **大语言模型决策**，实现了自主、智能的文档检索系统。不同于传统的单次检索方式，Agentic RAG 能够：
-
-- 🎯 **自主决策**：LLM 根据问题和检索历史，自动选择最优检索工具
-- 🔄 **多轮迭代**：支持最多5轮检索，逐步完善检索结果
-- 🧩 **上下文补全**：自动检测并补全不连续的文档片段
-- 🛑 **智能停止**：检索到足够信息后自动停止，避免过度检索
-- 📊 **过程可视化**：实时流式输出检索过程、工具调用、决策理由
-
-### 5种检索工具
-
-#### 1. search_by_grep - 关键词精确检索
-**适用场景**：代码级精确搜索、查找方法/类/变量/配置项
-- 支持全库检索、单文件检索、多文件检索
-- 支持 AND/OR 匹配模式（默认OR）
-- 精确匹配，无歧义，速度快
-
-**示例**：
-```python
-# 全库查找 Redis 相关代码
-search_by_grep(keywords=["Redis"], file_names=None)
-
-# 在 config.py 中查找端口配置
-search_by_grep(keywords=["port"], file_names=["config.py"])
-
-# 在多个 controller 文件中查找 API 端点
-search_by_grep(keywords=["@app.route", "POST"], 
-               file_names=["user_controller.py", "auth_controller.py"])
-```
-
-#### 2 & 3. chunk_range 工具 - 文档片段获取
-**适用场景**：补全上下文、扩展文档范围、绕过检索失败
-- `search_by_document_and_chunk_range` - 按文档ID获取
-- `search_by_filename_and_chunk_range` - 按文件名获取
-- 解决语义检索和关键词检索都失效的情况
-
-**示例**：
-```python
-# 补全不连续的chunk
-search_by_document_and_chunk_range(document_id=123, start=1, end=9)
-
-# 基于已知信息局部获取（检索失效时）
-search_by_filename_and_chunk_range(file_name="README.md", start=0, end=5)
-```
-
-#### 4. search_by_multi_queries_in_database - 多角度语义检索
-**适用场景**：概念理解、描述性问题、需要高质量语义匹配
-- 多query并行检索 + Rerank精排
-- 支持动态阈值过滤（grade_score_threshold: 0.3-0.6）
-- K-Means聚类去噪
-
-**示例**：
-```python
-# 理解Rerank机制
-search_by_multi_queries_in_database(
-    queries=["Rerank重排序机制", "文档相关性评分", "检索结果精排"],
-    grade_query="RAG系统中的Rerank是如何工作的",
-    grade_score_threshold=0.5,
-    top_k=10
-)
-```
-
-#### 5. list_filename_by_like - 文件探索
-**适用场景**：不确定文件名、浏览文件列表、按模式查找
-- 支持SQL LIKE语法（前缀、包含、目录匹配）
-- 仅返回元信息（fileName、documentId、maxChunkIndex）
-- 需配合 chunk_range 工具获取实际内容
-
-**示例**：
-```python
-# 查找所有配置文件
-list_filename_by_like(pattern="%config%", limit=30)
-# 然后选择目标文件获取内容
-search_by_filename_and_chunk_range(file_name="config.yaml", start=0, end=5)
-```
-
-### 工作流程
-
-```
-用户提问
-   ↓
-┌─────────────────────────────────────┐
-│  Agentic RAG Controller (LangGraph) │
-├─────────────────────────────────────┤
-│  第1轮：决策检索策略                 │
-│  ├─ 分析问题类型                     │
-│  ├─ 选择工具（5选1）                 │
-│  └─ 执行检索                         │
-│                                     │
-│  第2-5轮：迭代优化（如需）            │
-│  ├─ 评估当前检索结果                 │
-│  ├─ 决定继续/停止                    │
-│  ├─ 补全上下文/换角度检索            │
-│  └─ 更新检索历史                     │
-│                                     │
-│  构建上下文                          │
-│  ├─ 合并检索结果                     │
-│  ├─ 去重并排序                       │
-│  └─ 格式化为上下文                   │
-└─────────────────────────────────────┘
-   ↓
-生成回答（流式输出）
-```
-
-### 技术实现
-
-- **状态机框架**：LangGraph（支持循环、条件分支、状态持久化）
-- **决策模型**：支持所有 LLM（GPT、Claude、DeepSeek、Qwen、Gemini等）
-- **结构化输出**：Pydantic 模型定义，确保决策格式正确
-- **流式传输**：SSE（Server-Sent Events）实时推送检索过程
-- **容错机制**：工具调用失败自动降级，最多5轮保底
-
-### 优势对比
-
-| 特性 | 传统RAG | Agentic RAG |
-|------|---------|-------------|
-| 检索策略 | 固定单一 | 自主选择（5种工具） |
-| 检索轮次 | 单次 | 多轮迭代（最多5轮） |
-| 上下文补全 | 不支持 | 自动补全不连续chunk |
-| 工具组合 | 不支持 | 支持工具链式调用 |
-| 过程透明 | 黑盒 | 实时流式输出 |
-| 适应性 | 差 | 强（根据问题动态调整） |
-
-### 配置说明
-
-在 `agentic_rag_controller.py` 中可配置：
-- `max_rounds`: 最大检索轮次（默认5）
-- `grade_score_threshold`: Rerank分数阈值（默认0.4）
-- `top_k`: 每轮检索返回数量（默认10）
-
-## 📚 文档链接
-
-- [前端开发文档](./rag-client/README.md) - Vue 3 开发指南
-- [后端开发文档](./rag-server/README.md) - Spring Boot API 文档
-- [LLM服务文档](./rag-llm/README.md) - FastAPI 服务说明
-- **[Embedding服务文档](./embedding_rerank/EmbeddingREADME.md)** - 本地向量化服务指南
-- **[Rerank服务文档](./embedding_rerank/RerankREADME.md)** - 本地重排序服务指南
-- [安全配置指南](./SECURITY.md) - 敏感信息配置说明
-- [贡献指南](./CONTRIBUTING.md) - 如何参与项目开发
-- [Git历史清理](./CLEAN_GIT_HISTORY.md) - 仓库清理记录
-
-## 📄 开源协议
-
-本项目采用 [Apache License 2.0](./LICENSE) 协议开源。
-
-### 主要权限
-
-- ✅ 商业使用
-- ✅ 修改和分发
-- ✅ 专利授权
-- ✅ 私有使用
-
-### 主要限制
-
-- ⚠️ 必须保留版权声明
-- ⚠️ 必须声明修改内容
-- ⚠️ 必须包含 LICENSE 副本
-- ❌ 不提供责任担保
-
-详细信息请参阅 [LICENSE](./LICENSE) 文件。
-
-## 🤝 贡献指南
-
-我们欢迎所有形式的贡献！在提交 Pull Request 之前，请：
-
-1. 阅读我们的 [贡献指南](./CONTRIBUTING.md)
-2. 确保代码符合项目规范
-3. 添加必要的测试和文档
-4. 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范
-
-### 快速开始贡献
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'feat: add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
-## 🙋 常见问题
-
-<details>
-<summary><b>Q: 如何选择合适的 LLM 模型？</b></summary>
-
-A: 建议根据场景选择：
-- 快速响应：GPT-3.5、DeepSeek-Chat、Qwen-Plus
-- 高质量：GPT-4、Claude-3、Qwen-Max
-- 成本优化：本地部署开源模型（LLaMA、ChatGLM）
-</details>
-
-<details>
-<summary><b>Q: Agentic RAG 和传统 RAG 有什么区别？</b></summary>
-
-A: 主要区别：
-- **检索策略**：传统RAG单一固定，Agentic RAG自主选择5种工具
-- **检索轮次**：传统RAG单次检索，Agentic RAG支持最多5轮迭代
-- **上下文处理**：Agentic RAG自动补全不连续chunk，提供完整上下文
-- **适应性**：Agentic RAG根据问题类型动态调整策略
-- **透明度**：Agentic RAG实时展示检索过程和决策理由
-
-推荐在复杂问答、代码搜索、多文档关联等场景使用 Agentic RAG。
-</details>
-
-<details>
-<summary><b>Q: Agentic RAG 的5种工具如何选择？</b></summary>
-
-A: LLM会根据问题类型自动选择：
-- **结构化查找**（如"XXX方法在哪"）→ `search_by_grep`
-- **概念理解**（如"什么是XXX"）→ `search_by_multi_queries_in_database`
-- **文件探索**（如"有哪些配置文件"）→ `list_filename_by_like`
-- **上下文补全**（检索到不连续chunk）→ `chunk_range` 工具
-- **检索失效**（其他工具无法命中）→ `chunk_range` 兜底
-
-系统会在每轮检索后评估结果，决定是否继续、使用哪个工具。
-</details>
-
-<details>
-<summary><b>Q: 向量数据库可以替换为其他方案吗？</b></summary>
-
-A: 可以，本项目基于 LangChain，理论上支持：
-- Milvus（当前方案，推荐）
-- Pinecone、Weaviate、Qdrant
-- Elasticsearch（需要修改部分代码）
-</details>
-
-<details>
-<summary><b>Q: 支持哪些文档格式？</b></summary>
-
-A: 当前支持：
-- **PDF**（通过 PyMuPDF / pdfplumber）
-- **TXT、MD**（纯文本、Markdown）
-- 图片OCR（通过 Tesseract，需要额外安装）
-
-可通过扩展 `rag_utils.py` 支持更多格式（Word、Excel、HTML等）
-</details>
-
-<details>
-<summary><b>Q: LLM服务为什么运行在8888端口？</b></summary>
-
-A: 这是在 `main.py` 中配置的，建议使用：
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8888 --workers 2
-```
-可根据需要修改端口，但需同步更新 `rag-server` 中的配置。
-</details>
-
-<details>
-<summary><b>Q: embedding_rerank 模块的作用是什么？</b></summary>
-
-A: `embedding_rerank` 提供本地向量化和重排序服务，包含两个独立的微服务：
-
-**Embedding 服务** (端口: 8890)
-- 基于 Qwen3-Embedding-0.6B 模型
-- 将文本转换为768维向量
-- 支持批量向量化（最多1024条/次）
-- 兼容 OpenAI Embeddings API 格式
-
-**Rerank 服务** (端口: 8891)
-- 基于 Qwen3-Reranker-0.6B 模型
-- 对检索结果进行精确重排序
-- 提高召回文档的相关性
-- 支持批量重排序
-
-**适用场景**：
-- ✅ 对数据隐私有严格要求
-- ✅ 希望降低外部API调用成本
-- ✅ 有本地GPU资源（推荐4GB+显存）
-- ✅ 需要完全离线部署
-
-**技术栈**：
-- vLLM 0.8.5+ (高性能推理引擎)
-- FastAPI (异步Web框架)
-- PyTorch (深度学习框架)
-
-**性能参考**：
-- Embedding: ~100条/秒 (单GPU, batch_size=32)
-- Rerank: ~50对/秒 (单GPU, batch_size=16)
-
-详见: [Embedding文档](./embedding_rerank/EmbeddingREADME.md) | [Rerank文档](./embedding_rerank/RerankREADME.md)
-</details>
-
-<details>
-<summary><b>Q: 如何在 rag-llm 中使用本地向量化服务？</b></summary>
-
-A: 配置 `rag-llm/main.py` 或使用环境变量：
-
-```python
-# 在 main.py 中配置
-EMBEDDING_SERVICE_URL = "http://localhost:8890"
-RERANK_SERVICE_URL = "http://localhost:8891"
-
-# 或使用环境变量
-export EMBEDDING_SERVICE_URL="http://localhost:8890"
-export RERANK_SERVICE_URL="http://localhost:8891"
-```
-
-然后在 RAG 流程中调用本地服务替代外部API。
-</details>
-
-<details>
-<summary><b>Q: 本地向量化服务需要什么硬件配置？</b></summary>
-
-A: **最低配置**：
-- GPU: NVIDIA GPU (4GB显存，如GTX 1650)
-- CPU: 4核
-- 内存: 8GB
-- 硬盘: 10GB
-
-**推荐配置**：
-- GPU: NVIDIA GPU (8GB+显存，如RTX 3060)
-- CPU: 8核+
-- 内存: 16GB+
-- 硬盘: 20GB+ SSD
-- CUDA: 11.8+
-
-**性能对比**：
-- 4GB显存: 可运行，需调低 `gpu_memory_utilization`
-- 8GB显存: 流畅运行，推荐配置
-- 16GB+显存: 可同时运行多个服务或更大模型
-</details>
-
-## 📊 项目状态
-
-![GitHub last commit](https://img.shields.io/github/last-commit/yourusername/general-rag-system)
-![GitHub issues](https://img.shields.io/github/issues/yourusername/general-rag-system)
-![GitHub stars](https://img.shields.io/github/stars/yourusername/general-rag-system)
-
-## 📧 联系方式
-
-- 提交 Issue: [GitHub Issues](../../issues)
-- 讨论交流: [GitHub Discussions](../../discussions)
-
----
-
-<div align="center">
-
-**⭐ 如果这个项目对你有帮助，请给一个 Star！**
-
-Made with ❤️ by General RAG System Contributors
-
-[Apache License 2.0](./LICENSE) © 2026
-
----
-
-### 技术支持
-
-- 📖 [完整文档](../../wiki)
-- 💬 [常见问题](../../issues?q=label%3Aquestion)
-- 🐛 [报告Bug](../../issues/new?template=bug_report.md)
-- 💡 [功能建议](../../issues/new?template=feature_request.md)
-
-</div>
+本项目采用 [Apache License 2.0](./LICENSE)。贡献流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。

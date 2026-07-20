@@ -1,336 +1,308 @@
-# RAG LLM Service - AI 服务模块
+# rag-llm：检索增强生成服务
 
-LLM 服务层，负责文档解析、向量化、智能检索和问答生成。基于 FastAPI + LangChain + LangGraph 实现。
+`rag-llm` 是知识库文档处理、Agentic RAG 检索和 LLM 流式回答服务。服务基于 FastAPI、LangChain、Milvus、RabbitMQ 和 MinIO 实现。
 
-## 核心技术
+## 服务概览
 
-- **FastAPI** - 异步 Web 框架（默认端口 8888，root_path="/rag"）
-- **LangChain** - LLM 应用框架（langchain, langchain_core, langchain_community）
-- **LangGraph** - 工作流编排（Agentic RAG 状态机）
-- **Pydantic** - 数据验证和结构化输出
-- **aio_pika** - 异步 RabbitMQ 客户端
-- **miniopy_async** - 异步 MinIO 客户端（S3 兼容）
-- **langchain_milvus** - Milvus 向量存储集成
-- **PyMuPDF + pdfplumber** - PDF 解析
-- **Uvicorn** - ASGI 服务器
+- **监听端口**：`8848`
+- **FastAPI 根路径**：`/rag`
+- **应用入口**：`main.py` 中的 `app`
+- **聊天入口**：`POST /rag/chat/stream`
+- **检索模式**：唯一的知识库检索模式是 Agentic RAG；RAG Gateway 判断需要检索时进入 Agentic RAG
+- **检索工具**：5 个检索工具加 1 个停止工具，共 6 个
+- **Embedding**：当前固定使用本地 Embedding 服务，地址为 `http://192.168.188.6:8890`，模型为 `Qwen/Qwen3-Embedding-0.6B`
+- **Rerank**：`qwen3-rerank`，提供方为 `qwen`
 
-## 项目结构
+`root_path=/rag` 是 FastAPI 的根路径设置。应用代码中的路由前缀仍是 `/chat` 和 `/retrieval`，部署后通过 `/rag` 前缀访问。
 
-```
+## 目录与职责
+
+```text
 rag-llm/
-├── main.py                          # FastAPI 应用入口（端口 8888）
-├── dependencies.py                  # Lifespan 管理（RabbitMQ、Milvus 初始化）
-├── requirements.txt                 # Python 依赖
-├── model_config.json                # 模型配置（需创建，已在 .gitignore）
-├── model_config.json.example        # 配置模板
-│
-├── services/                        # 业务服务
-│   └── chat.py                      # 聊天服务路由（/chat）
-│
-├── mq/                              # RabbitMQ 消息队列
-│   ├── connection.py                # 连接管理
-│   ├── document_embedding.py        # 文档向量化消费者（rag.document.process.queue）
-│   └── session_name.py              # 会话名称生成消费者（session.name.generate.producer.queue）
-│
-├── agentic_rag_controller.py        # Agentic RAG 多轮检索决策控制器
-├── agentic_rag_toolkit.py           # Agentic RAG 检索工具 + PROMPT
-├── agentic_rag_utils.py             # Agentic RAG 核心服务（generate_workflow_id 等）
-│
-├── milvus_utils.py                  # Milvus 向量数据库操作
-│   ├── MilvusClientManager         # 客户端生命周期管理（30min 自动释放）
-│   ├── 向量检索（语义检索、关键词过滤）
-│   └── 异步锁（防并发冲突）
-│
-├── minio_utils.py                   # MinIO 对象存储操作（文件上传/下载）
-├── utils.py                         # 通用工具函数（LLM 初始化、模型配置加载）
-│
-├── openai_utils.py                  # OpenAI API 封装
-├── gemini_utils.py                  # Gemini API 封装
-├── aiohttp_utils.py                 # 异步 HTTP 工具
-├── wrapper.py                       # 装饰器和包装器
-└── run.log                          # 运行日志
+├── main.py                       FastAPI 应用入口、端口和根路径
+├── dependencies.py               应用生命周期、RabbitMQ 消费者和 Milvus 释放任务
+├── services/chat.py              会话标题和流式聊天入口
+├── services/retrieval.py         内部检索 HTTP 接口
+├── agentic_rag_utils.py          Agentic RAG 编排、轮次、上下文和引用
+├── agentic_rag_controller.py     检索决策控制器
+├── agentic_rag_toolkit.py        六个检索工具及 Milvus 查询
+├── rag_gateway.py                判断聊天请求是否需要知识库检索
+├── utils.py                      模型、Embedding、分块和流式处理工具
+├── model_config.json             运行时模型配置，不应提交敏感内容
+├── mq/connection.py              RabbitMQ 连接和消费
+├── mq/document_embedding.py      文档下载、解析、分块、向量化和入库
+├── milvus_utils.py               Milvus 客户端和集合生命周期
+├── minio_utils.py                MinIO 文件读取
+├── aiohttp_utils.py              Rerank HTTP 调用
+└── requirements.txt              Python 依赖
 ```
 
-## API 路由
-
-### 聊天服务 (`/rag/chat`)
-
-| 方法 | 路径 | 功能 | 认证 |
-|------|-----|------|------|
-| POST | `/rag/chat/stream` | 流式 RAG 问答（SSE） | 否 |
-| POST | `/rag/chat/agentic` | Agentic RAG 对话 | 否 |
-| POST | `/rag/chat/agentic/stream` | Agentic RAG 流式对话（SSE） | 否 |
-
-**请求参数**（以 `/rag/chat/agentic` 为例）
-```json
-{
-  "query": "什么是RAG？",
-  "kb_ids": [1, 2],
-  "session_id": 123,
-  "user_id": 456,
-  "model_name": "gpt-4",
-  "max_rounds": 3,
-  "grade_score_threshold": 0.4
-}
-```
-
-**流式响应格式**（SSE）
-```
-data: {"type": "workflow_id", "workflow_id": "abc123"}
-data: {"type": "token", "content": "RAG"}
-data: {"type": "token", "content": "是"}
-data: {"type": "citations", "data": [...]}
-data: {"type": "done"}
-```
-
-### 健康检查
-
-| 方法 | 路径 | 功能 |
-|------|-----|------|
-| GET | `/health` | 服务健康状态 |
-| GET | `/rag/` | 服务信息 |
-
-### RabbitMQ 消费者（异步任务）
-
-**文档向量化队列** (`rag.document.process.queue`)
-- 监听文档上传事件
-- 下载文档、解析、分块、向量化
-- 存储到 Milvus
-- 更新文档状态
-
-**会话名称生成队列** (`session.name.generate.producer.queue`)
-- 监听会话创建事件
-- 根据首条消息生成会话标题
-- 更新会话名称
-
-## 快速开始
+## 安装与运行
 
 ### 安装依赖
+
+在 `rag-llm` 目录执行：
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 配置文件
+### 启动
 
-⚠️ **关键配置**：`main.py` 中硬编码了基础设施连接信息，生产环境建议使用环境变量。
-
-**方式一：修改 main.py（开发环境）**
-```python
-# main.py 中的配置（第 30-40 行）
-os.environ["RABBITMQ_HOST"] = "192.168.188.6"
-os.environ["RABBITMQ_PORT"] = "5678"
-os.environ["RABBITMQ_USERNAME"] = "make"
-os.environ["RABBITMQ_PASSWORD"] = "make20260101"
-
-os.environ["MINIO_ENDPOINT"] = "192.168.188.6:9002"
-os.environ["MINIO_ACCESS_KEY"] = "make"
-os.environ["MINIO_SECRET_KEY"] = "make20260101"
-
-os.environ["MILVUS_URI"] = "http://192.168.188.6:19530"
-os.environ["MILVUS_TOKEN"] = "make:make5211314"
-```
-
-**方式二：使用环境变量（生产环境推荐）**
 ```bash
-export RABBITMQ_HOST=localhost
-export RABBITMQ_PORT=5672
-export MINIO_ENDPOINT=localhost:9000
-export MILVUS_URI=http://localhost:19530
-export MILVUS_TOKEN=username:password
+# 开发环境
+uvicorn main:app --host 0.0.0.0 --port 8848 --reload
+
+# 生产环境示例
+uvicorn main:app --host 0.0.0.0 --port 8848 --workers 2
+
+# 直接运行 main.py
+python main.py
 ```
 
-### 模型配置
+应用启动时会连接 RabbitMQ，并启动 `rag.document.process.queue` 消费者；同时启动 Milvus 连接释放任务。RabbitMQ、MinIO 和 Milvus 不可用时，应用生命周期初始化可能失败。
 
-编辑 `model_config.json`（参考 `model_config.json.example`）：
+## 配置
+
+### 基础设施连接
+
+`mq/connection.py`、`minio_utils.py` 和 Milvus 初始化代码本身从以下环境变量读取连接信息：
+
+```bash
+RABBITMQ_HOST=<RabbitMQ 主机>
+RABBITMQ_PORT=<RabbitMQ 端口>
+RABBITMQ_USERNAME=<RabbitMQ 用户名>
+RABBITMQ_PASSWORD=<RabbitMQ 密码>
+```
+
+MinIO 使用：
+
+```bash
+MINIO_ENDPOINT=<MinIO 地址>
+MINIO_ACCESS_KEY=<MinIO 访问密钥>
+MINIO_SECRET_KEY=<MinIO 私密密钥>
+```
+
+`MILVUS_URI` 和 `MILVUS_TOKEN` 用于 Milvus 连接：
+
+```bash
+MILVUS_URI=<Milvus URI>
+MILVUS_TOKEN=<Milvus 令牌>
+```
+
+但是当前 `main.py` 在导入这些模块之前直接给上述变量赋值，会覆盖进程外传入的同名值。按现有代码部署时需要修改 `main.py` 中的连接值；若要由部署环境注入，则应先改造入口为仅在变量缺失时设置默认值。不要把真实密码、访问密钥或令牌写入 README、提交到 Git 或复制到日志中。
+
+### 模型配置文件
+
+聊天模型和 Rerank 配置从 `model_config.json` 读取。文件路径相对于进程工作目录，服务每次调用配置读取函数时都会从磁盘重新读取，不使用进程内缓存。请根据部署环境准备该文件；本 README 不提供密钥、内网地址或具体供应商凭据。
+
+聊天配置的顶层结构为 `chat`，按提供方组织；每个提供方包含 `settings` 默认候选和可选的模型名候选。候选可以是对象或列表，列表项默认启用，也可以使用 `enabled: false` 禁用。候选通常包含以下字段：
 
 ```json
 {
-  "models": {
-    "openai": {
-      "api_key": "sk-your-openai-api-key",
-      "base_url": "https://api.openai.com/v1",
-      "model": "gpt-5.2"
-    },
-    "deepseek": {
-      "api_key": "sk-your-deepseek-api-key",
-      "base_url": "https://api.deepseek.com",
-      "model": "deepseek-chat"
-    },
-    "qwen": {
-      "api_key": "sk-your-qwen-api-key",
-      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "model": "qwen3-max"
+  "chat": {
+    "<provider>": {
+      "settings": [
+        {
+          "api_key": "由部署环境提供",
+          "base_url": "由部署环境提供",
+          "model_provider": "可选",
+          "timeout": 60,
+          "max_retries": 1,
+          "enabled": true
+        }
+      ],
+      "<model-name>": [
+        {
+          "api_key": "由部署环境提供",
+          "base_url": "由部署环境提供",
+          "enabled": true
+        }
+      ]
     }
   },
-  "embedding": {
-    "provider": "qwen",
-    "model": "text-embedding-v4"
+  "rerank": {
+    "qwen": {
+      "settings": {
+        "api_key": "由部署环境提供"
+      },
+      "qwen3-rerank": {
+        "endpoint": "由部署环境提供"
+      }
+    }
   }
 }
 ```
 
-⚠️ 不要将 `model_config.json` 提交到 Git！
+实际使用的模型由请求中的 `model.name` 和 `model.provider` 选择。Agentic RAG 的检索决策控制器固定使用 `MiniMax-M3/minimax`；RAG Gateway 和会话标题生成固定使用 `glm-5.2/z-ai`，并关闭 thinking。官方聊天 LLM 的默认超时为 60 秒；候选自身配置的 `timeout` 可以覆盖该默认值。控制器使用 LangChain LLM，默认超时为 30 秒。
 
-### 运行服务
-```bash
-# 单进程（开发环境）
-uvicorn main:app --host 0.0.0.0 --port 8888 --reload
+当前 Embedding 入口 `get_embedding_instance()` 不读取远程 Embedding 配置，而是固定返回本地服务实例。Rerank 从 `model_config.json` 的 `rerank.qwen.qwen3-rerank` 读取 endpoint 和 API 密钥。
 
-# 多进程（生产环境）
-uvicorn main:app --host 0.0.0.0 --port 8888 --workers 2
+## 聊天 API
 
-# 直接运行
-python main.py
+### `POST /rag/chat/session/name`
+
+根据请求体中的 `content` 生成会话标题。标题模型固定为 `glm-5.2/z-ai`。请求示例：
+
+```json
+{
+  "content": "请查找知识库中的项目部署要求"
+}
 ```
 
-服务运行在 `http://localhost:8888`（注意：端口是 8888，不是 8000）
+响应结构：
 
-### 验证服务
-```bash
-curl http://localhost:8888/health
-curl http://localhost:8888/rag/
+```json
+{
+  "title": "项目部署要求"
+}
 ```
 
-## 核心功能说明
+### `POST /rag/chat/stream`
 
-### 1. Agentic RAG 工作流
+唯一的聊天入口，返回 `text/event-stream`。请求体由 `history`、`model` 和 `options` 组成：
 
-**Agentic RAG 检索工具**（`agentic_rag_toolkit.py`）
-1. **keyword_search** - 关键词精确匹配，可按 `documentId` 限定文档范围
-2. **read_file_chunks** - 按 `documentId` 和 chunk 索引读取连续片段
-3. **expand_context** - 按 `documentId` 扩展命中片段的前后上下文
-4. **semantic_search** - 多角度语义检索和 Rerank
-5. **find_files** - 按文件名模式发现文件并返回 `documentId`
-6. **stop_search** - 控制器判断无需继续检索时结束检索
-
-**状态机控制**（`agentic_rag_controller.py`）
-- RAG Gateway 需要检索时固定进入 Agentic RAG，不再维护传统一次检索 RAG
-- 默认最多 10 轮检索（`maxRounds=10`）
-- 文件定位统一使用 `documentId`；Milvus 检索结果仍保留 `fileName` 用于展示和来源归因
-- 关键词和语义检索可传递已命中的 chunk PK；连续读取和上下文扩展按文档与 chunk 范围读取
-- 支持动态工具选择、结果去重和最终引用构建
-
-### 2. 文档向量化流程
-
-1. **RabbitMQ 接收任务** - 监听 `rag.document.process.queue`
-2. **从 MinIO 下载文档** - 根据 documentId 下载文件
-3. **文档解析** - PyMuPDFLoader
-4. **文本分块** - RecursiveCharacterTextSplitter（chunk_size=800, overlap=100）
-5. **向量化** - 调用 Embedding API（Qwen text-embedding-v4）
-6. **存储 Milvus** - 向量 + 元数据（documentId, chunkIndex, fileName 等）
-7. **状态更新** - 通知 rag-server 处理完成
-
-### 3. Milvus 集合生命周期管理
-
-**MilvusClientManager** (`milvus_utils.py`)
-- 按知识库（kbId）创建独立集合
-- 30 分钟无访问自动释放连接
-- 异步锁防止并发冲突
-- 集合命名：`kb_{kbId}`
-
-**向量检索优化**
-- 自动分词（空格分隔）+ 关键词过滤
-- 支持 Rerank 重排序（可选）
-- TopK 限制（默认 10）
-
-### 4. 支持的 LLM 模型
-
-**model_config.json 配置**（16+ 模型）
-- OpenAI: gpt-5.2, gpt-5.2-codex
-- Anthropic: claude-4.5-sonnet, claude-4.5-opus
-- Qwen: qwen3-max, qwen3-vl-plus, text-embedding-v4
-- Gemini: gemini-3-flash-preview, gemini-3-pro-preview
-- DeepSeek: deepseek-chat, deepseek-reasoner
-- 其他: Moonshot, X-AI, Minimax, Xiaomi, ByteDance
-
-## 开发指南
-
-### 添加新的检索工具
-
-在 `agentic_rag_toolkit.py` 中扩展：
-
-```python
-# 1. 在 RetrievalDecision 枚举中添加工具
-class ToolEnum(str, Enum):
-    SEARCH_BY_GREP = "search_by_grep"
-    YOUR_NEW_TOOL = "your_new_tool"  # 新增
-
-# 2. 实现工具函数
-async def your_new_tool(param1: str, param2: int) -> List[Dict]:
-    # 实现检索逻辑
-    return results
-
-# 3. 在 execute_tool 中注册
-async def execute_tool(decision: RetrievalDecision):
-    if decision.tool == ToolEnum.YOUR_NEW_TOOL:
-        return await your_new_tool(**decision.parameters)
-
-# 4. 更新 TOOL_DEFINE_PROMPT 和 TOOL_SELECT_PROMPT
+```json
+{
+  "history": [
+    {"role": "user", "content": "项目的部署要求是什么？"}
+  ],
+  "model": {
+    "name": "<已配置的模型名>",
+    "provider": "<已配置的提供方>"
+  },
+  "options": {
+    "kbId": 123,
+    "userId": 456,
+    "maxRounds": 10,
+    "systemPrompt": "可选的系统提示词",
+    "thinking": false,
+    "webSearch": false
+  }
+}
 ```
 
-### 调试技巧
+`history` 的最后一项必须是当前用户问题。`options.kbId` 和 `options.userId` 同时存在时，服务先调用 RAG Gateway 判断是否需要检索；判断结果为 `use_rag` 时进入 Agentic RAG，检索轮次默认取 `maxRounds=10`。RAG Gateway 调用失败时默认进入 Agentic RAG。判断为 `direct_answer` 时才使用纯 LLM 模式。
 
-**启用详细日志**
-```python
-# main.py
-logging.basicConfig(level=logging.DEBUG)
+SSE 事件使用 JSON 数据行：
+
+```text
+data: {"type":"process","payload":"..."}
+
+data: {"type":"thinking","payload":"..."}
+
+data: {"type":"content","payload":"..."}
+
+data: {"type":"error","payload":"..."}
+
+data: {"type":"rag_summary","payload":"..."}
+
+data: {"type":"usage","payload":{...}}
 ```
 
-**测试单个模块**
-```bash
-# 测试 Milvus 连接
-python -c "from milvus_utils import MilvusClientManager; print('OK')"
+`payload` 在聊天流中通常是 JSON 编码后的字符串；`usage` 包含 `prompt_tokens`、`completion_tokens`、`total_tokens`、`latency_ms`、`first_token_latency_ms` 和 `is_success`。服务不提供 README 中曾列出的独立 `/chat/agentic` 或 `/chat/agentic/stream` 路由。
 
-# 测试 MinIO 连接
-python -c "from minio_utils import test_connection; test_connection()"
+## Agentic RAG
+
+### 六个工具
+
+`agentic_rag_toolkit.py` 注册以下六个工具：
+
+1. `keyword_search`：按具体关键词检索正文，可用 `document_ids` 限定文档。
+2. `read_file_chunks`：按 `document_id` 和起止 chunk 索引读取连续正文，单次最多 20 个 chunk。
+3. `expand_context`：围绕已命中的 `document_id` 和 `chunk_index` 扩展前后上下文。
+4. `semantic_search`：多个 query 并行召回，使用 Rerank 和相关性阈值筛选。
+5. `find_files`：按文件名模式查找文件，只返回文件元信息，不返回正文。
+6. `stop_search`：控制器判断信息足够、无法构造有效新查询或达到轮次上限时停止检索。
+
+### 检索流程和约束
+
+- RAG Gateway 的 `use_rag` 决策只进入 Agentic RAG，不恢复传统一次性 RAG 分支。
+- 聊天入口默认最大检索轮次为 10，可通过 `options.maxRounds` 传入其他值。
+- 检索控制器固定为 `MiniMax-M3/minimax`。
+- 轮次结束条件包括：调用 `stop_search`、控制器没有工具调用、达到最大轮次、控制器调用失败，或控制器消息累计超过 256000 个 token。
+- 控制器 token 使用 `o200k_base` 编码计算。
+- `reference_docs` 以数值 chunk PK 去重；`all_docs` 以 `documentId` 聚合文件信息。
+- 文档定位统一使用 `documentId`。关键词检索使用 `document_ids`；连续读取和上下文扩展使用 `document_id`，不使用文件名定位。
+- 只有关键词检索和语义检索传递已命中的 chunk PK 以尽量避免重复；连续读取和上下文扩展不做排除过滤。
+- Milvus 结果保留 `fileName`，用于展示和来源归因。
+- Agentic RAG 使用 `text-embedding-v4/qwen` 作为配置标识，但当前 Embedding 实例实际固定连接本地 `8890` 服务。
+
+最终回答阶段使用主聊天请求中的模型生成流式答案，并把检索过程、引用文档和使用统计转换为聊天 SSE 事件。
+
+## 内部检索 API
+
+以下五个接口挂载在 `/rag/retrieval` 下，供受信任的 `rag-mcp` 内部调用。它们没有公共认证层，调用前的 Java 授权和请求参数由上游负责；必须保持在受保护的内部网络中，不得直接暴露到公网。
+
+五个接口都要求 `ownerUserId` 和 `knowledgeBaseId`。chunk 结果包含 `chunkId`、`documentId`、`fileName`、`chunkIndex`、`totalChunks`、`content`、`score` 和 `scoreType` 等字段。
+
+| 方法 | 路径 | 主要请求字段 | 用途 |
+|---|---|---|---|
+| POST | `/rag/retrieval/keywords` | `keywords`、`matchMode`、`topK`、可选 `documentIds` | 关键词检索 |
+| POST | `/rag/retrieval/semantic` | `queries`、`relevanceQuery`、`topK`、`relevanceThreshold` | 语义检索和 Rerank |
+| POST | `/rag/retrieval/files` | `namePattern`、`offset`、`limit` | 文件元信息发现 |
+| POST | `/rag/retrieval/chunks` | `documentId`、`startChunkIndex`、`endChunkIndex` | 读取连续 chunk |
+| POST | `/rag/retrieval/context` | `documentId`、`chunkIndex`、`windowSize` | 扩展上下文 |
+
+关键词请求示例：
+
+```json
+{
+  "ownerUserId": 456,
+  "knowledgeBaseId": 123,
+  "keywords": ["部署", "配置"],
+  "matchMode": "OR",
+  "topK": 15,
+  "documentIds": [789]
+}
 ```
 
-**查看 RabbitMQ 队列状态**
-```bash
-# 登录 RabbitMQ 管理界面
-http://localhost:15672
+语义请求示例：
+
+```json
+{
+  "ownerUserId": 456,
+  "knowledgeBaseId": 123,
+  "queries": ["应用部署配置", "服务启动要求"],
+  "relevanceQuery": "部署方式、启动参数和运行环境要求",
+  "topK": 10,
+  "relevanceThreshold": 0.3
+}
 ```
 
-### 性能优化建议
+接口默认值和限制以 `services/retrieval.py` 的 Pydantic 请求模型为准：关键词 `topK` 默认 15、语义 `topK` 默认 10，二者最大均为 50；文件列表 `limit` 默认 30、最大 100；上下文 `windowSize` 默认 2、最大 9。
 
-1. **批量向量化** - 使用批处理减少 API 调用（batch_size=32）
-2. **异步处理** - 充分利用 asyncio 和 aiohttp
-3. **连接复用** - Milvus 客户端池化（MilvusClientManager）
-4. **缓存策略** - 常见查询结果缓存（Redis）
-5. **模型选择** - 根据场景选择合适的模型（速度 vs 质量）
+## 文档向量化
 
-## 注意事项
+应用启动后消费 RabbitMQ 队列 `rag.document.process.queue`。任务包含文档、知识库、用户、MinIO 对象等信息，处理过程为：
 
-⚠️ **关键约束**
+1. 从 MinIO 读取文件。
+2. 按扩展名解析 PDF、TXT、Markdown、JSON、代码、标记文本或图片。
+3. 为每个 chunk 写入 `documentId`、`chunkIndex`、`maxChunkIndex` 和 `fileName` 元数据。
+4. 使用当前本地 Embedding 服务生成向量，并按最多 32 条一批写入 Milvus。
+5. 通过 RabbitMQ 发布处理成功或失败消息。
 
-1. **端口配置**：默认端口 8888（不是 8000），root_path="/rag"
-2. **硬编码配置**：`main.py` 中硬编码了 RabbitMQ、MinIO、Milvus 连接信息
-3. **模型配置**：`model_config.json` 需手动创建（已在 .gitignore）
-4. **Milvus 集合**：按 kbId 创建独立集合，30 分钟无访问自动释放
-5. **文档分块**：chunk_size=800, overlap=100（RecursiveCharacterTextSplitter）
-6. **异步任务**：RabbitMQ 消费者随应用启动，需确保队列已创建
-7. **向量维度**：默认 1024 维（Qwen text-embedding-v4），需与 Milvus 集合一致
+Milvus 客户端按用户和知识库获取，服务维护集合生命周期，并运行后台释放任务。检索和向量化都依赖 `MILVUS_URI`、`MILVUS_TOKEN` 以及相应知识库集合。
 
-## 常见问题
+## 关键约束
 
-**Q: RabbitMQ 连接失败？**  
-A: 检查 RabbitMQ 是否启动，用户名密码是否正确，队列是否已创建
+- 端口必须以当前入口为准：`8848`；FastAPI `root_path` 为 `/rag`。
+- 当前聊天 API 只有 `/chat/session/name` 和 `/chat/stream`；Agentic RAG 是聊天流内部模式，不是单独公开路由。
+- Agentic RAG 固定使用六工具；`stop_search` 由编排层处理，不作为普通检索结果工具执行。
+- 文件定位使用数值 `documentId`；不能用 `fileName` 替代文档定位。
+- 五个 `/rag/retrieval/*` 接口没有公共认证，必须只允许受信任内部调用。
+- `model_config.json` 每次访问都从磁盘读取；修改配置后无需依赖进程内缓存刷新。
+- 官方 LLM 默认超时为 60 秒。候选已显式配置 `timeout` 时，以候选值为准。
+- LLM fallback 只允许发生在流开始之前；已经输出有效流内容后，不能切换到下一个候选。`ainvoke` 失败时仍可按候选顺序 fallback。
+- 当提供方为 `other` 且模型名以 `gemini` 开头时，流式入口改用 `ainvoke`，以兼容该类 OpenAI 兼容 Gemini 中继返回空流内容的情况。
+- 不要把任何真实 API 密钥、RabbitMQ 密码、MinIO 密钥或 Milvus 令牌写入文档、示例、提交记录或日志。
 
-**Q: Milvus 插入向量失败？**  
-A: 确认集合是否已创建，向量维度是否匹配（1024），是否有足够权限
+## 常用文件
 
-**Q: 文档解析乱码？**  
-A: 检查文档编码、字体和源文件质量；图片型 PDF 如需识别请在上游先做 OCR 再导入
-
-**Q: 流式响应中断？**  
-A: 检查网络稳定性，增加超时时间，确保前端正确处理 SSE 连接
-
-**Q: 为什么端口是 8888？**  
-A: `main.py` 中明确配置为 8888，与 rag-server 的 LLM 服务地址配置一致
-
-**Q: 如何切换 Embedding 模型？**  
-A: 修改 `model_config.json` 中的 `embedding.provider` 和 `embedding.model`
-
----
-
-**返回主文档**：[../README.md](../README.md)
+- `main.py`：服务端口、`root_path`、路由挂载和进程入口。
+- `services/chat.py`：聊天请求、RAG Gateway 分流、Agentic RAG 默认轮次和 SSE 事件。
+- `services/retrieval.py`：五个受信任内部检索接口及请求模型。
+- `agentic_rag_controller.py`：`MiniMax-M3/minimax` 检索控制器和工具选择提示词。
+- `agentic_rag_toolkit.py`：六工具定义及底层 Milvus 检索。
+- `agentic_rag_utils.py`：Agentic RAG 多轮编排、token 限制、去重和引用。
+- `utils.py`：模型配置读取、官方 LLM fallback、Embedding 入口和统一流式处理。

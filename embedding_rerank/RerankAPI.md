@@ -1,14 +1,12 @@
-# Rerank Service API 文档
+# Rerank API 契约
 
-## 基本信息
+Rerank 服务默认地址为 `http://localhost:8891`，默认模型为 `Qwen/Qwen3-Reranker-0.6B`。请求和响应使用 JSON；接口当前不要求认证。
 
-- **Base URL**: `http://localhost:8891`
-- **协议**: HTTP/HTTPS
-- **内容类型**: `application/json`
+接口返回查询与文档对的相关性分数，但不会按分数重新排列结果。调用方需要使用 `relevance_score` 自行排序。
 
 ## API端点
 
-### 1. 根路径
+### `GET /`：服务信息
 
 获取服务基本信息。
 
@@ -26,7 +24,7 @@
 
 ---
 
-### 2. 健康检查
+### `GET /health`：健康检查
 
 检查服务健康状态和配置信息。
 
@@ -37,8 +35,8 @@
 {
   "status": "healthy",
   "model": "Qwen/Qwen3-Reranker-0.6B",
-  "gpu_memory_utilization": 0.4,
-  "max_model_len": 10000,
+  "gpu_memory_utilization": 0.25,
+  "max_model_len": 8192,
   "device": "cuda"
 }
 ```
@@ -49,7 +47,7 @@
 
 ---
 
-### 3. 重排序 (标准端点)
+### `POST /v1/rerank`：计算相关性分数
 
 对查询-文档对进行重排序，返回相关性分数。
 
@@ -59,9 +57,9 @@
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| pairs | Array[QueryDocPair] | ✓ | 查询-文档对列表 |
-| instruction | String | ✗ | 任务指令，默认为检索任务 |
-| model | String | ✗ | 模型名称（当前忽略） |
+| `pairs` | `QueryDocPair[]` | 是 | 查询与文档对列表；不可为空 |
+| `instruction` | `string \| null` | 否 | 任务指令；缺省、`null` 或空字符串时使用默认检索指令 |
+| `model` | `string \| null` | 否 | 当前实现忽略该字段，实际模型由服务配置决定 |
 
 **QueryDocPair 结构**:
 ```json
@@ -98,19 +96,19 @@
   "results": [
     {
       "index": 0,
-      "score": 0.9876,
+      "relevance_score": 0.9876,
       "query": "What is the capital of China?",
       "document": "The capital of China is Beijing."
     },
     {
       "index": 1,
-      "score": 0.4321,
+      "relevance_score": 0.4321,
       "query": "What is the capital of China?",
       "document": "Shanghai is the largest city in China."
     },
     {
       "index": 2,
-      "score": 0.1234,
+      "relevance_score": 0.1234,
       "query": "What is the capital of China?",
       "document": "China has a long history."
     }
@@ -124,19 +122,20 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| results | Array | 重排序结果列表 |
-| results[].index | Integer | 原始输入中的索引位置 |
-| results[].score | Float | 相关性分数 (0-1) |
-| results[].query | String | 查询文本 |
-| results[].document | String | 文档文本 |
-| model | String | 使用的模型名称 |
-| processing_time | Float | 处理时间（秒） |
+| `results` | `array` | 与输入顺序一致的结果列表 |
+| `results[].index` | `integer` | 原始输入中的索引位置 |
+| `results[].relevance_score` | `float` | `yes` 与 `no` 概率归一化后的相关性分数 |
+| `results[].query` | `string` | 原始查询文本 |
+| `results[].document` | `string` | 原始文档文本 |
+| `model` | `string` | 服务配置中的 `model_name` |
+| `processing_time` | `float` | 从输入处理到完成打分的耗时，单位为秒 |
 
 **状态码**:
-- `200`: 成功
-- `400`: 请求参数错误
-- `500`: 服务器内部错误
-- `503`: 模型未加载
+- `200`：成功
+- `400`：`pairs` 是空列表，或任一 `query`、`document` 是空白文本
+- `422`：缺少 `pairs`、字段类型不符合请求模型，或 JSON 无法校验
+- `500`：输入处理或模型打分过程中出现未处理异常
+- `503`：模型尚未加载
 
 **错误响应示例**:
 ```json
@@ -147,9 +146,9 @@
 
 ---
 
-### 4. 重排序 (简化端点)
+### `POST /rerank`：相关性打分别名
 
-功能与 `/v1/rerank` 完全相同，提供更简洁的路径。
+请求模型、处理逻辑、响应和错误与 `/v1/rerank` 相同。
 
 **端点**: `POST /rerank`
 
@@ -192,182 +191,41 @@ curl -X POST http://localhost:8891/v1/rerank \
 ```python
 import requests
 
-# 基础用法
-def rerank_documents(query, documents):
-    pairs = [{"query": query, "document": doc} for doc in documents]
-    response = requests.post(
-        "http://localhost:8891/v1/rerank",
-        json={"pairs": pairs}
-    )
-    return response.json()
+query = "Python 编程语言"
+documents = ["Python 是一种编程语言", "今天有雨"]
+pairs = [{"query": query, "document": document} for document in documents]
 
-# 使用示例
-query = "Python编程语言"
-documents = [
-    "Python是一种高级编程语言，广泛用于数据科学",
-    "Java是另一种流行的编程语言",
-    "机器学习是人工智能的一个分支"
-]
-
-results = rerank_documents(query, documents)
-
-# 按分数排序
-sorted_results = sorted(
-    results["results"],
-    key=lambda x: x["score"],
-    reverse=True
+response = requests.post(
+    "http://localhost:8891/v1/rerank",
+    json={"pairs": pairs},
 )
-
-for i, result in enumerate(sorted_results, 1):
-    print(f"{i}. Score: {result['score']:.4f}")
-    print(f"   Document: {result['document']}")
+response.raise_for_status()
+results = sorted(
+    response.json()["results"],
+    key=lambda item: item["relevance_score"],
+    reverse=True,
+)
 ```
 
-### JavaScript/Node.js
+## 错误与处理约束
 
-```javascript
-const axios = require('axios');
+业务错误响应使用 `{"detail": "错误信息"}`。FastAPI 请求模型校验失败时返回 422，`detail` 为校验错误数组。
 
-async function rerankDocuments(query, documents) {
-  const pairs = documents.map(doc => ({
-    query: query,
-    document: doc
-  }));
-  
-  const response = await axios.post('http://localhost:8891/v1/rerank', {
-    pairs: pairs
-  });
-  
-  return response.data;
-}
+- 空 `pairs` 返回 `{"detail": "Pairs cannot be empty"}`。
+- 空白查询返回 `{"detail": "Query at index {i} is empty"}`。
+- 空白文档返回 `{"detail": "Document at index {i} is empty"}`。
+- 模型未加载返回 `{"detail": "Model not loaded"}`。
+- 打分异常返回 500，`detail` 以 `Internal error:` 开头。
 
-// 使用示例
-const query = "Python编程语言";
-const documents = [
-  "Python是一种高级编程语言",
-  "Java是另一种流行的编程语言",
-  "机器学习是人工智能的一个分支"
-];
+## 实现注意事项
 
-rerankDocuments(query, documents)
-  .then(results => {
-    // 按分数排序
-    const sorted = results.results.sort((a, b) => b.score - a.score);
-    sorted.forEach((result, i) => {
-      console.log(`${i+1}. Score: ${result.score.toFixed(4)}`);
-      console.log(`   Document: ${result.document}`);
-    });
-  })
-  .catch(error => console.error('Error:', error));
-```
+- 默认 instruction 为 `Given a web search query, retrieve relevant passages that answer the query`。
+- `instruction` 传入 `null` 或空字符串时也会使用默认值。
+- 输入 token 序列按配置的 `max_length` 截断，并为固定 suffix 保留空间。
+- 服务没有请求级模型切换能力，也没有在 API 层声明最大批量大小。
 
----
+## 相关文档
 
-## 性能指标
-
-### 延迟
-
-| 批量大小 | 平均延迟 | 说明 |
-|---------|---------|------|
-| 1 | 100-200ms | 单次推理 |
-| 10 | 300-500ms | 小批量 |
-| 32 | 800-1200ms | 大批量 |
-
-### 吞吐量
-
-- **单GPU (A100)**: ~500-1000 pairs/s
-- **单GPU (V100)**: ~300-600 pairs/s
-- **CPU**: ~10-20 pairs/s
-
-*实际性能取决于硬件配置和输入长度*
-
----
-
-## 最佳实践
-
-### 1. 批量处理
-
-将多个查询-文档对打包成一个请求以提高吞吐量：
-
-```python
-# ✓ 推荐：批量请求
-pairs = [{"query": q, "document": d} for q, d in zip(queries, documents)]
-response = requests.post(url, json={"pairs": pairs})
-
-# ✗ 不推荐：多次单独请求
-for q, d in zip(queries, documents):
-    response = requests.post(url, json={"pairs": [{"query": q, "document": d}]})
-```
-
-### 2. 相关性分数解释
-
-- **0.8 - 1.0**: 高度相关
-- **0.5 - 0.8**: 中度相关
-- **0.0 - 0.5**: 低度相关
-
-### 3. 输入长度限制
-
-- 最大输入长度: 8192 tokens (可通过配置调整)
-- 过长的输入会被截断
-- 建议预处理文本保持合理长度
-
-### 4. 错误处理
-
-```python
-try:
-    response = requests.post(url, json=payload, timeout=30)
-    response.raise_for_status()
-    results = response.json()
-except requests.exceptions.Timeout:
-    print("请求超时")
-except requests.exceptions.HTTPError as e:
-    print(f"HTTP错误: {e.response.status_code}")
-    print(f"错误详情: {e.response.json()}")
-except Exception as e:
-    print(f"未知错误: {e}")
-```
-
----
-
-## 常见问题
-
-### Q: 分数的含义是什么？
-
-分数表示文档与查询的相关性概率，范围0-1。分数越高表示越相关。
-
-### Q: 如何处理空查询或文档？
-
-API会返回400错误。请确保所有查询和文档都非空。
-
-### Q: 是否支持中文？
-
-是的，模型支持多语言，包括中文。
-
-### Q: 批量大小有限制吗？
-
-建议批量大小不超过32，过大的批量可能导致内存问题。
-
-### Q: 如何提高性能？
-
-1. 使用批量请求
-2. 启用GPU
-3. 增加GPU内存利用率
-4. 使用多GPU（设置tensor_parallel_size）
-
----
-
-## 更新日志
-
-### v1.0.0 (2026-02-03)
-- 初始版本发布
-- 支持基本的重排序功能
-- 支持批量处理
-- 兼容OpenAI风格的API
-
----
-
-## 技术支持
-
-如有问题或建议，请参考：
-- [README文档](RerankREADME.md)
-- [快速启动指南](RerankQUICKSTART.md)
+- [模块总览](README.md)
+- [Rerank 实现与配置](RerankREADME.md)
+- [Rerank 快速开始](RerankQUICKSTART.md)

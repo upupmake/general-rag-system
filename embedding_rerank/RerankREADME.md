@@ -1,743 +1,99 @@
-# Rerank Service - 完整文档
+# Rerank 实现与配置
 
-基于vLLM和Qwen3-Reranker-0.6B的高性能重排序服务
+Rerank 服务位于 `service/rerank_service.py`，使用 vLLM 加载 `Qwen/Qwen3-Reranker-0.6B`，默认监听 `8891` 端口。服务接收查询与文档对，返回字段名为 `relevance_score` 的相关性分数。
 
-## 目录
+本文说明服务实现、配置和运行约束。请求响应契约见 [RerankAPI.md](RerankAPI.md)，最短启动步骤见 [RerankQUICKSTART.md](RerankQUICKSTART.md)。
 
-- [概述](#概述)
-- [系统要求](#系统要求)
-- [快速开始](#快速开始)
-- [配置说明](#配置说明)
-- [API接口](#api接口)
-- [性能优化](#性能优化)
-- [故障排除](#故障排除)
-- [最佳实践](#最佳实践)
-- [更新日志](#更新日志)
+## 组件关系
 
-## 概述
+- `config/rerank_config.py`：定义 `RerankConfig`，并创建全局 `config` 实例。
+- `service/rerank_service.py`：定义 tokenizer、模型、打分流程和 FastAPI 端点。
+- `rerank_start.py`：读取 `config`，通过 Uvicorn 启动 `service.rerank_service:app`。
 
-Rerank Service是一个生产级的文档重排序服务，提供：
+服务启动时先加载 tokenizer，再加载模型并创建采样参数。任一步骤失败都会抛出异常，服务不会进入可用状态。
 
-### 核心特性
 
-- 🚀 **高性能推理**: 基于vLLM引擎，支持GPU加速
-- 📊 **精准排序**: 基于Qwen3-Reranker-0.6B模型
-- 📦 **批量处理**: 高效的批量重排序
-- 🔧 **灵活配置**: 支持环境变量和配置文件
-- 🌐 **标准API**: RESTful API设计
-- 📈 **完整监控**: 详细的日志和性能指标
-- 🔄 **生产就绪**: 健康检查、优雅关闭等
+## 实现流程
 
-### 技术栈
+`POST /v1/rerank` 和 `POST /rerank` 都调用同一个处理函数：
 
-- **推理引擎**: vLLM 0.8.5+
-- **模型**: Qwen3-Reranker-0.6B
-- **框架**: FastAPI + Uvicorn
-- **配置**: Pydantic
-- **语言**: Python 3.8+
+1. 拒绝空 `pairs`，以及 `query` 或 `document` 为空白的条目。
+2. 使用请求中的 `instruction`；未提供或传入 `null`、空字符串时使用默认检索指令。
+3. 把每个查询与文档对格式化为 system/user 消息，并应用 tokenizer 的 chat template，且关闭 thinking。
+4. 将 token 序列截取到 `max_length - len(suffix_tokens)`，再追加固定 suffix。
+5. 调用 vLLM 生成，并只允许 `yes`、`no` 两个 token。
+6. 对 `yes` 和 `no` 的概率归一化，得到 `relevance_score`。
 
-### 应用场景
+请求中的 `model` 字段会被接收但不会参与模型选择，实际模型由配置中的 `model_name` 决定。结果保持请求顺序，服务不按分数自动排序。
 
-1. **搜索引擎**: 对初排结果进行精排序
-2. **推荐系统**: 提高推荐质量
-3. **问答系统**: 找到最相关的答案
-4. **文档检索**: 精确匹配文档相关性
+## 运行依赖
 
-## 系统要求
+代码直接导入 `torch`、`fastapi`、`pydantic`、`transformers` 和 `vllm`，因此运行环境需要提供这些依赖及其兼容版本。具体版本不在当前模块代码中声明。
 
-### 硬件要求
+## 运行方式
 
-| 组件 | 最低配置 | 推荐配置 |
-|------|---------|---------|
-| CPU | 4核 | 8核+ |
-| 内存 | 8GB | 16GB+ |
-| GPU | - | NVIDIA GPU (4GB+ 显存) |
-| 磁盘 | 10GB | 20GB+ SSD |
-
-### 软件要求
-
-- **操作系统**: Linux (推荐), macOS, Windows
-- **Python**: 3.8, 3.9, 3.10, 3.11
-- **CUDA**: 11.8+ (使用GPU时)
-- **驱动**: NVIDIA Driver 450.80.02+
-
-### 依赖包
-
-```txt
-vllm>=0.8.5
-fastapi>=0.100.0
-uvicorn>=0.23.0
-transformers>=4.30.0
-torch>=2.0.0
-pydantic>=2.0.0
-```
-
-## 快速开始
-
-### 1. 安装
-
-```bash
-# 安装依赖
-pip install vllm>=0.8.5 fastapi uvicorn transformers torch pydantic
-
-# 克隆代码（如果需要）
-git clone <repository-url>
-cd embedding_rerank
-```
-
-### 2. 配置
-
-直接编辑配置文件 `config/rerank_config.py` 进行配置：
-
-```bash
-nano config/rerank_config.py
-```
-
-### 3. 启动
+在 `embedding_rerank` 目录执行：
 
 ```bash
 python rerank_start.py
 ```
 
-启动成功后，服务将在 `http://0.0.0.0:8891` 运行。
+启动脚本默认传入 `host=0.0.0.0`、`port=8891`、`workers=1`、`reload=False`。服务加载完成后，通过 `GET /health` 检查模型是否可用。
 
-### 4. 验证
-
-```bash
-# 健康检查
-curl http://localhost:8891/health
-
-# 重排序测试
-curl -X POST http://localhost:8891/v1/rerank \
-  -H "Content-Type: application/json" \
-  -d '{
-    "pairs": [
-      {
-        "query": "What is Python?",
-        "document": "Python is a programming language."
-      }
-    ]
-  }'
-```
+当前实现会检查 `torch.cuda.is_available()` 并把设备信息写入日志和健康响应；代码没有独立的 CPU 降级流程说明，实际模型能否在当前设备运行取决于 vLLM 和运行环境。
 
 ## 配置说明
 
-### 配置方式
-
-请直接修改 `config/rerank_config.py` 文件中的 `RerankConfig` 类属性。
-
-### 完整配置选项
-
-#### 模型配置
-
-```python
-# 模型名称（HuggingFace模型ID）
-model_name: str = "Qwen/Qwen3-Reranker-0.6B"
-
-# 本地模型路径（可选，优先于model）
-model_path: Optional[str] = None
-```
-
-#### GPU配置
-
-```python
-# GPU内存使用率 (0.0-1.0)
-gpu_memory_utilization: float = 0.4
-
-# 最大模型长度（tokens）
-max_model_len: int = 10000
-
-# 张量并行大小（GPU数量）
-tensor_parallel_size: int = 1
-
-# 数据类型
-dtype: str = "float16"  # 可选: float16, bfloat16, float32
-
-# 启用前缀缓存
-enable_prefix_caching: bool = True
-```
-
-#### Rerank特定配置
-
-```python
-# 最大输入长度（tokens）
-max_length: int = 8192
-
-# 采样温度
-temperature: float = 0.0
-
-# 最大生成token数
-max_tokens: int = 1
-
-# Logprobs数量
-logprobs: int = 20
-```
-
-#### 服务配置
-
-```python
-# 监听地址
-host: str = "0.0.0.0"
-
-# 服务端口
-port: int = 8891
-
-# 工作进程数（推荐设为1）
-workers: int = 1
-```
-
-#### 批处理配置
-
-```python
-# 批处理超时（毫秒）
-batch_timeout_ms: int = 10
-```
-
-#### 日志配置
-
-```python
-# 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
-log_level: str = "INFO"
-```
-
-### 配置示例
-
-**生产环境**
-修改 `config/rerank_config.py`:
-```python
-gpu_memory_utilization: float = 0.8
-max_model_len: int = 10000
-tensor_parallel_size: int = 1
-enable_prefix_caching: bool = True
-log_level: str = "WARNING"
-```
-
-**开发环境**
-修改 `config/rerank_config.py`:
-```python
-gpu_memory_utilization: float = 0.3
-max_model_len: int = 8000
-port: int = 8891
-log_level: str = "DEBUG"
-```
-
-**多GPU环境**
-修改 `config/rerank_config.py`:
-```python
-tensor_parallel_size: int = 4
-gpu_memory_utilization: float = 0.9
-max_model_len: int = 10000
-```
-
-## API接口
-
-### 端点列表
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/` | GET | 服务信息 |
-| `/health` | GET | 健康检查 |
-| `/v1/rerank` | POST | 重排序（标准） |
-| `/rerank` | POST | 重排序（简化） |
-
-### 详细说明
-
-#### 1. GET `/health`
-
-健康检查端点
-
-**响应示例**
-```json
-{
-  "status": "healthy",
-  "model": "Qwen/Qwen3-Reranker-0.6B",
-  "gpu_memory_utilization": 0.4,
-  "max_model_len": 10000,
-  "device": "cuda"
-}
-```
-
-#### 2. POST `/v1/rerank`
-
-对查询-文档对进行重排序
-
-**请求参数**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| pairs | array | ✓ | 查询-文档对列表 |
-| instruction | string | ✗ | 任务指令 |
-| model | string | ✗ | 模型名称（忽略） |
-
-**QueryDocPair结构**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| query | string | ✓ | 查询文本 |
-| document | string | ✓ | 文档文本 |
-
-**请求示例**
-
-基础用法：
-```json
-{
-  "pairs": [
-    {
-      "query": "What is Python?",
-      "document": "Python is a programming language."
-    },
-    {
-      "query": "What is Python?",
-      "document": "Java is also a programming language."
-    }
-  ]
-}
-```
-
-带指令：
-```json
-{
-  "pairs": [
-    {
-      "query": "机器学习",
-      "document": "机器学习是人工智能的分支"
-    }
-  ],
-  "instruction": "找出最相关的技术文档"
-}
-```
-
-**响应格式**
-
-```json
-{
-  "results": [
-    {
-      "index": 0,
-      "score": 0.9876,
-      "query": "What is Python?",
-      "document": "Python is a programming language."
-    },
-    {
-      "index": 1,
-      "score": 0.4321,
-      "query": "What is Python?",
-      "document": "Java is also a programming language."
-    }
-  ],
-  "model": "Qwen/Qwen3-Reranker-0.6B",
-  "processing_time": 0.125
-}
-```
-
-**响应字段说明**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| results | array | 重排序结果列表 |
-| results[].index | integer | 原始索引位置 |
-| results[].score | float | 相关性分数(0-1) |
-| results[].query | string | 查询文本 |
-| results[].document | string | 文档文本 |
-| model | string | 模型名称 |
-| processing_time | float | 处理时间（秒） |
-
-**分数解释**
-
-- **0.8 - 1.0**: 高度相关，强烈推荐
-- **0.5 - 0.8**: 中度相关，可能相关
-- **0.0 - 0.5**: 低度相关，不太相关
-
-**状态码**
-
-- `200`: 成功
-- `400`: 请求参数错误
-- `500`: 服务器内部错误
-- `503`: 模型未加载
-
-### 使用示例
-
-#### Python
-
-```python
-import requests
-
-# 基础用法
-query = "Python编程"
-documents = [
-    "Python是一种编程语言",
-    "Java是一种编程语言",
-    "机器学习很流行"
-]
-
-pairs = [{"query": query, "document": doc} for doc in documents]
-response = requests.post(
-    "http://localhost:8891/v1/rerank",
-    json={"pairs": pairs}
-)
-
-# 获取并排序结果
-results = sorted(
-    response.json()["results"],
-    key=lambda x: x["score"],
-    reverse=True
-)
-
-for i, r in enumerate(results, 1):
-    print(f"{i}. Score: {r['score']:.4f} - {r['document']}")
-
-# 带自定义指令
-response = requests.post(
-    "http://localhost:8891/v1/rerank",
-    json={
-        "pairs": pairs,
-        "instruction": "检索与编程相关的文档"
-    }
-)
-
-# 错误处理
-try:
-    response = requests.post(url, json=payload, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-except requests.exceptions.Timeout:
-    print("请求超时")
-except requests.exceptions.HTTPError as e:
-    print(f"HTTP错误: {e.response.status_code}")
-except Exception as e:
-    print(f"错误: {e}")
-```
-
-#### JavaScript/Node.js
-
-```javascript
-const axios = require('axios');
-
-// 重排序函数
-async function rerankDocuments(query, documents) {
-  const pairs = documents.map(doc => ({
-    query: query,
-    document: doc
-  }));
-  
-  const response = await axios.post('http://localhost:8891/v1/rerank', {
-    pairs: pairs
-  });
-  
-  // 按分数排序
-  return response.data.results.sort((a, b) => b.score - a.score);
-}
-
-// 使用示例
-const query = "Python编程";
-const documents = [
-  "Python是一种编程语言",
-  "Java是一种编程语言",
-  "机器学习很流行"
-];
-
-rerankDocuments(query, documents)
-  .then(results => {
-    results.forEach((r, i) => {
-      console.log(`${i+1}. Score: ${r.score.toFixed(4)} - ${r.document}`);
-    });
-  })
-  .catch(error => console.error('Error:', error));
-```
-
-#### cURL
-
-```bash
-# 单个查询-文档对
-curl -X POST http://localhost:8891/v1/rerank \
-  -H "Content-Type: application/json" \
-  -d '{
-    "pairs": [
-      {
-        "query": "Python",
-        "document": "Python is a programming language"
-      }
-    ]
-  }'
-
-# 批量重排序
-curl -X POST http://localhost:8891/v1/rerank \
-  -H "Content-Type: application/json" \
-  -d '{
-    "pairs": [
-      {"query": "Python", "document": "Python是编程语言"},
-      {"query": "Python", "document": "Java是编程语言"},
-      {"query": "Python", "document": "机器学习很流行"}
-    ],
-    "instruction": "检索与Python相关的文档"
-  }'
-```
-
-## 性能优化
-
-### 性能指标
-
-| 场景 | 批量大小 | 延迟 | 吞吐量 |
-|------|---------|------|--------|
-| 单对 | 1 | 100-200ms | 5-10 pairs/s |
-| 小批量 | 10 | 400-600ms | 15-25 pairs/s |
-| 大批量 | 32 | 1000-1500ms | 20-30 pairs/s |
-
-*基于NVIDIA A100 GPU测试*
-
-### 优化策略
-
-#### 1. 批量处理
-
-❌ **不推荐**
-```python
-for query, doc in pairs:
-    response = requests.post(url, json={
-        "pairs": [{"query": query, "document": doc}]
-    })
-```
-
-✅ **推荐**
-```python
-pairs_list = [{"query": q, "document": d} for q, d in pairs]
-response = requests.post(url, json={"pairs": pairs_list})
-```
-
-批量处理可以显著提高吞吐量。
-
-#### 2. 启用前缀缓存
-
-```python
-# config/rerank_config.py
-enable_prefix_caching: bool = True
-```
-
-前缀缓存可以减少重复计算，提高性能。
-
-#### 3. GPU配置优化
-
-修改 `config/rerank_config.py`:
-```python
-# 如果有足够显存，提高利用率
-gpu_memory_utilization: float = 0.8
-```
-
-#### 4. 多GPU部署
-
-修改 `config/rerank_config.py`:
-```python
-# 使用4个GPU
-tensor_parallel_size: int = 4
-```
-
-#### 5. 多实例负载均衡
-
-可以启动多个实例监听不同端口，需要创建多个配置文件或代码中动态修改。
-
-
-### 性能监控
-
-服务提供详细的性能日志：
-
-```
-INFO: Processing 32 query-document pairs for reranking
-INFO: Reranked 32 pairs in 1.234s (25.9 pairs/s)
-```
-
-## 故障排除
-
-### 常见问题
-
-#### 1. CUDA out of memory
-
-**症状**: `RuntimeError: CUDA out of memory`
-
-**解决方法**:
-```bash
-# 降低显存使用率
-export RERANK_GPU_MEMORY_UTILIZATION=0.3
-
-# 减小最大长度
-export RERANK_MAX_MODEL_LEN=8000
-
-# 减小批处理大小
-export RERANK_MAX_BATCH_SIZE=16
-```
-
-#### 2. 模型下载失败
-
-**症状**: `OSError: Can't load tokenizer`
-
-**解决方法**:
-```bash
-# 使用镜像
-export HF_ENDPOINT=https://hf-mirror.com
-
-# 或手动下载后使用本地路径
-export RERANK_MODEL_PATH=/path/to/model
-```
-
-#### 3. 端口被占用
-
-**症状**: `Address already in use`
-
-**解决方法**:
-```bash
-# 更改端口
-export RERANK_PORT=9001
-
-# 或释放端口
-lsof -ti:8891 | xargs kill -9
-```
-
-#### 4. 没有GPU
-
-服务会自动降级到CPU模式，但性能较低（10-20倍慢）。
-
-建议使用GPU或考虑使用云GPU服务。
-
-#### 5. 分数异常
-
-如果所有分数都很低或很高，检查：
-- 查询和文档是否匹配
-- 任务指令是否合适
-- 输入是否被截断
-
-### 日志分析
-
-修改配置文件启用DEBUG日志查看详细信息：
-
-```python
-# config/rerank_config.py
-log_level: str = "DEBUG"
-```
-
-```bash
-python rerank_start.py
-```
-
-## 最佳实践
-
-### 生产部署
-
-#### 1. 使用进程管理器
-
-**Systemd服务**
-
-```ini
-[Unit]
-Description=Rerank Service
-After=network.target
-
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/opt/embedding_rerank
-Environment="RERANK_GPU_MEMORY_UTILIZATION=0.7"
-ExecStart=/usr/bin/python3 rerank_start.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-#### 2. 反向代理
-
-**Nginx配置**
-
-```nginx
-upstream rerank_backend {
-    server 127.0.0.1:8891;
-    # 如有多实例
-    # server 127.0.0.1:8892;
-}
-
-server {
-    listen 80;
-    server_name rerank.example.com;
-
-    location / {
-        proxy_pass http://rerank_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 300s;
-    }
-}
-```
-
-#### 3. 容器化部署
-
-**Dockerfile**
-
-```dockerfile
-FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
-
-RUN apt-get update && apt-get install -y python3 python3-pip
-RUN pip3 install vllm fastapi uvicorn transformers torch
-
-COPY . /app
-WORKDIR /app
-
-EXPOSE 8891
-
-CMD ["python3", "rerank_start.py"]
-```
-
-### 使用建议
-
-#### 1. 合理设置批量大小
-
-根据场景选择合适的批量大小：
-- 实时场景：1-10
-- 批量场景：20-50
-
-#### 2. 预过滤候选文档
-
-先用快速方法（如向量检索）筛选出top-k候选文档，再用Rerank精排序。
-
-典型流程：
-```
-全部文档 (10000) 
-  → 向量检索 (top-100) 
-  → Rerank精排 (top-10)
-```
-
-#### 3. 缓存策略
-
-对常见查询的结果进行缓存，减少重复计算。
-
-#### 4. 监控和告警
-
-- 监控延迟、吞吐量
-- 监控GPU使用率
-- 设置性能告警阈值
-
-## 更新日志
-
-### v1.0.0 (2026-02-03)
-
-- ✅ 初始版本发布
-- ✅ 支持Qwen3-Reranker-0.6B模型
-- ✅ RESTful API接口
-- ✅ 批量处理支持
-- ✅ 前缀缓存优化
-- ✅ 健康检查端点
-- ✅ 完整的配置系统
-- ✅ 生产级错误处理
+配置方式：直接修改 `config/rerank_config.py` 中 `RerankConfig` 的类属性，然后重启服务。当前实现不读取环境变量。
+
+默认配置如下：
+
+| 属性 | 默认值 | 运行时用途 |
+| --- | --- | --- |
+| `model_name` | `Qwen/Qwen3-Reranker-0.6B` | tokenizer 与 vLLM 的模型标识，也写入响应 |
+| `model_path` | `None` | 当前服务未使用 |
+| `gpu_memory_utilization` | `0.25` | 传给 vLLM |
+| `max_model_len` | `8192` | 传给 vLLM，并写入健康响应 |
+| `tensor_parallel_size` | `1` | 传给 vLLM |
+| `dtype` | `float16` | 传给 vLLM |
+| `enable_prefix_caching` | `True` | 传给 vLLM |
+| `max_length` | `8192` | 请求 token 序列的截断上限，包含固定 suffix |
+| `temperature` | `0.0` | 传给 `SamplingParams` |
+| `max_tokens` | `1` | 传给 `SamplingParams` |
+| `logprobs` | `20` | 传给 `SamplingParams` |
+| `host` | `0.0.0.0` | Uvicorn 监听地址 |
+| `port` | `8891` | Uvicorn 监听端口 |
+| `workers` | `1` | Uvicorn 工作进程数 |
+| `batch_timeout_ms` | `10` | 当前服务未使用 |
+| `log_level` | `INFO` | 日志配置和 Uvicorn 日志级别 |
+
+`model_path` 虽然在配置类中声明，但 tokenizer 和模型初始化都只读取 `config.model_name`。`batch_timeout_ms` 没有连接到请求队列或批处理器。
+
+## 模型与采样参数
+
+模型初始化使用 `tensor_parallel_size`、`max_model_len`、`enable_prefix_caching`、`gpu_memory_utilization`、`dtype`，并固定传入 `trust_remote_code=True`。采样参数使用 `temperature`、`max_tokens`、`logprobs`，同时把 `allowed_token_ids` 限制为 tokenizer 得到的 `yes` 与 `no` token。
+
+## API 端点
+
+| 端点 | 方法 | 处理函数 |
+| --- | --- | --- |
+| `/` | GET | 返回服务名、版本、模型名和运行状态 |
+| `/health` | GET | 模型加载后返回健康信息，未加载时返回 503 |
+| `/v1/rerank` | POST | 计算查询与文档对的相关性分数 |
+| `/rerank` | POST | 调用同一重排序处理逻辑 |
+
+请求和响应字段以 [RerankAPI.md](RerankAPI.md) 为准。
+
+## 关键约束
+
+- 单条结果字段为 `relevance_score`，值由 `yes` 与 `no` 的模型概率归一化得到。
+- 返回 `results` 与请求 `pairs` 顺序一致，`index` 是原始位置；如需按分数排序，由调用方完成。
+- 默认 instruction 为 `Given a web search query, retrieve relevant passages that answer the query`。
+- 超长 token 序列会在尾部截断后追加固定 suffix。
+- 当前接口没有鉴权、限流或请求批量上限配置。
 
 ## 相关文档
 
-- **快速开始**: [RerankQUICKSTART.md](RerankQUICKSTART.md)
-- **API参考**: [RerankAPI.md](RerankAPI.md)
-
-## 许可证
-
-本项目遵循Qwen模型的许可证条款。
-
-## 技术支持
-
-如有问题，请查阅：
-1. 本文档的[故障排除](#故障排除)部分
-2. [API文档](RerankAPI.md)
-3. [快速开始指南](RerankQUICKSTART.md)
+- [模块总览](README.md)
+- [Rerank 快速开始](RerankQUICKSTART.md)
+- [Rerank API 契约](RerankAPI.md)
