@@ -175,6 +175,7 @@ const onSend = async (text) => {
     })
     const {sessionId} = res
     if (sessionId) {
+      localStorage.removeItem(newChatDraftKey)
       events.emit('sessionListRefresh')
       router.replace(`/chat/${res.sessionId}`).then(() => {
         question.value = ''
