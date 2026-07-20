@@ -62,7 +62,7 @@ const handleCreate = async () => {
 
 const mcpCommand = computed(() => {
   if (!createdKey.value?.accessKey) return ''
-  return `/mcp-add kb --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer ${createdKey.value.accessKey}"`
+  return `/mcp-add kb --transport http --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer ${createdKey.value.accessKey}"`
 })
 
 const copyText = async (text, successMessage) => {
@@ -135,7 +135,7 @@ onMounted(loadAccessKeys)
         <a-tag color="blue">MCP</a-tag>
       </div>
       <div class="command-box">
-        <code>/mcp-add kb --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer grs_ak_你的完整AccessKey"</code>
+        <code>/mcp-add kb --transport http --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer grs_ak_你的完整AccessKey"</code>
       </div>
       <div class="agent-download">
         <router-link class="mcp-doc-link" to="/docs/mcp">查看完整接入文档</router-link>

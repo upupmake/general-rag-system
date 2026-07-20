@@ -305,7 +305,7 @@
 }
 
 .chat-sender :deep(textarea) {
-  height: 96px !important;
+  height: 72px !important;
   overflow-y: auto !important;
   resize: none;
 }
@@ -441,6 +441,10 @@
   align-items: center;
   gap: 4px;
   color: #595959;
+}
+
+.shortcut-help-button {
+  display: inline-flex;
 }
 
 .model-select-footer-wrapper {
@@ -683,7 +687,11 @@
   }
 
   .chat-sender :deep(textarea) {
-    height: 80px !important;
+    height: 56px !important;
+  }
+
+  .shortcut-help-button {
+    display: none;
   }
 
   .input-wrapper :deep(.ant-sender .ant-sender-footer) {

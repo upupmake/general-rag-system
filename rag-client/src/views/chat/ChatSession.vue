@@ -192,7 +192,11 @@ const handleKeyboardShortcut = (event) => {
     onCopy(lastAssistantMessage.value?.content)
   } else if (modifier && event.key === '/') {
     event.preventDefault()
-    shortcutHelpVisible.value = true
+    if (inputExpanded.value) {
+      collapseInput()
+    } else {
+      expandInput()
+    }
   }
 }
 
@@ -481,7 +485,7 @@ const confirmContextCustom = () => {
         <div><kbd>Ctrl/Cmd + K</kbd><span>聚焦输入框</span></div>
         <div><kbd>Esc</kbd><span>停止生成</span></div>
         <div><kbd>Ctrl/Cmd + Shift + C</kbd><span>复制最后一条回答</span></div>
-        <div><kbd>Ctrl/Cmd + /</kbd><span>打开此面板</span></div>
+        <div><kbd>Ctrl/Cmd + /</kbd><span>快速收起/展开输入区</span></div>
       </div>
     </a-modal>
 
@@ -652,12 +656,13 @@ const confirmContextCustom = () => {
                 <a-button
                     type="text"
                     size="small"
+                    class="shortcut-help-button"
                     title="键盘快捷键"
                     @click="shortcutHelpVisible = true">
                   快捷键
                 </a-button>
 
-                <a-button
+                 <a-button
                     type="text"
                     size="small"
                     class="collapse-input-button"

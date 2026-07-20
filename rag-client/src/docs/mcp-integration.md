@@ -102,7 +102,7 @@ https://starvpn.forwardforever.top:7777/mcp
 在 Access Key 管理页复制配置命令，将占位内容替换为刚刚保存的完整 Access Key：
 
 ```text
-/mcp-add kb --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer grs_ak_你的完整AccessKey"
+/mcp-add kb --transport http --url https://starvpn.forwardforever.top:7777/mcp --header Authorization="Bearer grs_ak_你的完整AccessKey"
 ```
 
 然后在 Agent 的**对话输入框**中粘贴整条命令并发送。命令开头的 `/`、`Bearer` 后的空格以及双引号都需要保留。
