@@ -7,6 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import openai_utils as real_openai_utils
+
 
 _INIT_CHAT_MODEL_CALLS = []
 
@@ -404,6 +406,70 @@ def test_unified_stream_ignores_empty_response_wrapper_chunks():
     ]
 
 
+class FakeResponsesClient:
+    def __init__(self):
+        self.calls = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if kwargs.get("stream"):
+            async def events():
+                yield types.SimpleNamespace(type="response.output_text.delta", delta="answer")
+
+            return events()
+        return types.SimpleNamespace(output_text="answer")
+
+
+def _make_responses_llm():
+    llm = real_openai_utils.OpenAIInstance(
+        model_name="gpt-5.6-sol",
+        api_key="test-key",
+        base_url="https://example.com/v1",
+        max_retries=0,
+    )
+    responses = FakeResponsesClient()
+    llm.client = types.SimpleNamespace(responses=responses)
+    return llm, responses
+
+
+def test_responses_ainvoke_strips_historical_reasoning_content():
+    llm, responses = _make_responses_llm()
+    messages = [
+        {"role": "assistant", "content": "previous answer", "reasoning_content": "private reasoning"},
+        {"role": "user", "content": "next question"},
+    ]
+
+    response = asyncio.run(llm.ainvoke(messages))
+
+    assert response.content == "answer"
+    assert responses.calls[0]["input"] == [
+        {"role": "assistant", "content": "previous answer"},
+        {"role": "user", "content": "next question"},
+    ]
+    assert messages[0]["reasoning_content"] == "private reasoning"
+
+
+async def _collect_responses_stream(llm, messages):
+    return [chunk.content async for chunk in llm.astream(messages)]
+
+
+def test_responses_astream_strips_historical_reasoning_content():
+    llm, responses = _make_responses_llm()
+    messages = [
+        {"role": "assistant", "content": "previous answer", "reasoning_content": "private reasoning"},
+        {"role": "user", "content": "next question"},
+    ]
+
+    chunks = asyncio.run(_collect_responses_stream(llm, messages))
+
+    assert chunks == ["answer"]
+    assert responses.calls[0]["input"] == [
+        {"role": "assistant", "content": "previous answer"},
+        {"role": "user", "content": "next question"},
+    ]
+    assert messages[0]["reasoning_content"] == "private reasoning"
+
+
 def _run_tests():
     tests = [
         test_old_dict_config_merges_to_single_candidate,
@@ -420,6 +486,8 @@ def _run_tests():
         test_gemini_candidate_build_uses_gemini_instance,
         test_other_gemini_stream_uses_ainvoke_once,
         test_unified_stream_ignores_empty_response_wrapper_chunks,
+        test_responses_ainvoke_strips_historical_reasoning_content,
+        test_responses_astream_strips_historical_reasoning_content,
     ]
     for test in tests:
         test()

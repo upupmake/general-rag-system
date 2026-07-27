@@ -38,6 +38,13 @@ class OpenAIInstance:
     def _use_responses_api(self):
         return self.model_name.startswith("gpt-")
 
+    @staticmethod
+    def _responses_input(messages: list):
+        return [
+            {key: value for key, value in message.items() if key != "reasoning_content"}
+            for message in messages
+        ]
+
     def _responses_extract(self, event):
         event_type = getattr(event, "type", None)
         if event_type == "response.output_text.delta":
@@ -63,7 +70,7 @@ class OpenAIInstance:
             if self._use_responses_api():
                 response = await self.client.responses.create(
                     model=self.model_name,
-                    input=messages,
+                    input=self._responses_input(messages),
                     **self.get_generate_config()
                 )
                 return ResponseWrapper(content=response.output_text)
@@ -167,7 +174,7 @@ class OpenAIInstance:
             if self._use_responses_api():
                 stream = await self.client.responses.create(
                     model=self.model_name,
-                    input=messages,
+                    input=self._responses_input(messages),
                     stream=True,
                     **self.get_generate_config()
                 )
