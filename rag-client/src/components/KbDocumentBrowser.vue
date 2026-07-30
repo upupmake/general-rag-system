@@ -285,7 +285,7 @@ onBeforeUnmount(() => {
         :body-style="isMobile ? { padding: '10px', height: 'calc(100vh - 55px)' } : {}"
         @cancel="closePreview">
       <iframe v-if="previewType === 'pdf'" :src="previewContent" class="preview-pdf" title="PDF 预览"/>
-      <div v-else-if="previewType === 'markdown'" class="markdown-body preview-text" v-html="md.render(previewContent)"/>
+      <div v-else-if="previewType === 'markdown'" class="markdown-body preview-scroll" v-html="md.render(previewContent)"/>
       <div v-else-if="previewType === 'image'" class="preview-image-wrap">
         <img :src="previewContent" class="preview-image" alt="文件预览"/>
       </div>
@@ -406,10 +406,14 @@ onBeforeUnmount(() => {
   max-height: 72vh;
 }
 
+.preview-scroll,
 .preview-text {
   max-height: 72vh;
   margin: 0;
   overflow: auto;
+}
+
+.preview-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -439,6 +443,7 @@ onBeforeUnmount(() => {
   }
 
   .preview-pdf,
+  .preview-scroll,
   .preview-text {
     height: calc(100vh - 80px);
     max-height: none;

@@ -1,9 +1,6 @@
 <script setup>
 import {onMounted, ref, computed, watch} from "vue";
 import {onUnmounted} from "vue";
-import VuePdfEmbed from 'vue-pdf-embed';
-import 'vue-pdf-embed/dist/styles/annotationLayer.css';
-import 'vue-pdf-embed/dist/styles/textLayer.css';
 import md from "@/utils/markdown.js";
 import {useRoute, useRouter} from "vue-router";
 import {message} from "ant-design-vue";
@@ -82,11 +79,15 @@ const displayList = computed(() => {
         let status = 'ready';
         let hasProcessing = false;
         let hasFailed = false;
+        let latestCreatedAt = null;
 
         filesInFolder.forEach(f => {
           totalSize += (f.fileSize || 0);
           if (f.status === 'failed') hasFailed = true;
           if (f.status === 'processing') hasProcessing = true;
+          if (f.createdAt && (!latestCreatedAt || new Date(f.createdAt).getTime() > new Date(latestCreatedAt).getTime())) {
+            latestCreatedAt = f.createdAt;
+          }
         });
 
         if (hasFailed) status = 'failed';
@@ -98,7 +99,7 @@ const displayList = computed(() => {
           isFolder: true,
           fileSize: totalSize,
           status: status,
-          createdAt: file.createdAt, // Just use one of the files' date
+          createdAt: latestCreatedAt,
         });
       }
     } else {
@@ -215,10 +216,8 @@ const canInvite = computed(() => {
 // Preview related refs
 const previewVisible = ref(false);
 const previewContent = ref('');
-const previewType = ref('text');
+const previewType = ref('');
 const previewTitle = ref('预览');
-const pdfPage = ref(1);
-const pdfPageCount = ref(0);
 
 // Invite related refs
 const inviteModalVisible = ref(false);
@@ -306,7 +305,17 @@ const columns = [
   {title: '文件名', dataIndex: 'fileName', key: 'fileName'},
   {title: '大小', dataIndex: 'fileSize', key: 'fileSize'},
   {title: '状态', dataIndex: 'status', key: 'status'}, // processing, ready, failed
-  {title: '上传时间', dataIndex: 'createdAt', key: 'createdAt'},
+  {
+    title: '上传时间',
+    dataIndex: 'createdAt',
+    key: 'createdAt',
+    sorter: (a, b, sortOrder) => {
+      if (a.isFolder && !b.isFolder) return sortOrder === 'descend' ? 1 : -1;
+      if (!a.isFolder && b.isFolder) return sortOrder === 'descend' ? -1 : 1;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    },
+    sortDirections: ['descend', 'ascend']
+  },
   {title: '操作', key: 'action'},
 ];
 
@@ -564,7 +573,16 @@ const customRequest = async (options) => {
 };
 
 // 2. 预览逻辑
+const clearPreview = () => {
+  if (['pdf', 'image'].includes(previewType.value) && previewContent.value) {
+    URL.revokeObjectURL(previewContent.value);
+  }
+  previewContent.value = '';
+  previewType.value = '';
+};
+
 const handlePreview = async (record) => {
+  clearPreview();
   downloadProgress.value = {visible: true, percent: 0, title: '正在加载预览...'};
   startSimulatedProgress();
   try {
@@ -576,21 +594,20 @@ const handlePreview = async (record) => {
 
     if (fileName.endsWith('.pdf')) {
       previewType.value = 'pdf';
-      previewContent.value = window.URL.createObjectURL(blob);
-      pdfPage.value = 1;
-      pdfPageCount.value = 0;
+      previewContent.value = URL.createObjectURL(blob);
+    } else if (fileName.match(/\.(jpeg|jpg|png|gif|bmp|webp)$/)) {
+      previewType.value = 'image';
+      previewContent.value = URL.createObjectURL(blob);
     } else if (fileName.endsWith('.md')) {
       previewType.value = 'markdown';
       previewContent.value = await blob.text();
-    } else if (fileName.match(/\.(jpeg|jpg|png|gif|bmp|webp)$/)) {
-      previewType.value = 'image';
-      previewContent.value = window.URL.createObjectURL(blob);
     } else {
       previewType.value = 'text';
       previewContent.value = await blob.text();
     }
     previewVisible.value = true;
   } catch (e) {
+    clearPreview();
     console.error('Preview failed', e);
     message.error('预览失败');
     downloadProgress.value.visible = false;
@@ -600,22 +617,7 @@ const handlePreview = async (record) => {
 
 const handlePreviewCancel = () => {
   previewVisible.value = false;
-  // Optional cleanup
-  if (['pdf', 'image'].includes(previewType.value)) {
-    URL.revokeObjectURL(previewContent.value);
-  }
-  previewContent.value = '';
-};
-
-const handlePdfLoaded = (doc) => {
-  pdfPageCount.value = doc.numPages;
-};
-
-const changePage = (delta) => {
-  const newPage = pdfPage.value + delta;
-  if (newPage >= 1 && newPage <= pdfPageCount.value) {
-    pdfPage.value = newPage;
-  }
+  clearPreview();
 };
 
 // 3. 删除逻辑
@@ -764,6 +766,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkIsMobile)
+  clearPreview()
 })
 </script>
 
@@ -972,36 +975,19 @@ onUnmounted(() => {
     <a-modal
         v-model:visible="previewVisible"
         :title="previewTitle"
-        :width="isMobile ? '100%' : '800px'"
+        :width="isMobile ? '100%' : 860"
         :footer="null"
         @cancel="handlePreviewCancel"
-        :style="isMobile ? { top: 0, margin: 0, maxWidth: '100%' } : { top: '8vh' }"
-        :bodyStyle="isMobile ? { padding: '10px', height: 'calc(100vh - 55px)', overflow: 'hidden' } : {}"
+        :style="isMobile ? { top: 0, margin: 0, maxWidth: '100%' } : { top: '6vh' }"
+        :body-style="isMobile ? { padding: '10px', height: 'calc(100vh - 55px)' } : {}"
     >
-      <div v-if="previewType === 'pdf'"
-           style="max-height: 80vh; overflow-y: scroll; display: flex; flex-direction: column; align-items: center;">
-        <div style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
-          <a-button :disabled="pdfPage <= 1" @click="changePage(-1)">上一页</a-button>
-          <span>{{ pdfPage }} / {{ pdfPageCount }}</span>
-          <a-button :disabled="pdfPage >= pdfPageCount" @click="changePage(1)">下一页</a-button>
-        </div>
-        <VuePdfEmbed
-            :source="previewContent"
-            :page="pdfPage"
-            text-layer
-            annotation-layer
-            @loaded="handlePdfLoaded"
-            style="width: 100%; border: 1px solid #eee;"
-        />
-      </div>
-      <div v-else-if="previewType === 'markdown'" class="markdown-body" style="max-height: 70vh; overflow-y: auto;"
+      <iframe v-if="previewType === 'pdf'" :src="previewContent" class="preview-pdf" title="PDF 预览"/>
+      <div v-else-if="previewType === 'markdown'" class="markdown-body preview-scroll"
            v-html="md.render(previewContent)"></div>
-      <div v-else-if="previewType === 'image'" style="text-align: center;">
-        <img :src="previewContent" style="max-width: 100%; max-height: 70vh;"/>
+      <div v-else-if="previewType === 'image'" class="preview-image-wrap">
+        <img :src="previewContent" class="preview-image" alt="文件预览"/>
       </div>
-      <pre v-else style="white-space: pre-wrap; word-wrap: break-word; max-height: 70vh; overflow-y: auto;">{{
-          previewContent
-        }}</pre>
+      <pre v-else class="preview-text">{{ previewContent }}</pre>
     </a-modal>
 
     <a-drawer
@@ -1164,6 +1150,33 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
+.preview-pdf {
+  width: 100%;
+  height: 72vh;
+  border: 0;
+}
+
+.preview-image-wrap {
+  text-align: center;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 72vh;
+}
+
+.preview-scroll,
+.preview-text {
+  max-height: 72vh;
+  margin: 0;
+  overflow: auto;
+}
+
+.preview-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .kb-header {
   margin-bottom: 16px;
   display: flex;
@@ -1187,6 +1200,17 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .preview-pdf,
+  .preview-scroll,
+  .preview-text {
+    height: calc(100vh - 80px);
+    max-height: none;
+  }
+
+  .preview-image {
+    max-height: calc(100vh - 80px);
+  }
+
   .kb-header {
     flex-direction: column;
     align-items: flex-start;
