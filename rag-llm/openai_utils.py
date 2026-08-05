@@ -7,7 +7,7 @@ from wrapper import ResponseWrapper
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_OUTPUT_TOKENS = 65536
+DEFAULT_MAX_OUTPUT_TOKENS = 32768
 
 
 class OpenAIInstance:

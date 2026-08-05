@@ -293,7 +293,7 @@ def get_langchain_llm(
     model_name = model_info.get("name")
     api_key = settings.get("api_key")
     base_url = settings.get("base_url")
-    kwargs.setdefault("max_tokens", 65536)
+    kwargs.setdefault("max_tokens", 32768)
 
     llm = init_chat_model(
         model=model_name,

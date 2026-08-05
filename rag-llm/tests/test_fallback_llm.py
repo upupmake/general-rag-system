@@ -255,7 +255,7 @@ def test_langchain_default_timeout_is_30():
         }
         utils.get_langchain_llm({"provider": "deepseek", "name": "deepseek-v4-flash"})
         assert _INIT_CHAT_MODEL_CALLS[-1]["kwargs"]["timeout"] == 30
-        assert _INIT_CHAT_MODEL_CALLS[-1]["kwargs"]["max_tokens"] == 65536
+        assert _INIT_CHAT_MODEL_CALLS[-1]["kwargs"]["max_tokens"] == 32768
     finally:
         utils._load_config = original_load_config
 
@@ -464,7 +464,7 @@ def test_openai_chat_ainvoke_uses_large_token_limit_and_high_reasoning_effort():
     response = asyncio.run(llm.ainvoke([{"role": "user", "content": "question"}]))
 
     assert response.content == "answer"
-    assert completions.calls[0]["max_tokens"] == 65536
+    assert completions.calls[0]["max_tokens"] == 32768
     assert completions.calls[0]["reasoning_effort"] == "high"
 
 
@@ -482,7 +482,7 @@ def test_responses_ainvoke_strips_historical_reasoning_content():
         {"role": "assistant", "content": "previous answer"},
         {"role": "user", "content": "next question"},
     ]
-    assert responses.calls[0]["max_output_tokens"] == 65536
+    assert responses.calls[0]["max_output_tokens"] == 32768
     assert responses.calls[0]["reasoning"] == {"effort": "high"}
     assert messages[0]["reasoning_content"] == "private reasoning"
 
