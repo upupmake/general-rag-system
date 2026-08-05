@@ -8,6 +8,7 @@ import {
   FolderOutlined,
   LoadingOutlined,
   ReloadOutlined,
+  SearchOutlined,
 } from '@ant-design/icons-vue'
 import {deleteDocument, listDocuments, previewDocument} from '@/api/kbApi.js'
 import {findKbById} from '@/vars.js'
@@ -30,6 +31,7 @@ const previewVisible = ref(false)
 const previewTitle = ref('')
 const previewType = ref('')
 const previewContent = ref('')
+const searchKeyword = ref('')
 const isMobile = ref(window.innerWidth <= 768)
 let pollTimer = null
 
@@ -40,6 +42,9 @@ const isOwner = computed(() => currentKb.value?.ownerUserId === userStore.userId
 const canDeleteFile = (file) => isOwner.value || file.uploaderId === userStore.userId
 
 const displayList = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  const pathMatches = (fullName) => !keyword || fullName.toLowerCase().includes(keyword)
+
   const list = []
   const folders = new Set()
   const pathPrefix = currentPathString.value ? `${currentPathString.value}/` : ''
@@ -53,6 +58,7 @@ const displayList = computed(() => {
 
     const parts = relativeName.split('/')
     if (parts.length === 1) {
+      if (!pathMatches(fullName)) return // 搜索时过滤不匹配的文件
       list.push({...file, fileName: parts[0], isFolder: false})
       return
     }
@@ -63,8 +69,16 @@ const displayList = computed(() => {
 
     const folderPrefix = `${pathPrefix}${folderName}/`
     const files = documents.value.filter(item => (item.fileName || '').replace(/\\/g, '/').startsWith(folderPrefix))
+    if (keyword && !files.some(item => pathMatches((item.fileName || '').replace(/\\/g, '/')))) return // 搜索时仅保留包含匹配文件的目录
     const hasFailed = files.some(item => item.status === 'failed')
     const hasProcessing = files.some(item => item.status === 'processing')
+
+    let latestCreatedAt = null
+    files.forEach(item => {
+      if (item.createdAt && (!latestCreatedAt || new Date(item.createdAt).getTime() > new Date(latestCreatedAt).getTime())) {
+        latestCreatedAt = item.createdAt
+      }
+    })
 
     list.push({
       id: `folder-${folderPrefix}`,
@@ -72,6 +86,7 @@ const displayList = computed(() => {
       isFolder: true,
       fileSize: files.reduce((total, item) => total + (item.fileSize || 0), 0),
       status: hasFailed ? 'failed' : (hasProcessing ? 'processing' : 'ready'),
+      createdAt: latestCreatedAt,
       files,
       canDelete: files.length > 0 && files.every(canDeleteFile),
     })
@@ -82,6 +97,25 @@ const displayList = computed(() => {
     return a.fileName.localeCompare(b.fileName)
   })
 })
+
+const isSearching = computed(() => searchKeyword.value.trim() !== '')
+
+const formatTime = (value) => {
+  if (!value) return ''
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return ''
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+const metaParts = (item) => {
+  const parts = []
+  if (item.isFolder) parts.push(`${item.files.length} 个文件`)
+  parts.push(formatSize(item.fileSize))
+  const time = formatTime(item.createdAt)
+  if (time) parts.push(`上传于 ${time}`)
+  return parts.join(' · ')
+}
 
 const stopPolling = () => {
   if (pollTimer) {
@@ -192,6 +226,7 @@ watch(() => props.visible, visible => {
   if (visible) {
     window.addEventListener('resize', handleResize)
     currentPath.value = []
+    searchKeyword.value = ''
     fetchDocuments()
   } else {
     window.removeEventListener('resize', handleResize)
@@ -201,6 +236,7 @@ watch(() => props.visible, visible => {
 
 watch(() => props.kbId, () => {
   currentPath.value = []
+  searchKeyword.value = ''
   if (props.visible) fetchDocuments()
 })
 
@@ -233,17 +269,20 @@ onBeforeUnmount(() => {
           <a @click="navigateTo(index)">{{ folder }}</a>
         </a-breadcrumb-item>
       </a-breadcrumb>
+      <a-input v-model:value="searchKeyword" allow-clear placeholder="按路径过滤文件" class="browser-search">
+        <template #prefix><SearchOutlined style="color: #bfbfbf"/></template>
+      </a-input>
     </div>
 
     <a-spin :spinning="loading">
-      <a-empty v-if="!loading && displayList.length === 0" description="当前目录暂无文件"/>
+      <a-empty v-if="!loading && displayList.length === 0" :description="isSearching ? '未找到匹配的文件' : '当前目录暂无文件'"/>
       <div v-else class="document-list">
         <div v-for="item in displayList" :key="item.id" class="document-row">
           <button v-if="item.isFolder" type="button" class="document-main folder-button" @click="enterFolder(item.fileName)">
             <FolderOutlined class="document-icon folder-icon"/>
             <span class="document-info">
               <span class="document-name">{{ item.fileName }}</span>
-              <span class="document-meta">{{ item.files.length }} 个文件 · {{ formatSize(item.fileSize) }}</span>
+              <span class="document-meta">{{ metaParts(item) }}</span>
             </span>
             <FolderOpenOutlined class="open-icon"/>
           </button>
@@ -251,7 +290,7 @@ onBeforeUnmount(() => {
             <FileOutlined class="document-icon"/>
             <span class="document-info">
               <span class="document-name" :title="item.fileName">{{ item.fileName }}</span>
-              <span class="document-meta">{{ formatSize(item.fileSize) }} · 点击预览</span>
+              <span class="document-meta">{{ metaParts(item) }}</span>
             </span>
           </button>
 
@@ -306,6 +345,10 @@ onBeforeUnmount(() => {
   color: #1f1f1f;
   font-size: 15px;
   font-weight: 600;
+}
+
+.browser-search {
+  width: 100%;
 }
 
 .document-list {
@@ -380,8 +423,11 @@ onBeforeUnmount(() => {
 }
 
 .document-meta {
+  overflow: hidden;
   color: #8c8c8c;
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .document-actions {

@@ -11,6 +11,8 @@ from wrapper import ResponseWrapper
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MAX_OUTPUT_TOKENS = 65536
+
 
 class GeminiInstance:
     def __init__(
@@ -22,6 +24,7 @@ class GeminiInstance:
             enable_thinking: bool = True,
             timeout: int = 30,
             max_retries: int = 2,
+            max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     ):
         """
         初始化 Gemini 实例
@@ -39,6 +42,7 @@ class GeminiInstance:
         # 确保 base_url 不以 / 结尾，方便后续拼接
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.max_output_tokens = max_output_tokens
 
         # --- SDK 初始化 (保留给 ainvoke 使用) ---
         # 配置 HTTP 选项
@@ -95,6 +99,7 @@ class GeminiInstance:
         return types.GenerateContentConfig(
             tools=tools,
             system_instruction=system_instruction,
+            max_output_tokens=self.max_output_tokens,
             thinking_config=ThinkingConfig(
                 include_thoughts=True
             ) if self.enable_thinking else None
@@ -167,14 +172,15 @@ class GeminiInstance:
             payload["tools"] = [{"googleSearch": {}}]
 
         # 添加 Generation Config
-        generation_config = {}
+        generation_config = {
+            "maxOutputTokens": self.max_output_tokens
+        }
         if self.enable_thinking:
             generation_config["thinkingConfig"] = {
                 "includeThoughts": True,
             }
 
-        if generation_config:
-            payload["generationConfig"] = generation_config
+        payload["generationConfig"] = generation_config
 
         # 3. 发起请求并处理 SSE
         try:

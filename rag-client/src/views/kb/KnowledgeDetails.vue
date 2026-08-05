@@ -11,7 +11,8 @@ import {
   FileOutlined,
   HomeOutlined,
   MoreOutlined,
-  DownOutlined
+  DownOutlined,
+  SearchOutlined
 } from '@ant-design/icons-vue';
 import {
   deleteDocument,
@@ -35,6 +36,7 @@ const fileList = ref([]);
 const uploading = ref(false);
 const currentKb = ref(null);
 const currentPath = ref([]);
+const searchKeyword = ref('');
 
 const currentPathString = computed(() => {
   return currentPath.value.join('/');
@@ -51,6 +53,9 @@ const displayList = computed(() => {
   const folders = new Set();
 
   if (!fileList.value) return [];
+
+  const keyword = searchKeyword.value.trim().toLowerCase();
+  const pathMatches = (fullName) => !keyword || fullName.toLowerCase().includes(keyword);
 
   // Sort files first to ensure consistent order
   const sortedFiles = [...fileList.value].sort((a, b) => (a.fileName || '').localeCompare(b.fileName || ''));
@@ -74,6 +79,9 @@ const displayList = computed(() => {
         // Calculate folder stats
         const prefix = (currentPathString.value ? currentPathString.value + '/' : '') + folderName + '/';
         const filesInFolder = fileList.value.filter(f => (f.fileName || '').replace(/\\/g, '/').startsWith(prefix));
+
+        // 搜索时仅保留包含匹配文件的目录，保留原始目录结构
+        if (keyword && !filesInFolder.some(f => pathMatches((f.fileName || '').replace(/\\/g, '/')))) return;
 
         let totalSize = 0;
         let status = 'ready';
@@ -104,6 +112,7 @@ const displayList = computed(() => {
       }
     } else {
       // It's a file in current folder
+      if (!pathMatches(fileName)) return; // 搜索时过滤不匹配的文件
       list.push({
         ...file,
         isFolder: false
@@ -118,6 +127,8 @@ const displayList = computed(() => {
     return a.fileName.localeCompare(b.fileName);
   });
 });
+
+const isSearching = computed(() => searchKeyword.value.trim() !== '');
 
 const enterFolder = (folderName) => {
   currentPath.value.push(folderName);
@@ -820,8 +831,8 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Breadcrumb -->
-    <div style="margin-bottom: 16px; flex-shrink: 0;">
+    <!-- 搜索与面包屑 -->
+    <div class="kb-toolbar">
       <a-breadcrumb>
         <a-breadcrumb-item>
           <a @click="navToLevel(-1)">
@@ -832,10 +843,18 @@ onUnmounted(() => {
           <a @click="navToLevel(index)">{{ folder }}</a>
         </a-breadcrumb-item>
       </a-breadcrumb>
+      <a-input
+          v-model:value="searchKeyword"
+          allow-clear
+          placeholder="按路径过滤文件"
+          class="kb-search-input">
+        <template #prefix><search-outlined style="color: #bfbfbf;"/></template>
+      </a-input>
     </div>
 
     <a-table :columns="columns" :data-source="displayList" row-key="id" :pagination="false"
-             :scroll="{ x: 800, y: 'calc(100vh - 250px)' }">
+             :scroll="{ x: 800, y: 'calc(100vh - 250px)' }"
+             :locale="{ emptyText: isSearching ? '未找到匹配的文件' : '当前目录暂无文件' }">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'icon'">
           <folder-outlined v-if="record.isFolder" style="color: #1890ff; font-size: 18px;"/>
@@ -1199,6 +1218,21 @@ onUnmounted(() => {
   gap: 8px;
 }
 
+.kb-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.kb-search-input {
+  width: 280px;
+  max-width: 100%;
+}
+
 @media (max-width: 768px) {
   .preview-pdf,
   .preview-scroll,
@@ -1232,6 +1266,10 @@ onUnmounted(() => {
     width: 100%;
     justify-content: space-between;
     flex-wrap: wrap;
+  }
+
+  .kb-search-input {
+    width: 100%;
   }
 
   .kb-actions .ant-btn {

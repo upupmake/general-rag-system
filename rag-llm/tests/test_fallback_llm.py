@@ -255,6 +255,7 @@ def test_langchain_default_timeout_is_30():
         }
         utils.get_langchain_llm({"provider": "deepseek", "name": "deepseek-v4-flash"})
         assert _INIT_CHAT_MODEL_CALLS[-1]["kwargs"]["timeout"] == 30
+        assert _INIT_CHAT_MODEL_CALLS[-1]["kwargs"]["max_tokens"] == 65536
     finally:
         utils._load_config = original_load_config
 
@@ -420,6 +421,31 @@ class FakeResponsesClient:
         return types.SimpleNamespace(output_text="answer")
 
 
+class FakeChatCompletionsClient:
+    def __init__(self):
+        self.calls = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        message = types.SimpleNamespace(content="answer")
+        return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
+
+
+def _make_chat_completions_llm():
+    llm = real_openai_utils.OpenAIInstance(
+        model_name="deepseek-v4-flash",
+        api_key="test-key",
+        base_url="https://example.com/v1",
+        max_retries=0,
+        provider="deepseek",
+    )
+    completions = FakeChatCompletionsClient()
+    llm.client = types.SimpleNamespace(
+        chat=types.SimpleNamespace(completions=completions)
+    )
+    return llm, completions
+
+
 def _make_responses_llm():
     llm = real_openai_utils.OpenAIInstance(
         model_name="gpt-5.6-sol",
@@ -430,6 +456,16 @@ def _make_responses_llm():
     responses = FakeResponsesClient()
     llm.client = types.SimpleNamespace(responses=responses)
     return llm, responses
+
+
+def test_openai_chat_ainvoke_uses_large_token_limit_and_high_reasoning_effort():
+    llm, completions = _make_chat_completions_llm()
+
+    response = asyncio.run(llm.ainvoke([{"role": "user", "content": "question"}]))
+
+    assert response.content == "answer"
+    assert completions.calls[0]["max_tokens"] == 65536
+    assert completions.calls[0]["reasoning_effort"] == "high"
 
 
 def test_responses_ainvoke_strips_historical_reasoning_content():
@@ -446,6 +482,8 @@ def test_responses_ainvoke_strips_historical_reasoning_content():
         {"role": "assistant", "content": "previous answer"},
         {"role": "user", "content": "next question"},
     ]
+    assert responses.calls[0]["max_output_tokens"] == 65536
+    assert responses.calls[0]["reasoning"] == {"effort": "high"}
     assert messages[0]["reasoning_content"] == "private reasoning"
 
 
@@ -486,6 +524,7 @@ def _run_tests():
         test_gemini_candidate_build_uses_gemini_instance,
         test_other_gemini_stream_uses_ainvoke_once,
         test_unified_stream_ignores_empty_response_wrapper_chunks,
+        test_openai_chat_ainvoke_uses_large_token_limit_and_high_reasoning_effort,
         test_responses_ainvoke_strips_historical_reasoning_content,
         test_responses_astream_strips_historical_reasoning_content,
     ]

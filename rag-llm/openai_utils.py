@@ -7,6 +7,8 @@ from wrapper import ResponseWrapper
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MAX_OUTPUT_TOKENS = 65536
+
 
 class OpenAIInstance:
     def __init__(
@@ -19,11 +21,15 @@ class OpenAIInstance:
             enable_thinking: bool = False,
             enable_web_search: bool = False,
             provider: str = "openai",
+            max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
+            reasoning_effort: str = "high",
     ):
         self.model_name = model_name
         self.provider = provider
         self.enable_thinking = enable_thinking
         self.enable_web_search = enable_web_search
+        self.max_output_tokens = max_output_tokens
+        self.reasoning_effort = reasoning_effort
 
         self.client = AsyncOpenAI(
             api_key=api_key,
@@ -96,8 +102,7 @@ class OpenAIInstance:
     def get_generate_config(self):
         # 包含extra_body, thinking, reasoning等配置
         extra_body = {}
-        reasoning = {}
-        reasoning_effort = {}
+        reasoning = {"effort": self.reasoning_effort} if self._use_responses_api() else {}
         tools = []
 
         if self.provider == "qwen":
@@ -140,14 +145,8 @@ class OpenAIInstance:
                 extra_body['thinking'] = {"type": "disabled"}
         elif self.model_name.startswith("gpt-"):
             # gpt-* 走 Responses API
-            reasoning = {"effort": "high"}
             if self.enable_web_search:
                 tools.append({"type": "web_search"})
-        elif "grok-4" in self.model_name:
-            if self.enable_thinking:
-                reasoning_effort = "high"
-            else:
-                reasoning_effort = "low"
         elif "anthropic" == self.provider:
             if self.enable_thinking:
                 extra_body['thinking'] = {
@@ -163,10 +162,13 @@ class OpenAIInstance:
             r['extra_body'] = extra_body
         if reasoning:
             r['reasoning'] = reasoning
-        if reasoning_effort:
-            r['reasoning_effort'] = reasoning_effort
         if tools:
             r["tools"] = tools
+        if self._use_responses_api():
+            r["max_output_tokens"] = self.max_output_tokens
+        else:
+            r["max_tokens"] = self.max_output_tokens
+            r["reasoning_effort"] = self.reasoning_effort
         return r
 
     async def astream(self, messages: list) -> AsyncGenerator[ResponseWrapper, None]:
