@@ -660,13 +660,17 @@ class AgenticRAGService:
                 reasoning_content = msg.additional_kwargs.get("reasoning_content")
                 if reasoning_content:
                     item["reasoning_content"] = reasoning_content
+                provider_response_items = msg.additional_kwargs.get("providerResponseItems")
+                if provider_response_items:
+                    item["providerResponseItems"] = provider_response_items
                 conversation.append(item)
         conversation.append({"role": "user", "content": final_user_content})
 
         llm = get_official_llm(
             model_info,
             enable_web_search=options.get('webSearch', False) if options else False,
-            enable_thinking=options.get('thinking', False) if options else False
+            enable_thinking=options.get('thinking', False) if options else False,
+            prompt_cache_key=options.get('promptCacheKey') if options else None,
         )
 
         async for item in unified_llm_stream(llm, conversation):

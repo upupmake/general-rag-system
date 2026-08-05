@@ -112,6 +112,7 @@ class FallbackLLMInstance:
             enable_thinking: bool = False,
             timeout: int = 30,
             max_retries: int = 3,
+            prompt_cache_key: str = None,
     ):
         self.model_info = model_info
         self.candidates = candidates
@@ -119,6 +120,7 @@ class FallbackLLMInstance:
         self.enable_thinking = enable_thinking
         self.timeout = timeout
         self.max_retries = max_retries
+        self.prompt_cache_key = prompt_cache_key
 
     def _build_llm(self, settings: dict):
         provider = self.model_info.get("provider")
@@ -146,7 +148,8 @@ class FallbackLLMInstance:
             max_retries=max_retries,
             enable_web_search=self.enable_web_search,
             enable_thinking=self.enable_thinking,
-            provider=provider
+            provider=provider,
+            prompt_cache_key=self.prompt_cache_key,
         )
 
     def _candidate_name(self, settings: dict, index: int):
@@ -220,6 +223,7 @@ def get_official_llm(
         enable_thinking: bool = False,
         timeout: int = 60,
         max_retries: int = 1,
+        prompt_cache_key: str = None,
 ):
     """根据模型信息加载配置并初始化 LLM"""
     candidates = _get_model_candidates(model_info)
@@ -230,6 +234,7 @@ def get_official_llm(
         enable_thinking=enable_thinking,
         timeout=timeout,
         max_retries=max_retries,
+        prompt_cache_key=prompt_cache_key,
     )
 
 
@@ -527,12 +532,19 @@ def get_token_count(text: str, encoding_name: str = "o200k_base") -> int:
     return len(encoding.encode(text))
 
 
+def _history_message_token_count(message: dict) -> int:
+    provider_response_items = message.get("providerResponseItems")
+    if isinstance(provider_response_items, list) and provider_response_items:
+        return get_token_count(json.dumps(provider_response_items, ensure_ascii=False))
+    return get_token_count(message.get("content") or "")
+
+
 def cut_history(history: list, model: dict, context_multiplier: int = None):
     current_msg = history[-1]
     previous_msgs = history[:-1]
 
     processed_context = []
-    current_token_count = get_token_count(current_msg.get('content') or "")
+    current_token_count = _history_message_token_count(current_msg)
     n = len(previous_msgs)
     model_name = model.get("name", "")
 
@@ -558,7 +570,7 @@ def cut_history(history: list, model: dict, context_multiplier: int = None):
 
     for i in range(n, 1, -2):
         pair = previous_msgs[i - 2: i]
-        pair_tokens = sum(get_token_count(m.get('content') or "") for m in pair)
+        pair_tokens = sum(_history_message_token_count(message) for message in pair)
 
         if current_token_count + pair_tokens < max_tokens:
             current_token_count += pair_tokens
@@ -631,6 +643,11 @@ async def unified_llm_stream(model_instance, messages):
     """统一的LLM流式生成器"""
     try:
         async for chunk in model_instance.astream(messages):
+            response_metadata = getattr(chunk, "response_metadata", None)
+            if response_metadata and response_metadata.get("type") == "provider_response":
+                yield response_metadata
+                continue
+
             content = chunk.content or reasoning_content_wrapper(chunk)
             if content:
                 think_content, text_content, error_content = content_extractor(content)

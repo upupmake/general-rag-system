@@ -28,7 +28,11 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import javax.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -288,8 +292,11 @@ public class ChatController {
                         ConversationMessages::getContent,
                         ConversationMessages::getRagContext,
                         ConversationMessages::getStatus,
+                        ConversationMessages::getModelId,
                         ConversationMessages::getOptions,
-                        ConversationMessages::getThinking
+                        ConversationMessages::getThinking,
+                        ConversationMessages::getProviderResponseId,
+                        ConversationMessages::getProviderResponseItems
                 )
                 .eq(ConversationMessages::getSessionId, sessionId)
                 .eq(ConversationMessages::getUserId, userId)
@@ -354,8 +361,16 @@ public class ChatController {
         StringBuffer thinkingSb = new StringBuffer(); // Add thinking buffer
         List<Map<String, Object>> ragProcessList = new java.util.ArrayList<>();
         Map<String, Object> usageInfo = new java.util.HashMap<>(); // Store usage info
+        Map<String, Object> providerResponseInfo = new java.util.HashMap<>();
         ObjectMapper objectMapper = new ObjectMapper();
         AtomicBoolean saved = new AtomicBoolean(false);
+
+        for (ConversationMessages message : messageList) {
+            if ("assistant".equals(message.getRole()) && !chatStream.getModelId().equals(message.getModelId())) {
+                message.setProviderResponseId(null);
+                message.setProviderResponseItems(null);
+            }
+        }
 
         Map<String, Object> options = new java.util.HashMap<>();
         // 合并用户传递的 options
@@ -372,6 +387,7 @@ public class ChatController {
             options.put("kbId", kbId);
             options.put("systemPrompt", kb.getSystemPrompt());
         }
+        options.put("promptCacheKey", buildPromptCacheKey(userId, sessionId, chatStream.getModelId()));
         Map<String, Object> info = Map.of(
                 "history", messageList,
                 "model", modelPermission,
@@ -387,8 +403,8 @@ public class ChatController {
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
                 })
                 .doOnSubscribe(a -> updateMessageStatus(sessionId, currentUserMessageId, "generating"))
-                .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo))
-                .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, saved))
+                .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, providerResponseInfo))
+                .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, providerResponseInfo, saved))
                 .doOnError(e -> {
                     if (saved.compareAndSet(false, true)) {
                         saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, false)
@@ -414,8 +430,19 @@ public class ChatController {
         return streamFlux;
     }
 
+    private String buildPromptCacheKey(Long userId, Long sessionId, Long modelId) {
+        String source = userId + ":" + sessionId + ":" + modelId;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(source.getBytes(StandardCharsets.UTF_8));
+            return "chat:v1:" + Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
     private Flux<String> processStreamEvent(ServerSentEvent<String> event, StringBuffer sb, StringBuffer thinkingSb,
-                                            List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper, Map<String, Object> usageInfo) {
+                                             List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper,
+                                             Map<String, Object> usageInfo, Map<String, Object> providerResponseInfo) {
         String dataStr = event.data();
         if (dataStr == null || dataStr.isEmpty()) return Flux.empty();
 
@@ -472,6 +499,20 @@ public class ChatController {
                 } catch (Exception e) {
                     log.error("处理RAG汇总信息失败", e);
                 }
+            } else if ("provider_response".equals(type)) {
+                JsonNode payload = data.get("payload");
+                if (payload != null && !payload.isNull()
+                        && payload.has("responseId") && !payload.get("responseId").isNull()
+                        && payload.has("status") && !payload.get("status").isNull()
+                        && "completed".equals(payload.get("status").asText())
+                        && payload.has("items") && payload.get("items").isArray()
+                        && payload.get("items").size() > 0) {
+                    providerResponseInfo.put("responseId", payload.get("responseId").asText());
+                    providerResponseInfo.put("items", objectMapper.convertValue(payload.get("items"), List.class));
+                } else {
+                    log.warn("忽略无效的 provider_response 事件");
+                }
+                return Flux.empty();
             } else if ("usage".equals(type)) {
                 // Handle usage data including latency
                 JsonNode payload = data.path("payload");
@@ -505,8 +546,10 @@ public class ChatController {
     }
 
     private Mono<String> saveCompletedMessage(Long sessionId, Long userId, ChatStream chatStream,
-                                              Long currentUserMessageId, StringBuffer sb, StringBuffer thinkingSb,
-                                              List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper, Map<String, Object> usageInfo, AtomicBoolean saved) {
+                                               Long currentUserMessageId, StringBuffer sb, StringBuffer thinkingSb,
+                                               List<Map<String, Object>> ragProcessList, ObjectMapper objectMapper,
+                                               Map<String, Object> usageInfo, Map<String, Object> providerResponseInfo,
+                                               AtomicBoolean saved) {
         return Mono.defer(() -> Mono.fromCallable(() -> {
             if (!saved.compareAndSet(false, true)) {
                 return objectMapper.writeValueAsString(Map.of("type", "done"));
@@ -529,6 +572,11 @@ public class ChatController {
             aiMessage.setKbId(chatStream.getKbId());
             aiMessage.setStatus("completed");
             aiMessage.setModelId(chatStream.getModelId());
+            if (providerResponseInfo.get("responseId") instanceof String
+                    && providerResponseInfo.get("items") instanceof List) {
+                aiMessage.setProviderResponseId((String) providerResponseInfo.get("responseId"));
+                aiMessage.setProviderResponseItems(providerResponseInfo.get("items"));
+            }
             // aiMessage.setCreatedAt(new Date());
 
             // Set latency if available

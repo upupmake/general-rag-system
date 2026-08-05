@@ -54,8 +54,9 @@ def _install_dependency_stubs():
     wrapper = types.ModuleType("wrapper")
 
     class ResponseWrapper:
-        def __init__(self, content):
+        def __init__(self, content, response_metadata=None):
             self.content = content
+            self.response_metadata = response_metadata
 
     gemini_utils.GeminiInstance = object
     openai_utils.OpenAIInstance = object
@@ -317,6 +318,7 @@ def test_openai_candidate_build_uses_provider_and_candidate_settings():
             enable_thinking=True,
             timeout=30,
             max_retries=3,
+            prompt_cache_key="cache-key",
         )
         llm._build_llm(llm.candidates[0])
         assert calls == [{
@@ -327,7 +329,8 @@ def test_openai_candidate_build_uses_provider_and_candidate_settings():
             "max_retries": 1,
             "enable_web_search": True,
             "enable_thinking": True,
-            "provider": "deepseek"
+            "provider": "deepseek",
+            "prompt_cache_key": "cache-key",
         }]
     finally:
         utils.OpenAIInstance = original_openai
@@ -407,18 +410,55 @@ def test_unified_stream_ignores_empty_response_wrapper_chunks():
     ]
 
 
+class FakeResponseItem:
+    def __init__(self, data):
+        self.data = data
+
+    def model_dump(self, exclude_none=False):
+        return self.data.copy()
+
+
 class FakeResponsesClient:
     def __init__(self):
         self.calls = []
+        self.output = [
+            FakeResponseItem({
+                "id": "rs_test",
+                "type": "reasoning",
+                "summary": [],
+                "encrypted_content": "encrypted-reasoning",
+                "status": "completed",
+            }),
+            FakeResponseItem({
+                "id": "msg_test",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "answer", "annotations": []}],
+            }),
+        ]
+
+    def _response(self):
+        return types.SimpleNamespace(
+            id="resp_test",
+            status="completed",
+            output=self.output,
+            output_text="answer",
+            usage=types.SimpleNamespace(
+                input_tokens=4096,
+                input_tokens_details=types.SimpleNamespace(cached_tokens=3072),
+            ),
+        )
 
     async def create(self, **kwargs):
         self.calls.append(kwargs)
         if kwargs.get("stream"):
             async def events():
                 yield types.SimpleNamespace(type="response.output_text.delta", delta="answer")
+                yield types.SimpleNamespace(type="response.completed", response=self._response())
 
             return events()
-        return types.SimpleNamespace(output_text="answer")
+        return self._response()
 
 
 class FakeChatCompletionsClient:
@@ -431,13 +471,14 @@ class FakeChatCompletionsClient:
         return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
 
 
-def _make_chat_completions_llm():
+def _make_chat_completions_llm(prompt_cache_key=None):
     llm = real_openai_utils.OpenAIInstance(
         model_name="deepseek-v4-flash",
         api_key="test-key",
         base_url="https://example.com/v1",
         max_retries=0,
         provider="deepseek",
+        prompt_cache_key=prompt_cache_key,
     )
     completions = FakeChatCompletionsClient()
     llm.client = types.SimpleNamespace(
@@ -446,12 +487,13 @@ def _make_chat_completions_llm():
     return llm, completions
 
 
-def _make_responses_llm():
+def _make_responses_llm(prompt_cache_key=None):
     llm = real_openai_utils.OpenAIInstance(
         model_name="gpt-5.6-sol",
         api_key="test-key",
         base_url="https://example.com/v1",
         max_retries=0,
+        prompt_cache_key=prompt_cache_key,
     )
     responses = FakeResponsesClient()
     llm.client = types.SimpleNamespace(responses=responses)
@@ -459,17 +501,18 @@ def _make_responses_llm():
 
 
 def test_openai_chat_ainvoke_uses_large_token_limit_and_high_reasoning_effort():
-    llm, completions = _make_chat_completions_llm()
+    llm, completions = _make_chat_completions_llm(prompt_cache_key="cache-key")
 
     response = asyncio.run(llm.ainvoke([{"role": "user", "content": "question"}]))
 
     assert response.content == "answer"
     assert completions.calls[0]["max_tokens"] == 32768
     assert completions.calls[0]["reasoning_effort"] == "high"
+    assert "prompt_cache_key" not in completions.calls[0]
 
 
 def test_responses_ainvoke_strips_historical_reasoning_content():
-    llm, responses = _make_responses_llm()
+    llm, responses = _make_responses_llm(prompt_cache_key="cache-key")
     messages = [
         {"role": "assistant", "content": "previous answer", "reasoning_content": "private reasoning"},
         {"role": "user", "content": "next question"},
@@ -484,11 +527,46 @@ def test_responses_ainvoke_strips_historical_reasoning_content():
     ]
     assert responses.calls[0]["max_output_tokens"] == 32768
     assert responses.calls[0]["reasoning"] == {"effort": "high"}
+    assert responses.calls[0]["include"] == ["reasoning.encrypted_content"]
+    assert responses.calls[0]["prompt_cache_key"] == "cache-key"
+    assert response.response_metadata == {
+        "type": "provider_response",
+        "payload": {
+            "responseId": "resp_test",
+            "status": "completed",
+            "items": [item.data for item in responses.output],
+            "cachedTokens": 3072,
+        }
+    }
     assert messages[0]["reasoning_content"] == "private reasoning"
 
 
+def test_responses_input_replays_native_provider_items():
+    llm, responses = _make_responses_llm()
+    provider_items = [
+        {"id": "rs_previous", "type": "reasoning", "summary": [], "encrypted_content": "cipher"},
+        {"id": "msg_previous", "type": "message", "role": "assistant", "status": "completed", "content": []},
+    ]
+    messages = [
+        {
+            "role": "assistant",
+            "content": "previous answer",
+            "reasoning_content": "display reasoning",
+            "providerResponseItems": provider_items,
+            "providerResponseId": "resp_previous",
+        },
+        {"role": "user", "content": "next question"},
+    ]
+
+    asyncio.run(llm.ainvoke(messages))
+
+    assert responses.calls[0]["input"] == provider_items + [
+        {"role": "user", "content": "next question"},
+    ]
+
+
 async def _collect_responses_stream(llm, messages):
-    return [chunk.content async for chunk in llm.astream(messages)]
+    return [chunk async for chunk in llm.astream(messages)]
 
 
 def test_responses_astream_strips_historical_reasoning_content():
@@ -500,12 +578,35 @@ def test_responses_astream_strips_historical_reasoning_content():
 
     chunks = asyncio.run(_collect_responses_stream(llm, messages))
 
-    assert chunks == ["answer"]
+    assert [chunk.content for chunk in chunks] == ["answer", ""]
+    assert chunks[-1].response_metadata == {
+        "type": "provider_response",
+        "payload": {
+            "responseId": "resp_test",
+            "status": "completed",
+            "items": [item.data for item in responses.output],
+            "cachedTokens": 3072,
+        }
+    }
     assert responses.calls[0]["input"] == [
         {"role": "assistant", "content": "previous answer"},
         {"role": "user", "content": "next question"},
     ]
+    assert responses.calls[0]["include"] == ["reasoning.encrypted_content"]
     assert messages[0]["reasoning_content"] == "private reasoning"
+
+
+def test_unified_stream_forwards_provider_response_metadata():
+    metadata = {
+        "type": "provider_response",
+        "payload": {"responseId": "resp_test", "status": "completed", "items": []},
+    }
+
+    class MetadataLLM:
+        async def astream(self, messages):
+            yield utils.ResponseWrapper("", response_metadata=metadata)
+
+    assert asyncio.run(_collect_unified_stream(MetadataLLM())) == [metadata]
 
 
 def _run_tests():
@@ -526,7 +627,9 @@ def _run_tests():
         test_unified_stream_ignores_empty_response_wrapper_chunks,
         test_openai_chat_ainvoke_uses_large_token_limit_and_high_reasoning_effort,
         test_responses_ainvoke_strips_historical_reasoning_content,
+        test_responses_input_replays_native_provider_items,
         test_responses_astream_strips_historical_reasoning_content,
+        test_unified_stream_forwards_provider_response_metadata,
     ]
     for test in tests:
         test()

@@ -99,6 +99,10 @@ public class ConversationMessages {
     @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
     private Object options;
 
+    private String providerResponseId;
+
+    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private Object providerResponseItems;
 
     private Long firstTokenLatencyMs;
 

@@ -69,6 +69,8 @@ CREATE TABLE `conversation_messages` (
   `is_deleted` INT NOT NULL DEFAULT 0 ,
   `options` JSON NULL,
   `thinking` MEDIUMTEXT NULL,
+  `provider_response_id` VARCHAR(128) NULL COMMENT 'Responses API response ID（审计）',
+  `provider_response_items` JSON NULL COMMENT 'Responses API 完整输出 items，用于多轮前缀缓存',
    PRIMARY KEY (`id`)
 )
 ENGINE = InnoDB

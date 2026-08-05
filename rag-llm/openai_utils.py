@@ -23,6 +23,7 @@ class OpenAIInstance:
             provider: str = "openai",
             max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
             reasoning_effort: str = "high",
+            prompt_cache_key: str = None,
     ):
         self.model_name = model_name
         self.provider = provider
@@ -30,6 +31,7 @@ class OpenAIInstance:
         self.enable_web_search = enable_web_search
         self.max_output_tokens = max_output_tokens
         self.reasoning_effort = reasoning_effort
+        self.prompt_cache_key = prompt_cache_key
 
         self.client = AsyncOpenAI(
             api_key=api_key,
@@ -46,10 +48,38 @@ class OpenAIInstance:
 
     @staticmethod
     def _responses_input(messages: list):
+        response_input = []
+        for message in messages:
+            provider_response_items = message.get("providerResponseItems")
+            if isinstance(provider_response_items, list) and provider_response_items:
+                response_input.extend(provider_response_items)
+                continue
+            response_input.append({
+                key: value
+                for key, value in message.items()
+                if key not in ("reasoning_content", "providerResponseItems", "providerResponseId")
+            })
+        return response_input
+
+    @staticmethod
+    def _serialize_response_items(response):
         return [
-            {key: value for key, value in message.items() if key != "reasoning_content"}
-            for message in messages
+            item.model_dump(exclude_none=True) if hasattr(item, "model_dump") else item
+            for item in (getattr(response, "output", None) or [])
         ]
+
+    def _provider_response_payload(self, response):
+        payload = {
+            "responseId": response.id,
+            "status": response.status,
+            "items": self._serialize_response_items(response),
+        }
+        usage = getattr(response, "usage", None)
+        input_details = getattr(usage, "input_tokens_details", None)
+        cached_tokens = getattr(input_details, "cached_tokens", None)
+        if cached_tokens is not None:
+            payload["cachedTokens"] = cached_tokens
+        return payload
 
     def _responses_extract(self, event):
         event_type = getattr(event, "type", None)
@@ -57,6 +87,15 @@ class OpenAIInstance:
             return ResponseWrapper(content=event.delta)
         if event_type in ("response.reasoning_text.delta", "response.reasoning_summary_text.delta"):
             return ResponseWrapper(content=[{"type": "reasoning", "text": event.delta}])
+        if event_type == "response.completed":
+            response = event.response
+            return ResponseWrapper(
+                content="",
+                response_metadata={
+                    "type": "provider_response",
+                    "payload": self._provider_response_payload(response),
+                }
+            )
         return None
 
     def chat_api_extract(self, chunk):
@@ -77,9 +116,16 @@ class OpenAIInstance:
                 response = await self.client.responses.create(
                     model=self.model_name,
                     input=self._responses_input(messages),
+                    include=["reasoning.encrypted_content"],
                     **self.get_generate_config()
                 )
-                return ResponseWrapper(content=response.output_text)
+                return ResponseWrapper(
+                    content=response.output_text,
+                    response_metadata={
+                        "type": "provider_response",
+                        "payload": self._provider_response_payload(response),
+                    } if response.status == "completed" else None
+                )
             response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
@@ -166,6 +212,8 @@ class OpenAIInstance:
             r["tools"] = tools
         if self._use_responses_api():
             r["max_output_tokens"] = self.max_output_tokens
+            if self.prompt_cache_key:
+                r["prompt_cache_key"] = self.prompt_cache_key
         else:
             r["max_tokens"] = self.max_output_tokens
             r["reasoning_effort"] = self.reasoning_effort
@@ -177,6 +225,7 @@ class OpenAIInstance:
                 stream = await self.client.responses.create(
                     model=self.model_name,
                     input=self._responses_input(messages),
+                    include=["reasoning.encrypted_content"],
                     stream=True,
                     **self.get_generate_config()
                 )
