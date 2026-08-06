@@ -471,12 +471,13 @@ class FakeChatCompletionsClient:
         return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
 
 
-def _make_chat_completions_llm(prompt_cache_key=None):
+def _make_chat_completions_llm(prompt_cache_key=None, enable_thinking=False):
     llm = real_openai_utils.OpenAIInstance(
         model_name="deepseek-v4-flash",
         api_key="test-key",
         base_url="https://example.com/v1",
         max_retries=0,
+        enable_thinking=enable_thinking,
         provider="deepseek",
         prompt_cache_key=prompt_cache_key,
     )
@@ -501,14 +502,28 @@ def _make_responses_llm(prompt_cache_key=None):
 
 
 def test_openai_chat_ainvoke_uses_large_token_limit_and_high_reasoning_effort():
-    llm, completions = _make_chat_completions_llm(prompt_cache_key="cache-key")
+    llm, completions = _make_chat_completions_llm(
+        prompt_cache_key="cache-key",
+        enable_thinking=True,
+    )
 
     response = asyncio.run(llm.ainvoke([{"role": "user", "content": "question"}]))
 
     assert response.content == "answer"
     assert completions.calls[0]["max_tokens"] == 32768
     assert completions.calls[0]["reasoning_effort"] == "high"
+    assert completions.calls[0]["extra_body"]["thinking"] == {"type": "enabled"}
     assert "prompt_cache_key" not in completions.calls[0]
+
+
+def test_openai_chat_ainvoke_omits_reasoning_effort_when_thinking_disabled():
+    llm, completions = _make_chat_completions_llm()
+
+    response = asyncio.run(llm.ainvoke([{"role": "user", "content": "question"}]))
+
+    assert response.content == "answer"
+    assert "reasoning_effort" not in completions.calls[0]
+    assert completions.calls[0]["extra_body"]["thinking"] == {"type": "disabled"}
 
 
 def test_responses_ainvoke_strips_historical_reasoning_content():
@@ -626,6 +641,7 @@ def _run_tests():
         test_other_gemini_stream_uses_ainvoke_once,
         test_unified_stream_ignores_empty_response_wrapper_chunks,
         test_openai_chat_ainvoke_uses_large_token_limit_and_high_reasoning_effort,
+        test_openai_chat_ainvoke_omits_reasoning_effort_when_thinking_disabled,
         test_responses_ainvoke_strips_historical_reasoning_content,
         test_responses_input_replays_native_provider_items,
         test_responses_astream_strips_historical_reasoning_content,

@@ -216,7 +216,8 @@ class OpenAIInstance:
                 r["prompt_cache_key"] = self.prompt_cache_key
         else:
             r["max_tokens"] = self.max_output_tokens
-            r["reasoning_effort"] = self.reasoning_effort
+            if self.enable_thinking:
+                r["reasoning_effort"] = self.reasoning_effort
         return r
 
     async def astream(self, messages: list) -> AsyncGenerator[ResponseWrapper, None]:
