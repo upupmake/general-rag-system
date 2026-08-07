@@ -339,7 +339,7 @@ async def find_knowledge_base_files(
         Field(description="文件名匹配模式，可使用 % 匹配任意字符，例如 %.md。", min_length=1),
     ],
     offset: Annotated[int, Field(description="分页起始偏移量，从 0 开始。", ge=0)] = 0,
-    limit: Annotated[int, Field(description="本次最多返回的文件数，取值范围 1 到 100。", ge=1, le=100)] = 30,
+    limit: Annotated[int, Field(description="本次最多返回的文件数，取值范围 1 到 100。", ge=1, le=100)] = 100,
 ) -> dict:
     """按文件名模式查找知识库文件，只返回 documentId、文件名和总片段数。使用 % 作为通配符。"""
     request_summary = {"namePattern": name_pattern, "offset": offset, "limit": limit}
