@@ -8,7 +8,9 @@
 import json
 import logging
 import os
+from datetime import datetime
 from typing import List, Dict, Any, Optional
+from zoneinfo import ZoneInfo
 
 import tiktoken
 from langchain_core.documents import Document
@@ -673,5 +675,7 @@ class AgenticRAGService:
             prompt_cache_key=options.get('promptCacheKey') if options else None,
         )
 
+        current_date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+        conversation[0]["content"] += f"\n\n<system>当前时间为：{current_date}</system>"
         async for item in unified_llm_stream(llm, conversation):
             yield item
