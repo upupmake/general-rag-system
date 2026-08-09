@@ -10,7 +10,9 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   GithubOutlined,
-  KeyOutlined
+  KeyOutlined,
+  AppstoreOutlined,
+  DownOutlined
 } from '@ant-design/icons-vue';
 // 引入本地静态资源 URL
 import lightThemeUrl from '@/assets/github-markdown.min.css?url';
@@ -239,7 +241,7 @@ const go = (path) => {
         </div>
         
         <!-- 功能菜单 -->
-        <a-menu mode="inline" :selectedKeys="selectedKeys" :theme="themeStore.isDark ? 'dark' : 'light'" :inline-collapsed="collapsed">
+        <a-menu class="function-menu" mode="inline" :selectedKeys="selectedKeys" :theme="themeStore.isDark ? 'dark' : 'light'" :inline-collapsed="collapsed">
           <a-menu-item key="new-chat" @click="go('/chat/new')">
             <template #icon>
               <span style="font-size: 16px;">➕</span>
@@ -278,6 +280,46 @@ const go = (path) => {
             Access Key
           </a-menu-item>
         </a-menu>
+
+        <div class="mobile-function-nav">
+          <a-dropdown :trigger="['click']" placement="bottomLeft" overlay-class-name="mobile-function-dropdown">
+            <a-button class="mobile-function-nav-trigger">
+              <template #icon>
+                <appstore-outlined />
+              </template>
+              <span>功能菜单</span>
+              <down-outlined class="mobile-function-nav-chevron" />
+            </a-button>
+            <template #overlay>
+              <a-menu :selectedKeys="selectedKeys" :theme="themeStore.isDark ? 'dark' : 'light'">
+                <a-menu-item key="new-chat" @click="go('/chat/new')">
+                  <template #icon><span>➕</span></template>
+                  新聊天
+                </a-menu-item>
+                <a-menu-item key="dashboard" @click="go('/dashboard')">
+                  <template #icon><span>📊</span></template>
+                  Dashboard
+                </a-menu-item>
+                <a-menu-item key="kb" @click="go('/kb')">
+                  <template #icon><span>📚</span></template>
+                  知识库
+                </a-menu-item>
+                <a-menu-item key="workspaces" @click="go('/workspaces')">
+                  <template #icon><span>🏢</span></template>
+                  工作空间
+                </a-menu-item>
+                <a-menu-item key="search" @click="go('/search')">
+                  <template #icon><span>🔍</span></template>
+                  搜索对话
+                </a-menu-item>
+                <a-menu-item key="access-keys" @click="go('/access-keys')">
+                  <template #icon><key-outlined /></template>
+                  Access Key
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
+        </div>
 
         <!-- 最近会话（独立区域） - 收起时隐藏 -->
         <div v-if="!collapsed" class="session-wrapper">
@@ -607,11 +649,48 @@ const go = (path) => {
   opacity: 0;
 }
 
+.mobile-function-nav {
+  display: none;
+}
+
+:global(.mobile-function-dropdown .ant-dropdown-menu) {
+  min-width: 208px;
+}
+
 /* 移动端响应式 */
 @media (max-width: 768px) {
   /* 在移动端，侧边栏在收起时完全隐藏 */
   .sidebar-container {
     overflow-x: hidden;
+  }
+
+  .function-menu {
+    display: none;
+  }
+
+  .mobile-function-nav {
+    display: block;
+    flex-shrink: 0;
+    padding: 8px 12px 6px;
+  }
+
+  .mobile-function-nav-trigger {
+    width: 100%;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    border-radius: 6px;
+  }
+
+  .mobile-function-nav-chevron {
+    margin-left: auto;
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 11px;
+  }
+
+  :global(body[data-theme='dark']) .mobile-function-nav-chevron {
+    color: rgba(255, 255, 255, 0.45);
   }
 }
 
