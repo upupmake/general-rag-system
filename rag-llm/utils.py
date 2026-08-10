@@ -462,7 +462,7 @@ async def image_split(
 
     # 2. 获取配置
     model_info = {
-        'name': 'doubao-seed-2.0-code',
+        'name': 'doubao-seed-2.1-turbo',
         'provider': 'bytedance'
     }
     settings = _get_model_setting(model_info)
