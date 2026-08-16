@@ -3,11 +3,10 @@ import os
 JAVA_OPENAPI_BASE_URL = os.getenv(
     "JAVA_OPENAPI_BASE_URL",
     "https://starvpn.forwardforever.top:5616/api/openapi/v1",
-    # "http://127.0.0.1:8080/api/openapi/v1",
 ).rstrip("/")
 RAG_LLM_BASE_URL = os.getenv(
     "RAG_LLM_BASE_URL",
-    "http://192.168.188.6:8848/rag",
+    "http://192.168.188.14:6667/rag",
 ).rstrip("/")
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8858"))
