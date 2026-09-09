@@ -6,6 +6,7 @@ langchain
 langchain_community
 langchain_core
 langchain_milvus
+langchain_openai
 langchain_text_splitters
 miniopy_async
 numpy

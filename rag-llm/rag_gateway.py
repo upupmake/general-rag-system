@@ -58,8 +58,8 @@ class RAGGateway:
         self.llm = None
         self.structured_agent = None
         self.model_info = {
-            "name": "glm-5.2",
-            "provider": "z-ai"
+            "name": "deepseek-v4-flash",
+            "provider": "deepseek"
         }
         self.generate_config = {
             "extra_body": {"thinking": {"type": "disabled"}}

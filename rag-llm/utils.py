@@ -551,7 +551,7 @@ def cut_history(history: list, model: dict, context_multiplier: int = None):
     base_token = 10240  # 10k
 
     # 按模型计算默认上限
-    default_max_tokens = base_token * 8
+    default_max_tokens = base_token * 7
     if model_name.startswith("gpt-"):
         default_max_tokens = base_token * 6
 
