@@ -100,6 +100,7 @@ const {
   isLastUserMsgGenerating,
   lastAssistantMessage,
   canEditOrRetry,
+  lastUserHasAssistant,
   isLastUserMessage,
   isLastAssistantMessage
 } = useChat(
@@ -451,6 +452,14 @@ const confirmContextCustom = () => {
                     :icon="h(EditOutlined)"
                     @click="startEditByItem(item)"
                     title="编辑问题"/>
+                <!-- 用户消息：上一轮中断（其后没有助手消息）时的重试按钮 -->
+                <a-button
+                    v-if="item.role === 'user' && isLastUserMessage(item) && !lastUserHasAssistant && canEditOrRetry"
+                    type="text"
+                    size="small"
+                    :icon="h(ReloadOutlined)"
+                    @click="onRetryFromAssistant()"
+                    title="重试回答"/>
                 <!-- 助手消息：重试按钮 -->
                 <a-button
                     v-if="item.role === 'assistant' && isLastAssistantMessage(item) && canEditOrRetry"

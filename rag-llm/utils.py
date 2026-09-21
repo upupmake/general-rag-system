@@ -539,19 +539,37 @@ def _history_message_token_count(message: dict) -> int:
     return get_token_count(message.get("content") or "")
 
 
+def _collect_complete_pairs(messages: list) -> list:
+    """从尾部收集完整的 [user, assistant] 对话对，孤行（不成对的消息）直接丢弃"""
+    pairs = []
+    i = len(messages) - 1
+    while i >= 1:
+        prev_msg, cur_msg = messages[i - 1], messages[i]
+        if cur_msg.get("role") == "assistant" and prev_msg.get("role") == "user":
+            pairs.insert(0, [prev_msg, cur_msg])
+            i -= 2
+        else:
+            logger.warning(f"历史消息不成对，丢弃孤行消息: role={cur_msg.get('role')}")
+            i -= 1
+    # 扫描到头部仍剩余的单条消息同样是不成对的孤行
+    if i == 0:
+        logger.warning(f"历史消息不成对，丢弃孤行消息: role={messages[0].get('role')}")
+    return pairs
+
+
 def cut_history(history: list, model: dict, context_multiplier: int = None):
     current_msg = history[-1]
     previous_msgs = history[:-1]
 
     processed_context = []
     current_token_count = _history_message_token_count(current_msg)
-    n = len(previous_msgs)
+    pairs = _collect_complete_pairs(previous_msgs)
     model_name = model.get("name", "")
 
     base_token = 10240  # 10k
 
     # 按模型计算默认上限
-    default_max_tokens = base_token * 7
+    default_max_tokens = base_token * 10
     if model_name.startswith("gpt-"):
         default_max_tokens = base_token * 6
 
@@ -568,8 +586,7 @@ def cut_history(history: list, model: dict, context_multiplier: int = None):
     else:
         max_tokens = default_max_tokens
 
-    for i in range(n, 1, -2):
-        pair = previous_msgs[i - 2: i]
+    for pair in reversed(pairs):
         pair_tokens = sum(_history_message_token_count(message) for message in pair)
 
         if current_token_count + pair_tokens < max_tokens:

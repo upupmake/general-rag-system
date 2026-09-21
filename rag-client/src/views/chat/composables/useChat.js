@@ -30,6 +30,39 @@ export function useChat(
     const stoppedFinalized = ref(false)
     const streamStarted = ref(false)
 
+    const buildMessages = (data) => data.map(msg => {
+        let ragProcess = null
+        if (msg.ragContext && msg.role === 'assistant') {
+            try {
+                ragProcess = typeof msg.ragContext === 'string' ? JSON.parse(msg.ragContext) : msg.ragContext
+            } catch (e) {
+                console.error('Failed to parse ragContext:', e)
+            }
+        }
+
+        let options = null
+        if (msg.options) {
+            try {
+                options = typeof msg.options === 'string' ? JSON.parse(msg.options) : msg.options
+            } catch (e) {
+                console.error('Failed to parse options:', e)
+            }
+        }
+        return reactive({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            status: msg.status,
+            loading: msg.role === 'assistant' && msg.status === 'generating',
+            ragProcess: ragProcess,
+            latencyMs: msg.latencyMs,
+            totalTokens: msg.totalTokens,
+            options: options,
+            thinking: msg.thinking,
+            thinkingCollapseKeys: []
+        })
+    })
+
     const finalizeStopped = () => {
         if (stoppedFinalized.value) return
         stoppedFinalized.value = true
@@ -58,11 +91,18 @@ export function useChat(
         setTimeout(async () => {
             try {
                 const data = await fetchSessionMessages(sid)
-                data.forEach((msg, i) => {
-                    if (messages.value[i] && !messages.value[i].id && msg.id) {
-                        messages.value[i].id = msg.id
-                    }
-                })
+                const local = messages.value
+                const aligned = data.length === local.length && data.every((msg, i) => msg.role === local[i].role)
+                if (aligned) {
+                    data.forEach((msg, i) => {
+                        if (local[i] && !local[i].id && msg.id) {
+                            local[i].id = msg.id
+                        }
+                    })
+                } else {
+                    // 本地与服务端结构不一致（例如后端复用了上一轮的 user 行），整体重建
+                    messages.value = buildMessages(data)
+                }
             } catch (e) {
                 console.error('停止后刷新消息失败', e)
             }
@@ -236,38 +276,7 @@ export function useChat(
             selectedKb.value = null
         }
 
-        messages.value = data.map(msg => {
-            let ragProcess = null
-            if (msg.ragContext && msg.role === 'assistant') {
-                try {
-                    ragProcess = typeof msg.ragContext === 'string' ? JSON.parse(msg.ragContext) : msg.ragContext
-                } catch (e) {
-                    console.error('Failed to parse ragContext:', e)
-                }
-            }
-
-            let options = null
-            if (msg.options) {
-                try {
-                    options = typeof msg.options === 'string' ? JSON.parse(msg.options) : msg.options
-                } catch (e) {
-                    console.error('Failed to parse options:', e)
-                }
-            }
-            return reactive({
-                id: msg.id,
-                role: msg.role,
-                content: msg.content,
-                status: msg.status,
-                loading: msg.role === 'assistant' && msg.status === 'generating',
-                ragProcess: ragProcess,
-                latencyMs: msg.latencyMs,
-                totalTokens: msg.totalTokens,
-                options: options,
-                thinking: msg.thinking,
-                thinkingCollapseKeys: []
-            })
-        })
+        messages.value = buildMessages(data)
 
         // 恢复工具和思考状态
         const lastUserMsg = messages.value.filter(m => m.role === 'user').pop()
@@ -440,9 +449,21 @@ export function useChat(
         return null
     })
 
+    const lastUserHasAssistant = computed(() => {
+        const msgs = messages.value
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === 'user') {
+                return msgs[i + 1]?.role === 'assistant'
+            }
+        }
+        return false
+    })
+
     const canEditOrRetry = computed(() => {
         const msg = lastUserMessage.value
         if (!msg) return false
+        // 上一轮中断/失败（user 后没有 assistant）时也允许编辑/重试
+        if (!lastUserHasAssistant.value) return true
         return ['completed', 'error'].includes(msg.status) || !msg.status
     })
 
@@ -474,6 +495,7 @@ export function useChat(
         lastUserMessage,
         isLastUserMsgGenerating,
         lastAssistantMessage,
+        lastUserHasAssistant,
         canEditOrRetry,
         isLastUserMessage,
         isLastAssistantMessage

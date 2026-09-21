@@ -14,6 +14,7 @@ import com.rag.ragserver.dto.MessageEditDTO;
 import com.rag.ragserver.dto.MessageRetryDTO;
 import com.rag.ragserver.exception.BusinessException;
 import com.rag.ragserver.service.*;
+import com.rag.ragserver.utils.ChatStreamRegistry;
 import com.rag.ragserver.utils.ModelUtils;
 import com.rag.ragserver.domain.model.vo.ModelPermission;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +53,7 @@ public class ChatController {
     private final RolesService rolesService;
     private final RequestLimitationsService requestLimitationsService;
     private final WebClient webClient;
+    private final ChatStreamRegistry chatStreamRegistry;
 
     @PostMapping("/start")
     public R<Map<String, Long>> startChat(@RequestBody ChatStart chatStart) {
@@ -125,7 +127,8 @@ public class ChatController {
                 )
                 .eq(ConversationMessages::getSessionId, sessionId)
                 .and(w -> w.isNull(ConversationMessages::getIsDeleted).or().eq(ConversationMessages::getIsDeleted, 0))
-                .orderByAsc(ConversationMessages::getCreatedAt);
+                .orderByAsc(ConversationMessages::getCreatedAt)
+                .orderByAsc(ConversationMessages::getId);
         List<ConversationMessages> messages = conversationMessagesService.list(messageQueryWrapper);
 
         // 3. 单独查询最后5条assistant消息的 rag_context，避免加载历史消息的大字段
@@ -168,22 +171,25 @@ public class ChatController {
         return executeStreamChat(chatStream, userId, modelPermission, messageList, currentUserMessageId);
     }
 
-    private void updateMessageStatus(Long sessionId, Long messageId, String status) {
+    private void markMessageGenerating(Long sessionId, Long messageId) {
         Mono.fromRunnable(() -> {
-            ConversationMessages message = conversationMessagesService.getById(messageId);
-            if (message != null) {
-                message.setStatus(status);
-                conversationMessagesService.updateById(message);
-
-                // 同时更新 Session 的最后活跃时间
-                querySessionsService.update(
-                        new LambdaUpdateWrapper<QuerySessions>()
-                                .eq(QuerySessions::getId, sessionId)
-                                .set(QuerySessions::getLastActiveAt, new Date())
-                );
-            } else {
-                log.warn("未找到消息ID: {}", messageId);
+            // 状态单调：只允许 pending -> generating，避免终态被并发回退
+            boolean updated = conversationMessagesService.update(
+                    new LambdaUpdateWrapper<ConversationMessages>()
+                            .eq(ConversationMessages::getId, messageId)
+                            .eq(ConversationMessages::getStatus, "pending")
+                            .set(ConversationMessages::getStatus, "generating")
+            );
+            if (!updated) {
+                log.warn("消息状态未推进为 generating（可能已是终态）, messageId={}", messageId);
             }
+
+            // 同时更新 Session 的最后活跃时间
+            querySessionsService.update(
+                    new LambdaUpdateWrapper<QuerySessions>()
+                            .eq(QuerySessions::getId, sessionId)
+                            .set(QuerySessions::getLastActiveAt, new Date())
+            );
         }).subscribeOn(Schedulers.boundedElastic()).subscribe();
     }
 
@@ -301,7 +307,8 @@ public class ChatController {
                 .eq(ConversationMessages::getSessionId, sessionId)
                 .eq(ConversationMessages::getUserId, userId)
                 .and(w -> w.isNull(ConversationMessages::getIsDeleted).or().eq(ConversationMessages::getIsDeleted, 0))
-                .orderByAsc(ConversationMessages::getCreatedAt);
+                .orderByAsc(ConversationMessages::getCreatedAt)
+                .orderByAsc(ConversationMessages::getId);
         List<ConversationMessages> messageList = conversationMessagesService.list(messageQueryWrapper);
         if (messageList.isEmpty()) {
             throw new BusinessException(400, "会话不存在或无权限访问");
@@ -311,44 +318,76 @@ public class ChatController {
 
     private Long processNewMessage(ChatStream chatStream, List<ConversationMessages> messageList,
                                    ConversationMessages lastMessage, Long userId) {
-        Long currentUserMessageId = lastMessage.getId();
         String lastRole = (String) lastMessage.getRole();
-        String lastStatus = (String) lastMessage.getStatus();
 
-        if ("user".equals(lastRole) && "generating".equals(lastStatus)) {
-            throw new BusinessException(400, "AI正在生成回复，请稍后再试");
+        // 最后一条不是 user：上一轮已完整（或数据异常），开启新一轮
+        if (!"user".equals(lastRole)) {
+            return insertUserMessage(chatStream, messageList, userId);
         }
-        if ("user".equals(lastRole) && "pending".equals(lastStatus)) {
-            chatStream.setQuestion(lastMessage.getContent());
-        } else if ("assistant".equals(lastRole)) {
-            if (chatStream.getQuestion() == null || chatStream.getQuestion().isEmpty()) {
-                throw new BusinessException(400, "请求信息为空");
-            }
-            ConversationMessages newUserMessage = new ConversationMessages();
-            newUserMessage.setSessionId(chatStream.getSessionId());
-            newUserMessage.setUserId(userId);
-            newUserMessage.setKbId(chatStream.getKbId());
-            newUserMessage.setRole("user");
-            newUserMessage.setContent(chatStream.getQuestion());
-            newUserMessage.setModelId(chatStream.getModelId());
-            newUserMessage.setStatus("pending");
 
-            // 保存 options
-            if (chatStream.getOptions() != null) {
-                Map<String, Object> opts = chatStream.getOptions();
-                if (opts.containsKey("thinking") && Boolean.FALSE.equals(opts.get("thinking"))) {
-                    opts.remove("thinking");
-                }
-                newUserMessage.setOptions(opts);
+        // 最后一条是 user 且没有 assistant：上一轮未完成（崩溃/写入失败/中断）
+        String lastStatus = lastMessage.getStatus() != null ? lastMessage.getStatus().toString() : "pending";
+        if ("generating".equals(lastStatus)) {
+            if (chatStreamRegistry.isActive(chatStream.getSessionId())) {
+                throw new BusinessException(400, "AI正在生成回复，请稍后再试");
             }
-
-            conversationMessagesService.save(newUserMessage);
-            messageList.add(newUserMessage);
-            currentUserMessageId = newUserMessage.getId();
-        } else {
-            throw new BusinessException(500, "未知异常");
+            log.warn("检测到陈旧的 generating 状态，按中断处理并复用该消息, sessionId={}, messageId={}",
+                    chatStream.getSessionId(), lastMessage.getId());
         }
-        return currentUserMessageId;
+
+        // 复用该 user 行：请求带问题则覆盖，否则沿用原内容（前端刷新后的续跑）
+        String question = chatStream.getQuestion();
+        if (question == null || question.isEmpty()) {
+            question = lastMessage.getContent();
+        }
+        if (question == null || question.isEmpty()) {
+            throw new BusinessException(400, "请求信息为空");
+        }
+        lastMessage.setContent(question);
+        lastMessage.setStatus("pending");
+        if (chatStream.getModelId() != null) {
+            lastMessage.setModelId(chatStream.getModelId());
+        }
+        if (chatStream.getKbId() != null) {
+            lastMessage.setKbId(chatStream.getKbId());
+        }
+        if (chatStream.getOptions() != null) {
+            lastMessage.setOptions(normalizeOptions(chatStream.getOptions()));
+        }
+        conversationMessagesService.updateById(lastMessage);
+        chatStream.setQuestion(question);
+        return lastMessage.getId();
+    }
+
+    private Long insertUserMessage(ChatStream chatStream, List<ConversationMessages> messageList, Long userId) {
+        if (chatStream.getQuestion() == null || chatStream.getQuestion().isEmpty()) {
+            throw new BusinessException(400, "请求信息为空");
+        }
+        ConversationMessages newUserMessage = new ConversationMessages();
+        newUserMessage.setSessionId(chatStream.getSessionId());
+        newUserMessage.setUserId(userId);
+        newUserMessage.setKbId(chatStream.getKbId());
+        newUserMessage.setRole("user");
+        newUserMessage.setContent(chatStream.getQuestion());
+        newUserMessage.setModelId(chatStream.getModelId());
+        newUserMessage.setStatus("pending");
+
+        // 保存 options
+        if (chatStream.getOptions() != null) {
+            newUserMessage.setOptions(normalizeOptions(chatStream.getOptions()));
+        }
+
+        conversationMessagesService.save(newUserMessage);
+        messageList.add(newUserMessage);
+        return newUserMessage.getId();
+    }
+
+    private Map<String, Object> normalizeOptions(Map<String, Object> options) {
+        Map<String, Object> opts = new java.util.HashMap<>(options);
+        if (opts.containsKey("thinking") && Boolean.FALSE.equals(opts.get("thinking"))) {
+            opts.remove("thinking");
+        }
+        return opts;
     }
 
     private Flux<String> executeStreamChat(ChatStream chatStream, Long userId, ModelPermission modelPermission,
@@ -402,7 +441,11 @@ public class ChatController {
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
                 })
-                .doOnSubscribe(a -> updateMessageStatus(sessionId, currentUserMessageId, "generating"))
+                .doOnSubscribe(a -> {
+                    chatStreamRegistry.markActive(sessionId, currentUserMessageId);
+                    markMessageGenerating(sessionId, currentUserMessageId);
+                })
+                .doOnNext(ignored -> chatStreamRegistry.refresh(sessionId))
                 .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, providerResponseInfo))
                 .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, providerResponseInfo, saved))
                 .doOnError(e -> {
@@ -416,7 +459,8 @@ public class ChatController {
                         saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, true)
                                 .subscribeOn(Schedulers.boundedElastic()).subscribe();
                     }
-                });
+                })
+                .doFinally(signal -> chatStreamRegistry.clear(sessionId));
 
         RequestLimitations requestLimitations = requestLimitationsService.getOne(
                 new LambdaQueryWrapper<RequestLimitations>()
@@ -554,12 +598,6 @@ public class ChatController {
             if (!saved.compareAndSet(false, true)) {
                 return objectMapper.writeValueAsString(Map.of("type", "done"));
             }
-            ConversationMessages userMessage = conversationMessagesService.getById(currentUserMessageId);
-            if (userMessage != null) {
-                userMessage.setStatus("completed");
-                conversationMessagesService.updateById(userMessage);
-            }
-
             ConversationMessages aiMessage = new ConversationMessages();
             aiMessage.setSessionId(sessionId);
             aiMessage.setUserId(userId);
@@ -614,7 +652,7 @@ public class ChatController {
                 }
             }
 
-            conversationMessagesService.save(aiMessage);
+            conversationMessagesService.saveRoundResult(currentUserMessageId, "completed", aiMessage);
 
             return objectMapper.writeValueAsString(Map.of(
                     "type", "done",
@@ -630,12 +668,6 @@ public class ChatController {
                                             boolean clientCancelled) {
         return Mono.defer(() -> Mono.fromCallable(() -> {
             String messageStatus = clientCancelled ? "completed" : "error";
-            ConversationMessages userMessage = conversationMessagesService.getById(currentUserMessageId);
-            if (userMessage != null) {
-                userMessage.setStatus(messageStatus);
-                conversationMessagesService.updateById(userMessage);
-            }
-
             ConversationMessages aiMessage = new ConversationMessages();
             aiMessage.setSessionId(sessionId);
             aiMessage.setUserId(userId);
@@ -676,7 +708,7 @@ public class ChatController {
                 }
             }
 
-            conversationMessagesService.save(aiMessage);
+            conversationMessagesService.saveRoundResult(currentUserMessageId, messageStatus, aiMessage);
             if (clientCancelled) {
                 log.info("客户端中断，已保存部分内容为 assistant 消息，messageId={}, contentLength={}", aiMessage.getId(), sb.length());
             } else {

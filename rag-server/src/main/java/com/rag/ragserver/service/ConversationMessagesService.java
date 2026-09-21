@@ -32,6 +32,17 @@ public interface ConversationMessagesService extends IService<ConversationMessag
      */
     ConversationMessages retryLastAssistantMessage(Long sessionId, Long userMessageId, Long userId);
 
+    /**
+     * 在同一事务内写入一轮对话的终态：user 消息状态 + assistant 消息。
+     * 任一步失败整体回滚，避免出现“user 已是终态但没有 assistant”的破对状态。
+     *
+     * @param userMessageId 本轮用户消息ID
+     * @param userStatus    用户消息终态（completed / error）
+     * @param assistantMessage 待保存的 assistant 消息
+     * @return 保存后的 assistant 消息（含自增ID）
+     */
+    ConversationMessages saveRoundResult(Long userMessageId, String userStatus, ConversationMessages assistantMessage);
+
     Long countTodayTokens();
 
     Long countTodayTokens(Long userId);

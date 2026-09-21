@@ -1,6 +1,7 @@
 package com.rag.ragserver.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -10,6 +11,7 @@ import com.rag.ragserver.domain.model.vo.ModelPerformanceVO;
 import com.rag.ragserver.exception.BusinessException;
 import com.rag.ragserver.service.ConversationMessagesService;
 import com.rag.ragserver.mapper.ConversationMessagesMapper;
+import com.rag.ragserver.utils.ChatStreamRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,8 +26,11 @@ import java.util.*;
  * @createDate 2026-01-02 23:06:15
  */
 @Service
+@RequiredArgsConstructor
 public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMessagesMapper, ConversationMessages>
         implements ConversationMessagesService {
+
+    private final ChatStreamRegistry chatStreamRegistry;
 
     @Override
     public Long countTodayTokens() {
@@ -49,7 +54,8 @@ public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMes
         queryWrapper.select(ConversationMessages::getId, ConversationMessages::getRagContext)
                 .eq(ConversationMessages::getSessionId, sessionId)
                 .eq(ConversationMessages::getRole, "assistant")
-                .orderByDesc(ConversationMessages::getCreatedAt);
+                .orderByDesc(ConversationMessages::getCreatedAt)
+                .orderByDesc(ConversationMessages::getId);
         IPage<ConversationMessages> pageWrapper = new Page<>(1, n);
         IPage<ConversationMessages> page = this.page(pageWrapper, queryWrapper);
         return page.getRecords();
@@ -63,7 +69,8 @@ public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMes
         queryWrapper.eq(ConversationMessages::getSessionId, sessionId)
                 .eq(ConversationMessages::getUserId, userId)
                 .and(w -> w.isNull(ConversationMessages::getIsDeleted).or().eq(ConversationMessages::getIsDeleted, 0))
-                .orderByAsc(ConversationMessages::getCreatedAt);
+                .orderByAsc(ConversationMessages::getCreatedAt)
+                .orderByAsc(ConversationMessages::getId);
         List<ConversationMessages> messages = this.list(queryWrapper);
 
         if (messages.isEmpty()) {
@@ -90,9 +97,9 @@ public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMes
             throw new BusinessException(400, "只能编辑最后一轮对话的用户问题");
         }
 
-        // 4. 校验状态：非generating状态才能编辑
+        // 4. 校验状态：只有该会话真正在生成时才拒绝；崩溃遗留的 generating 视为中断，允许编辑修复
         String status = lastUserMessage.getStatus() != null ? lastUserMessage.getStatus().toString() : "pending";
-        if ("generating".equals(status)) {
+        if ("generating".equals(status) && chatStreamRegistry.isActive(sessionId)) {
             throw new BusinessException(400, "AI正在生成回复中，请稍后再试");
         }
 
@@ -119,7 +126,9 @@ public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMes
         LambdaQueryWrapper<ConversationMessages> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(ConversationMessages::getSessionId, sessionId)
                 .eq(ConversationMessages::getUserId, userId)
-                .orderByAsc(ConversationMessages::getCreatedAt);
+                .and(w -> w.isNull(ConversationMessages::getIsDeleted).or().eq(ConversationMessages::getIsDeleted, 0))
+                .orderByAsc(ConversationMessages::getCreatedAt)
+                .orderByAsc(ConversationMessages::getId);
         List<ConversationMessages> messages = this.list(queryWrapper);
 
         if (messages.isEmpty()) {
@@ -146,31 +155,38 @@ public class ConversationMessagesServiceImpl extends ServiceImpl<ConversationMes
             throw new BusinessException(400, "只能重试最后一轮对话的AI回复");
         }
 
-        // 4. 校验状态：非generating状态才能重试
+        // 4. 校验状态：只有该会话真正在生成时才拒绝；崩溃遗留的 generating 视为中断，允许重试修复
         String status = lastUserMessage.getStatus() != null ? lastUserMessage.getStatus().toString() : "pending";
-        if ("generating".equals(status)) {
+        if ("generating".equals(status) && chatStreamRegistry.isActive(sessionId)) {
             throw new BusinessException(400, "AI正在生成回复中，请稍后再试");
         }
 
-        // 5. 校验：必须存在对应的assistant消息才能重试
-        if (lastUserIndex >= messages.size() - 1) {
-            throw new BusinessException(400, "没有可重试的AI回复");
+        // 5. 若存在对应的assistant消息则逻辑删除；上一轮中断/失败时允许直接重新生成
+        if (lastUserIndex < messages.size() - 1) {
+            ConversationMessages nextMessage = messages.get(lastUserIndex + 1);
+            if ("assistant".equals(nextMessage.getRole())) {
+                nextMessage.setIsDeleted(1);
+                this.removeById(nextMessage.getId());
+            }
         }
 
-        ConversationMessages assistantMessage = messages.get(lastUserIndex + 1);
-        if (!"assistant".equals(assistantMessage.getRole())) {
-            throw new BusinessException(400, "没有可重试的AI回复");
-        }
-
-        // 6. 逻辑删除该assistant消息
-        assistantMessage.setIsDeleted(1);
-        this.removeById(assistantMessage.getId());
-
-        // 7. 将用户消息状态改为pending，等待重新生成回复
+        // 6. 将用户消息状态改为pending，等待重新生成回复
         lastUserMessage.setStatus("pending");
         this.updateById(lastUserMessage);
 
         return lastUserMessage;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ConversationMessages saveRoundResult(Long userMessageId, String userStatus, ConversationMessages assistantMessage) {
+        if (userMessageId != null) {
+            this.update(new LambdaUpdateWrapper<ConversationMessages>()
+                    .eq(ConversationMessages::getId, userMessageId)
+                    .set(ConversationMessages::getStatus, userStatus));
+        }
+        this.save(assistantMessage);
+        return assistantMessage;
     }
 
     @Override
