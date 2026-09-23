@@ -11,7 +11,7 @@
 - **检索模式**：唯一的知识库检索模式是 Agentic RAG；RAG Gateway 判断需要检索时进入 Agentic RAG
 - **检索工具**：5 个检索工具加 1 个停止工具，共 6 个
 - **Embedding**：当前固定使用本地 Embedding 服务，地址为 `http://192.168.188.6:8890`，模型为 `Qwen/Qwen3-Embedding-0.6B`
-- **Rerank**：`qwen3-rerank`，提供方为 `qwen`
+- **Rerank**：已从检索链路移除，排序直接使用 Milvus 返回的向量相似度分数
 
 `root_path=/rag` 是 FastAPI 的根路径设置。应用代码中的路由前缀仍是 `/chat` 和 `/retrieval`，部署后通过 `/rag` 前缀访问。
 
@@ -33,7 +33,6 @@ rag-llm/
 ├── mq/document_embedding.py      文档下载、解析、分块、向量化和入库
 ├── milvus_utils.py               Milvus 客户端和集合生命周期
 ├── minio_utils.py                MinIO 文件读取
-├── aiohttp_utils.py              Rerank HTTP 调用
 └── requirements.txt              Python 依赖
 ```
 
@@ -94,7 +93,7 @@ MILVUS_TOKEN=<Milvus 令牌>
 
 ### 模型配置文件
 
-聊天模型和 Rerank 配置从 `model_config.json` 读取。文件路径相对于进程工作目录，服务每次调用配置读取函数时都会从磁盘重新读取，不使用进程内缓存。请根据部署环境准备该文件；本 README 不提供密钥、内网地址或具体供应商凭据。
+聊天模型配置从 `model_config.json` 读取。文件路径相对于进程工作目录，服务每次调用配置读取函数时都会从磁盘重新读取，不使用进程内缓存。请根据部署环境准备该文件；本 README 不提供密钥、内网地址或具体供应商凭据。
 
 聊天配置的顶层结构为 `chat`，按提供方组织；每个提供方包含 `settings` 默认候选和可选的模型名候选。候选可以是对象或列表，列表项默认启用，也可以使用 `enabled: false` 禁用。候选通常包含以下字段：
 
@@ -134,15 +133,15 @@ MILVUS_TOKEN=<Milvus 令牌>
 }
 ```
 
-实际使用的模型由请求中的 `model.name` 和 `model.provider` 选择。Agentic RAG 的检索决策控制器固定使用 `MiniMax-M3/minimax`；RAG Gateway 和会话标题生成固定使用 `glm-5.2/z-ai`，并关闭 thinking。官方聊天 LLM 的默认超时为 60 秒；候选自身配置的 `timeout` 可以覆盖该默认值。控制器使用 LangChain LLM，默认超时为 30 秒。
+实际使用的模型由请求中的 `model.name` 和 `model.provider` 选择。Agentic RAG 的检索决策控制器固定使用 `step-5-preview/stepfun`，`reasoning_effort` 为 `medium`；RAG Gateway 固定使用 `deepseek-v4-flash/deepseek` 并关闭 thinking；会话标题生成固定使用 `deepseek-v4-flash/deepseek`，不显式传思考参数。官方聊天 LLM 的默认超时为 60 秒；候选自身配置的 `timeout` 可以覆盖该默认值。控制器使用 LangChain LLM，默认超时为 30 秒。
 
-当前 Embedding 入口 `get_embedding_instance()` 不读取远程 Embedding 配置，而是固定返回本地服务实例。Rerank 从 `model_config.json` 的 `rerank.qwen.qwen3-rerank` 读取 endpoint 和 API 密钥。
+当前 Embedding 入口 `get_embedding_instance()` 不读取远程 Embedding 配置，而是固定返回本地服务实例。检索链路不再调用 Rerank，`model_config.json` 的 `rerank` 配置不再被读取。
 
 ## 聊天 API
 
 ### `POST /rag/chat/session/name`
 
-根据请求体中的 `content` 生成会话标题。标题模型固定为 `glm-5.2/z-ai`。请求示例：
+根据请求体中的 `content` 生成会话标题。标题模型固定为 `deepseek-v4-flash/deepseek`，不显式传思考参数。请求示例：
 
 ```json
 {
@@ -211,7 +210,7 @@ data: {"type":"usage","payload":{...}}
 1. `keyword_search`：按具体关键词检索正文，可用 `document_ids` 限定文档。
 2. `read_file_chunks`：按 `document_id` 和起止 chunk 索引读取连续正文，单次最多 20 个 chunk。
 3. `expand_context`：围绕已命中的 `document_id` 和 `chunk_index` 扩展前后上下文。
-4. `semantic_search`：多个 query 并行召回，使用 Rerank 和相关性阈值筛选。
+4. `semantic_search`：多个 query 并行召回（含关键词补召回），统一按 Milvus 向量相似度排序，经 K-Means 动态阈值过滤后返回（`top_k` 为上限）。
 5. `find_files`：按文件名模式查找文件，只返回文件元信息，不返回正文。
 6. `stop_search`：控制器判断信息足够、无法构造有效新查询或达到轮次上限时停止检索。
 
@@ -219,12 +218,14 @@ data: {"type":"usage","payload":{...}}
 
 - RAG Gateway 的 `use_rag` 决策只进入 Agentic RAG，不恢复传统一次性 RAG 分支。
 - 聊天入口默认最大检索轮次为 10，可通过 `options.maxRounds` 传入其他值。
-- 检索控制器固定为 `MiniMax-M3/minimax`。
+- 检索控制器固定为 `step-5-preview/stepfun`，`reasoning_effort` 为 `medium`。
 - 轮次结束条件包括：调用 `stop_search`、控制器没有工具调用、达到最大轮次、控制器调用失败，或控制器消息累计超过 256000 个 token。
 - 控制器 token 使用 `o200k_base` 编码计算。
 - `reference_docs` 以数值 chunk PK 去重；`all_docs` 以 `documentId` 聚合文件信息。
 - 文档定位统一使用 `documentId`。关键词检索使用 `document_ids`；连续读取和上下文扩展使用 `document_id`，不使用文件名定位。
 - 只有关键词检索和语义检索传递已命中的 chunk PK 以尽量避免重复；连续读取和上下文扩展不做排除过滤。
+- 同一轮内的多个工具调用按顺序串行执行，每个工具执行时取当前最新的已读 chunk 排除集合。
+- 检索失败（Milvus 异常、表达式错误等）以错误 ToolMessage 返回，与"没有检索到内容"区分；单个 query 失败时返回部分召回并在 ToolMessage 中标注失败数量。
 - Milvus 结果保留 `fileName`，用于展示和来源归因。
 - Agentic RAG 使用 `text-embedding-v4/qwen` 作为配置标识，但当前 Embedding 实例实际固定连接本地 `8890` 服务。
 
@@ -239,7 +240,7 @@ data: {"type":"usage","payload":{...}}
 | 方法 | 路径 | 主要请求字段 | 用途 |
 |---|---|---|---|
 | POST | `/rag/retrieval/keywords` | `keywords`、`matchMode`、`topK`、可选 `documentIds` | 关键词检索 |
-| POST | `/rag/retrieval/semantic` | `queries`、`relevanceQuery`、`topK`、`relevanceThreshold` | 语义检索和 Rerank |
+| POST | `/rag/retrieval/semantic` | `queries`、`topK` | 多查询语义检索，按向量相似度排序 |
 | POST | `/rag/retrieval/files` | `namePattern`、`offset`、`limit` | 文件元信息发现 |
 | POST | `/rag/retrieval/chunks` | `documentId`、`startChunkIndex`、`endChunkIndex` | 读取连续 chunk |
 | POST | `/rag/retrieval/context` | `documentId`、`chunkIndex`、`windowSize` | 扩展上下文 |
@@ -264,9 +265,7 @@ data: {"type":"usage","payload":{...}}
   "ownerUserId": 456,
   "knowledgeBaseId": 123,
   "queries": ["应用部署配置", "服务启动要求"],
-  "relevanceQuery": "部署方式、启动参数和运行环境要求",
-  "topK": 10,
-  "relevanceThreshold": 0.3
+  "topK": 10
 }
 ```
 
@@ -302,7 +301,7 @@ Milvus 客户端按用户和知识库获取，服务维护集合生命周期，�
 - `main.py`：服务端口、`root_path`、路由挂载和进程入口。
 - `services/chat.py`：聊天请求、RAG Gateway 分流、Agentic RAG 默认轮次和 SSE 事件。
 - `services/retrieval.py`：五个受信任内部检索接口及请求模型。
-- `agentic_rag_controller.py`：`MiniMax-M3/minimax` 检索控制器和工具选择提示词。
+- `agentic_rag_controller.py`：`step-5-preview/stepfun` 检索控制器（`reasoning_effort=medium`）和工具选择提示词。
 - `agentic_rag_toolkit.py`：六工具定义及底层 Milvus 检索。
 - `agentic_rag_utils.py`：Agentic RAG 多轮编排、token 限制、去重和引用。
 - `utils.py`：模型配置读取、官方 LLM fallback、Embedding 入口和统一流式处理。

@@ -305,22 +305,12 @@ async def search_knowledge_base_by_semantics(
         list[str],
         Field(description="用于扩大召回范围的语义查询列表，提供 1 到 10 条不同表述。", min_length=1, max_length=10),
     ],
-    relevance_query: Annotated[
-        str,
-        Field(description="用于 Rerank 和最终相关性判断的完整问题或检索目标。", min_length=1),
-    ],
     top_k: Annotated[int, Field(description="最多返回的相关片段数，取值范围 1 到 50。", ge=1, le=50)] = 10,
-    relevance_threshold: Annotated[
-        float,
-        Field(description="最低相关性阈值，取值范围 0 到 1；值越高，过滤越严格。", ge=0.0, le=1.0),
-    ] = 0.3,
 ) -> dict:
-    """执行多查询语义召回、关键词辅助召回、去重、Rerank 和相关性过滤。"""
+    """执行多查询语义召回、关键词辅助召回和去重，按向量相似度返回结果。"""
     request_summary = {
         "queries": queries,
-        "relevanceQuery": relevance_query,
         "topK": top_k,
-        "relevanceThreshold": relevance_threshold,
     }
 
     async def operation() -> dict:

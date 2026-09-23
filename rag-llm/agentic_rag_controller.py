@@ -4,10 +4,9 @@ Agentic RAG 决策控制器
 """
 import json
 import logging
-from typing import List, Dict, Any
+from typing import List
 
-from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage
 from langchain_core.tools import StructuredTool
 
 from utils import get_langchain_llm
@@ -24,7 +23,7 @@ CONTROLLER_SYSTEM_PROMPT = """你是 Agentic RAG 的检索决策控制器。你�
 1. **keyword_search** - 关键词精确匹配检索
 2. **read_file_chunks** - 按 documentId 读取连续chunk范围
 3. **expand_context** - 按 documentId 扩展已命中chunk的上下文
-4. **semantic_search** - 全库语义检索（多query并行+rerank+动态过滤）
+4. **semantic_search** - 全库语义检索（多query并行+向量分数排序+动态阈值过滤）
 5. **find_files** - 根据文件名模式查找文件
 6. **stop_search** - 停止检索
 
@@ -90,7 +89,7 @@ read_file_chunks → 找到关键内容 → expand_context 补充上下文
 | 失败情况 | 应对策略 |
 |----------|----------|
 | keyword_search 无结果 | 1. 换关键词 2. 改用 semantic_search |
-| semantic_search 结果少 | 1. 调整 queries 2. 降低 grade_score_threshold |
+| semantic_search 结果少 | 1. 调整 queries 2. 结合 keyword_search 补充 |
 | 文件 chunk 越界 | 1. 检查 maxChunkIndex 2. 缩小范围 |
 | 连续无增量 | 1. 换工具 2. stop_search |
 
@@ -110,8 +109,6 @@ read_file_chunks → 找到关键内容 → expand_context 补充上下文
 
 ### semantic_search
 - queries 建议4~6条，从多角度、多方面生成，可用空格分隔多个关键词
-- grade_query 是对用户问题核心概念的展开和细化，列举可能涉及的各个方面
-- grade_score_threshold 根据问题类型调整
 
 ### find_files
 - 使用 SQL LIKE 语法，%为通配符
@@ -125,92 +122,14 @@ class RetrievalController:
 
     def __init__(self):
         model_info = {
-            "name": "MiniMax-M3",
-            "provider": "minimax"
+            "name": "step-5-preview",
+            "provider": "stepfun"
         }
+        # 推理强度：low / medium / high
         generate_config = {
+            "reasoning_effort": "medium",
         }
         self.llm = get_langchain_llm(model_info, max_retries=2, **generate_config)
-
-    @staticmethod
-    def _format_history(history: list) -> str:
-        """格式化对话历史"""
-        if not history:
-            return "无对话历史"
-
-        lines = []
-        for msg in history:
-            if isinstance(msg, HumanMessage):
-                role, content = "用户", msg.content
-            elif isinstance(msg, AIMessage):
-                role, content = "助手", msg.content
-            elif isinstance(msg, dict):
-                role_key = msg.get("role", "")
-                role = "用户" if role_key == "user" else "助手" if role_key == "assistant" else role_key
-                content = msg.get("content", "")
-            else:
-                role, content = "未知", str(msg)
-            lines.append(f"{role}: {content}")
-
-        return "\n".join(lines)
-
-    @staticmethod
-    def _aggregate_docs_by_file(docs: List[Document]) -> Dict[str, List[Document]]:
-        """
-        按文件聚合文档，并按chunkIndex排序
-        """
-        file_docs = {}
-        for doc in docs:
-            file_name = doc.metadata.get("fileName")
-            if file_name not in file_docs:
-                file_docs[file_name] = []
-            file_docs[file_name].append(doc)
-
-        for file_name in file_docs:
-            file_docs[file_name].sort(key=lambda d: d.metadata.get("chunkIndex", 0))
-
-        return file_docs
-
-    @staticmethod
-    def _format_docs_by_file(docs: List[Document]) -> Dict[str, Any]:
-        """
-        格式化文档：按文件聚合并显示完整信息（包含内容）
-        """
-        file_docs = RetrievalController._aggregate_docs_by_file(docs)
-
-        result = {
-            "total_files": len(file_docs),
-            "total_chunks": len(docs),
-            "files": []
-        }
-
-        for file_name, file_chunks in sorted(file_docs.items()):
-            if not file_chunks:
-                continue
-
-            first_chunk = file_chunks[0]
-
-            sorted_chunks = sorted(file_chunks, key=lambda d: d.metadata.get("chunkIndex", 0))
-
-            chunks_data = []
-            for chunk in sorted_chunks:
-                chunks_data.append({
-                    "chunkIndex": chunk.metadata.get("chunkIndex", 0),
-                    "retrieved_round": chunk.metadata.get("retrieved_round"),
-                    "content": chunk.page_content
-                })
-
-            file_info = {
-                "fileName": file_name,
-                "documentId": first_chunk.metadata.get("documentId"),
-                "maxChunkIndex": first_chunk.metadata.get("maxChunkIndex"),
-                "retrieved_chunk_count": len(file_chunks),
-                "chunks": chunks_data
-            }
-
-            result["files"].append(file_info)
-
-        return result
 
     async def decide_next_action(
             self,

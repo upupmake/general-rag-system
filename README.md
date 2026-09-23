@@ -116,7 +116,7 @@ general-rag-system/
 | `keyword_search` | 用明确术语、函数名、配置项或错误码精确检索正文 |
 | `read_file_chunks` | 按 `documentId` 和索引范围连续读取原文，单次最多 20 个 chunk |
 | `expand_context` | 围绕已命中 chunk 扩展前后文 |
-| `semantic_search` | 多查询语义召回、去重、Rerank 与相关性过滤 |
+| `semantic_search` | 多查询语义召回、去重，按向量相似度排序并做动态阈值过滤 |
 | `find_files` | 使用文件名模式发现文件及其 `documentId` |
 | `stop_search` | 信息足够或继续检索无收益时终止循环 |
 
@@ -153,11 +153,11 @@ rag-llm：下载文件、按扩展名解析与分块、调用 Embedding
 
 ### 模型与回退
 
-- 会话标题：`glm-5.2/z-ai`。
+- 会话标题：`deepseek-v4-flash/deepseek`。
 - RAG Gateway：`glm-5.2/z-ai`。
-- 检索决策控制器：`MiniMax-M3/minimax`。
+- 检索决策控制器：`step-5-preview/stepfun`（`reasoning_effort=medium`）。
 - 当前 Embedding 执行路径：本地 `Qwen/Qwen3-Embedding-0.6B` 服务；配置标识为 `text-embedding-v4/qwen`。
-- Rerank：`qwen3-rerank/qwen`。
+- Rerank：检索链路不再调用，排序直接使用 Milvus 向量相似度分数。
 
 `model_config.json` 每次使用时从磁盘读取，不使用进程内缓存。官方聊天 LLM 默认超时 60 秒；候选回退只允许发生在流开始之前，已经输出有效内容后不会切换候选。特定 OpenAI 兼容 Gemini 路径通过 `ainvoke` 完成非流式调用。
 
@@ -169,14 +169,14 @@ rag-llm：下载文件、按扩展名解析与分块、调用 Embedding
 
 后端必须使用 Java 11。当前项目约定的本机 JDK 路径是 `D:\JDK-11`，JDK 21 会触发当前 Lombok 与编译器组合的 `JCTree$JCImport.qualid` 错误。
 
-当前 `rag-llm` 的 Embedding 入口固定连接本地 `8890` 服务，因此运行知识库向量化与检索前需要启动 `embedding_rerank` 的 Embedding 服务。`8891` 的本地 Rerank 服务是独立实现；当前 `rag-llm` 的 Rerank 执行路径仍使用 `model_config.json` 中的 `qwen3-rerank/qwen` endpoint。
+当前 `rag-llm` 的 Embedding 入口固定连接本地 `8890` 服务，因此运行知识库向量化与检索前需要启动 `embedding_rerank` 的 Embedding 服务。`8891` 的本地 Rerank 服务是独立实现；`rag-llm` 检索链路已不再调用 Rerank，`model_config.json` 中的 `rerank` 配置不再被读取。
 
 ### 配置入口
 
 - `rag-client/src/consts.js`：Java API 基础地址。
 - `rag-server/src/main/resources/application-*.yml`：MySQL、Redis、RabbitMQ、MinIO、Milvus、邮件、JWT 和 `rag-llm` 地址。
 - `rag-llm/main.py`：当前入口在导入服务前直接设置 RabbitMQ、MinIO、Milvus 连接值；部署时必须修改该入口或先改造为不覆盖外部配置。
-- `rag-llm/model_config.json`：聊天模型候选和 Rerank 配置；每次使用时重新从磁盘读取。
+- `rag-llm/model_config.json`：聊天模型候选配置；每次使用时重新从磁盘读取。
 - `rag-mcp/rag_mcp/config.py` 或同名环境变量：Java OpenAPI、内网 `rag-llm`、监听地址和审计消息配置。
 - `embedding_rerank/config/*.py`：本地 Embedding/Rerank 模型和服务参数；当前实现直接读取类属性。
 

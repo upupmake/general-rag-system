@@ -10,7 +10,6 @@ from langchain_core.documents import Document
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from aiohttp_utils import rerank
 from utils import filter_grade_threshold
 
 logger = logging.getLogger(__name__)
@@ -72,7 +71,7 @@ class ExpandContextInput(BaseModel):
 
 
 class SemanticSearchInput(BaseModel):
-    """semantic_search: 全库语义检索（多query并行+rerank+动态过滤）"""
+    """semantic_search: 全库语义检索（多query并行召回，按向量相似度排序）"""
     queries: List[str] = Field(
         description=(
             "从多角度、多方面生成的相关查询列表（建议4-6条）。"
@@ -82,24 +81,9 @@ class SemanticSearchInput(BaseModel):
             "'转专业 转学 学籍变动', '毕业要求 学位授予条件', '纪律处分 学籍处理']"
         )
     )
-    grade_query: str = Field(
-        description=(
-            "用于对检索结果进行相关性打分的查询。应该是对用户问题核心概念的展开和细化，而不是简单改写。"
-            "方法：抓住用户问题中的核心概念，列举该概念可能涉及的各个方面。"
-            "示例：用户问'合同内容涉及到哪些课题' → grade_query='课题的成果、内容、研究方法、技术方案、开展计划'"
-            "示例：用户问'研究生学籍管理规定' → grade_query='学籍注册、休学复学、转专业、毕业要求、学位授予、纪律处分'"
-        )
-    )
     top_k: int = Field(
         default=10,
-        description="最终返回结果数量，默认10条"
-    )
-    grade_score_threshold: float = Field(
-        default=0.3,
-        description=(
-            "Rerank相关性分数阈值（0.0-1.0）。"
-            "建议：通用问题0.3-0.4，精确问题0.5-0.6，探索性问题0.2-0.3"
-        )
+        description="最终返回结果数量上限（动态阈值过滤后截断），默认10条"
     )
 
 
@@ -130,9 +114,8 @@ class StopSearchInput(BaseModel):
 class RetrievalToolkit:
     """原子化检索工具集 - 基于 LangChain StructuredTool"""
 
-    def __init__(self, vector_store, retriever):
+    def __init__(self, vector_store):
         self.vector_store = vector_store
-        self.retriever = retriever
         self._tools = self._build_tools()
         # tool_map 不包含 stop_search（stop 在调用方处理）
         self._tool_map = {t.name: t for t in self._tools if t.name != "stop_search"}
@@ -196,7 +179,7 @@ class RetrievalToolkit:
 
         except Exception as e:
             logger.error(f"❌ Milvus查询失败: {e}")
-            return []
+            raise
 
     async def _vector_search(
             self,
@@ -204,21 +187,38 @@ class RetrievalToolkit:
             top_k: int = 10,
             exclude_pks: Optional[set] = None,
     ) -> List[Document]:
-        """底层向量检索封装"""
-        try:
-            # 向量检索
-            search_kwargs = {"k": top_k}
-            docs = await self.retriever.ainvoke(query, search_kwargs=search_kwargs)
-            # 尝试将query切分为多个keywords进行过滤（如果query中包含空格）
-            keywords = query.split(" ")
-            if len(keywords) > 1:
-                expr_filter = " OR ".join([f'text like "%{self._escape(kw)}%"' for kw in keywords])
-                docs.extend(await self._milvus_filter(filter_expr=expr_filter, limit=top_k, exclude_pks=exclude_pks))
-            return docs
+        """底层向量检索封装（向量检索 + 关键词补召回，Milvus分数写入 metadata["score"]）"""
+        exclude_expr = self._build_exclude_pks_expr(exclude_pks)
 
-        except Exception as e:
-            logger.error(f"❌ 向量检索失败: {e}")
-            return []
+        # 向量检索（保留Milvus返回的相似度分数；已进入参考文档的chunk在检索侧排除）
+        scored_docs = await self.vector_store.asimilarity_search_with_score(
+            query, k=top_k, expr=exclude_expr or None
+        )
+        docs = []
+        for doc, score in scored_docs:
+            doc.metadata["score"] = score
+            docs.append(doc)
+
+        # 尝试将query切分为多个keywords进行过滤（如果query中包含多个词）
+        keywords = query.split()
+        if len(keywords) > 1:
+            keyword_expr = " OR ".join([f'text like "%{self._escape(kw)}%"' for kw in keywords])
+            if exclude_expr:
+                keyword_expr = f"({keyword_expr}) and {exclude_expr}"
+            # 关键词补召回在关键词命中范围内再做一次向量检索，同样按相似度打分；
+            # 补召回失败时降级为仅使用向量召回结果
+            try:
+                keyword_docs = await self.vector_store.asimilarity_search_with_score(
+                    query, k=top_k, expr=keyword_expr
+                )
+            except Exception as e:
+                logger.error(f"❌ 关键词补召回失败，仅使用向量召回结果: {e}")
+            else:
+                for doc, score in keyword_docs:
+                    doc.metadata["score"] = score
+                    docs.append(doc)
+
+        return docs
 
     # ============= 工具1: 关键词检索（grep风格）=============
 
@@ -343,33 +343,27 @@ class RetrievalToolkit:
             end_chunk_index=chunk_index + window_size,
         )
 
-    # ============= 工具4: 全库语义检索(多query+rerank) =============
+    # ============= 工具4: 全库语义检索(多query并行) =============
 
     async def _search_by_multi_queries_in_database(
             self,
             queries: List[str],
-            grade_query: str,
             top_k: int = 10,
-            grade_score_threshold: float = 0.3,
             exclude_pks: Optional[set] = None,
     ) -> Dict[str, Any]:
         """
-        全库语义检索(多query+rerank)
+        全库语义检索(多query并行)
 
         流程:
-            1. 并行向量检索所有queries（召回阶段）
-            2. 合并去重
+            1. 并行向量检索所有queries（召回阶段，保留Milvus向量分数）
+            2. 合并去重（同一chunk保留最高分）
             3. 排除已进入参考文档的chunk
-            4. 使用grade_query进行Rerank重排序评分（精排阶段）
-            5. K-Means动态阈值过滤
-            6. 按rerank_score排序并返回top_k
+            4. K-Means双簇动态阈值过滤，按向量分数降序返回（top_k为上限）
         """
 
-        logger.info(
-            f"🔍 [4.全库语义] queries={queries}, grade_query={grade_query}, top_k={top_k}, threshold={grade_score_threshold}")
+        logger.info(f"🔍 [4.全库语义] queries={queries}, top_k={top_k}")
 
-        all_docs = []
-        seen_pks = set()
+        docs_by_pk: Dict[Any, Document] = {}
 
         retrieval_top_k = max(top_k * 3, 15)
         tasks = [
@@ -379,68 +373,51 @@ class RetrievalToolkit:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        failed_queries = 0
         for docs in results:
             if isinstance(docs, Exception):
+                failed_queries += 1
                 logger.warning(f"⚠️ 某个query检索失败: {docs}")
                 continue
             for doc in docs:
                 pk = doc.metadata.get("pk")
-                if pk and pk not in seen_pks:
-                    seen_pks.add(pk)
-                    all_docs.append(doc)
+                if not pk:
+                    continue
+                # 同一chunk可能被多个query或语义/关键词两路同时命中，保留最高分
+                existing = docs_by_pk.get(pk)
+                if existing is None or doc.metadata.get("score", 0.0) > existing.metadata.get("score", 0.0):
+                    docs_by_pk[pk] = doc
 
+        if failed_queries:
+            logger.warning(f"⚠️ {failed_queries}/{len(queries)} 个query检索失败")
+        if failed_queries == len(queries):
+            raise RuntimeError(f"语义检索失败: {len(queries)}个query全部检索失败，请检查Milvus连接或检索表达式")
+
+        all_docs = list(docs_by_pk.values())
         all_docs = self._filter_excluded_pks(all_docs, exclude_pks)
         logger.info(f"📊 并行检索完成: 总计{len(all_docs)}个独立新文档")
         if not all_docs:
             logger.warning("⚠️ 并行检索未找到任何新文档")
             return {
                 "results": [],
-                "total_hits": 0
+                "total_hits": 0,
+                "failed_queries": failed_queries,
             }
 
-        # Rerank
-        try:
-            doc_contents = [doc.page_content for doc in all_docs]
-            rerank_result = await rerank(
-                query=grade_query,
-                documents=doc_contents,
-                grade_score_threshold=grade_score_threshold
-            )
+        # 动态阈值过滤：K-Means 双簇按分数动态决定保留数量（top_k 仅作为上限）
+        filter_result = filter_grade_threshold(all_docs)
+        all_docs = filter_result["documents"]
+        logger.info(
+            f"✅ 动态阈值过滤后剩余 {len(all_docs)} 个文档，阈值: {filter_result.get('threshold', 0.0):.4f}"
+        )
 
-            # 根据 rerank 结果重新排序文档，并添加 rerank_score
-            ranked_docs = []
-            items = rerank_result.get("output", {}).get("results", [])
-            for item in items:
-                original_idx = item['index']
-                relevance_score = item['relevance_score']
-
-                # 获取原始文档并添加 rerank 分数到 metadata
-                doc = all_docs[original_idx]
-                doc.metadata['rerank_score'] = relevance_score
-                ranked_docs.append(doc)
-
-            all_docs = ranked_docs
-            logger.info(f"✅ Rerank完成，返回 {len(all_docs)} 个文档")
-        except Exception as e:
-            logger.warning(f"⚠️ Rerank失败: {e}")
-            raise e
-
-        # 动态阈值过滤
-        try:
-            filter_result = filter_grade_threshold(all_docs)
-            all_docs = filter_result['documents']
-            threshold = filter_result.get('threshold', 0.0)
-            logger.info(f"✅ 动态过滤后剩余: {len(all_docs)}个文档，阈值: {threshold:.2f}")
-        except Exception as e:
-            logger.warning(f"⚠️ 动态过滤失败: {e}")
-            raise e
-
-        all_docs.sort(key=lambda d: d.metadata.get("rerank_score", 0.0), reverse=True)
+        all_docs.sort(key=lambda d: d.metadata.get("score", 0.0), reverse=True)
         all_docs = all_docs[:top_k]
 
         return {
             "results": all_docs,
-            "total_hits": len(all_docs)
+            "total_hits": len(all_docs),
+            "failed_queries": failed_queries,
         }
 
     # ============= 工具5: 根据模式列出文件 =============
@@ -488,7 +465,7 @@ class RetrievalToolkit:
 
         except Exception as e:
             logger.error(f"❌ Milvus查询失败: {e}")
-            all_docs = []
+            raise
 
         return {
             "results": all_docs,
@@ -534,7 +511,7 @@ class RetrievalToolkit:
             StructuredTool(
                 name="semantic_search",
                 description=(
-                    "全库语义检索：多query并行召回 + rerank重排序 + 动态阈值过滤。"
+                    "全库语义检索：多query并行召回，按向量相似度排序并经K-Means动态阈值过滤。"
                     "【适用场景】概念性、探索性问题，可在无明确关键词时根据问题语义进行检索。"
                     "【特点】能发现语义相关的内容，覆盖面广。"
                 ),

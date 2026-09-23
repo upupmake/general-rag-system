@@ -77,34 +77,13 @@ class AgenticRAGService:
         if not self.vector_store:
             raise RuntimeError("无法连接到Milvus知识库")
 
-        # 初始化retriever
-        retriever = self.vector_store.as_retriever(
-            search_kwargs={"k": 10}
-        )
-
         # 初始化工具集
-        self.toolkit = RetrievalToolkit(self.vector_store, retriever)
+        self.toolkit = RetrievalToolkit(self.vector_store)
 
         # 初始化决策控制器
         self.controller = RetrievalController()
 
         logger.info("✅ AgenticRAG初始化完成")
-
-    @staticmethod
-    def _deduplicate_docs(docs: List[Document]) -> List[Document]:
-        """文档去重(基于pk)"""
-        seen = set()
-        unique_docs = []
-
-        for doc in docs:
-            pk = doc.metadata.get("pk")
-            if pk and pk not in seen:
-                seen.add(pk)
-                unique_docs.append(doc)
-            elif not pk:
-                unique_docs.append(doc)
-
-        return unique_docs
 
     @staticmethod
     def _format_all_docs_table(all_docs: List[Document]) -> str:
@@ -210,15 +189,21 @@ class AgenticRAGService:
             f"检索到 {retrieved} 个文档切片，新增 {new_added} 个，累计 {accumulated} 个。"
         ]
 
+        failed_queries = tool_result.get("failed_queries", 0)
+        if failed_queries:
+            lines.append(f"⚠️ 有 {failed_queries} 个 query 检索失败，本次为部分召回结果。")
+
         if not new_docs:
             lines.append("本次没有发现新的文档切片。")
             return "\n".join(lines)
 
         lines.extend(["", "## 新增切片"])
         for index, doc in enumerate(new_docs, start=1):
+            score = doc.metadata.get("score")
+            score_part = f" | score={score:.4f}" if isinstance(score, (int, float)) else ""
             lines.extend([
                 "",
-                f"### [{index}] {doc.metadata.get('fileName', '')} | chunkIndex={doc.metadata.get('chunkIndex', '')} | maxChunkIndex={doc.metadata.get('maxChunkIndex', '')} | documentId={doc.metadata.get('documentId', '')}",
+                f"### [{index}] {doc.metadata.get('fileName', '')}{score_part} | chunkIndex={doc.metadata.get('chunkIndex', '')} | maxChunkIndex={doc.metadata.get('maxChunkIndex', '')} | documentId={doc.metadata.get('documentId', '')}",
                 "",
                 doc.page_content or ""
             ])
@@ -352,7 +337,7 @@ class AgenticRAGService:
                     should_stop = True
                     break
 
-                # 执行工具
+                # 执行工具（串行：每个工具执行时取当前最新的已读排除集合）
                 try:
                     tool_result = await self.toolkit.execute_tool(
                         tool_name,
@@ -551,7 +536,7 @@ class AgenticRAGService:
 
             # 合并连续切片并构建上下文
             if reference_documents:
-                merged_docs = merge_consecutive_chunks(reference_documents, False)
+                merged_docs = merge_consecutive_chunks(reference_documents)
 
                 context = "\n\n".join([
                     f"[来源: {doc.metadata.get('fileName')}]: {doc.page_content}"

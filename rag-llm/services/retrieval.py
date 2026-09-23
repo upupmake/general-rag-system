@@ -25,9 +25,7 @@ class KeywordSearchRequest(RetrievalTarget):
 
 class SemanticSearchRequest(RetrievalTarget):
     queries: list[str] = Field(min_length=1, max_length=10)
-    relevanceQuery: str = Field(min_length=1)
     topK: int = Field(default=10, ge=1, le=50)
-    relevanceThreshold: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
 class FindFilesRequest(RetrievalTarget):
@@ -59,17 +57,14 @@ async def _get_toolkit(owner_user_id: int, knowledge_base_id: int) -> RetrievalT
     )
     if vector_store is None:
         raise HTTPException(status_code=503, detail="无法连接到知识库")
-    return RetrievalToolkit(
-        vector_store,
-        vector_store.as_retriever(search_kwargs={"k": 10}),
-    )
+    return RetrievalToolkit(vector_store)
 
 
 def _format_chunks(knowledge_base_id: int, result: dict[str, Any]) -> dict[str, Any]:
     chunks = []
     for document in result["results"]:
         metadata = document.metadata
-        score = metadata.get("rerank_score")
+        score = metadata.get("score")
         chunks.append({
             "chunkId": metadata.get("pk"),
             "documentId": metadata.get("documentId"),
@@ -82,7 +77,7 @@ def _format_chunks(knowledge_base_id: int, result: dict[str, Any]) -> dict[str, 
             ),
             "content": document.page_content,
             "score": score,
-            "scoreType": "rerank" if score is not None else None,
+            "scoreType": "vector" if score is not None else None,
         })
     return {
         "knowledgeBaseId": knowledge_base_id,
@@ -108,9 +103,7 @@ async def search_by_semantics(body: SemanticSearchRequest) -> dict[str, Any]:
     toolkit = await _get_toolkit(body.ownerUserId, body.knowledgeBaseId)
     result = await toolkit.execute_tool("semantic_search", {
         "queries": body.queries,
-        "grade_query": body.relevanceQuery,
         "top_k": body.topK,
-        "grade_score_threshold": body.relevanceThreshold,
     })
     return _format_chunks(body.knowledgeBaseId, result)
 

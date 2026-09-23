@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-from typing import List
 
 import numpy as np
 import tiktoken
@@ -462,8 +461,8 @@ async def image_split(
 
     # 2. 获取配置
     model_info = {
-        'name': 'doubao-seed-2.1-turbo',
-        'provider': 'bytedance'
+        'name': 'deepseek-v4-flash',
+        'provider': 'deepseek'
     }
     settings = _get_model_setting(model_info)
 
@@ -692,15 +691,21 @@ async def unified_llm_stream(model_instance, messages):
 
 
 def filter_grade_threshold(
-        docs: List[Document],  # 修正类型提示，兼容 Document
+        docs: list[Document],
         high_score_threshold: float = 0.7,
         possible_search_ratio: float = 0.15
 ) -> dict:
+    """
+    K-Means 双簇动态阈值过滤：按分数动态决定保留数量（分数越高越相关）
+
+    分数全部 >= high_score_threshold 时全保留；否则用 K-Means 分出高/低两簇，
+    阈值取高分簇最小值向低分簇中心下探 possible_search_ratio 的比例，并兜底不低于低分簇中心。
+    """
     # 1. 提取分数
     scores = []
     valid_docs = []
     for doc in docs:
-        score = doc.metadata.get('rerank_score', 0.0)
+        score = doc.metadata.get('score', 0.0)
         if isinstance(score, (int, float)):
             scores.append(float(score))
             valid_docs.append(doc)
@@ -786,10 +791,7 @@ def filter_grade_threshold(
     }
 
 
-def merge_consecutive_chunks(
-        docs: list[Document],
-        contain_score: bool = False
-) -> list[Document]:
+def merge_consecutive_chunks(docs: list[Document]) -> list[Document]:
     """合并同一文档的连续切片，去除重叠部分"""
     if not docs:
         return []
@@ -862,12 +864,6 @@ def merge_consecutive_chunks(
 
                 # 更新元数据
                 current_merged_doc.metadata['last_chunk_index'] = curr_chunk_idx
-                # 更新分数为两者的最大值
-                if contain_score:
-                    current_merged_doc.metadata['rerank_score'] = max(
-                        current_merged_doc.metadata.get('rerank_score', 0),
-                        next_doc.metadata.get('rerank_score', 0)
-                    )
 
             else:
                 # 不连续，保存当前，开始新的
@@ -876,9 +872,5 @@ def merge_consecutive_chunks(
                 current_merged_doc.metadata['last_chunk_index'] = current_merged_doc.metadata.get('chunkIndex')
 
         merged_results.append(current_merged_doc)
-
-    # 重新按 rerank_score 排序
-    if contain_score:
-        merged_results.sort(key=lambda x: x.metadata.get('rerank_score', 0), reverse=True)
 
     return merged_results

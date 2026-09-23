@@ -43,15 +43,13 @@
 
 ### `search_knowledge_base_by_semantics`
 
-先完成 Java 知识库授权，再调用内网 `rag-llm` 的 `POST /rag/retrieval/semantic`，执行多查询语义召回、关键词辅助召回、去重、Rerank 和相关性过滤。
+先完成 Java 知识库授权，再调用内网 `rag-llm` 的 `POST /rag/retrieval/semantic`，执行多查询语义召回、关键词辅助召回和去重，按向量相似度返回结果。
 
 | 参数 | 类型 | 限制与默认值 |
 | --- | --- | --- |
 | `knowledge_base_id` | `integer` | 必填，知识库 ID |
 | `queries` | `list[string]` | 必填，1 到 10 条语义查询 |
-| `relevance_query` | `string` | 必填，长度至少 1，用于 Rerank 和相关性判断 |
 | `top_k` | `integer` | 可选，1 到 50，默认 `10` |
-| `relevance_threshold` | `float` | 可选，0 到 1，默认 `0.3` |
 
 ### `find_knowledge_base_files`
 
