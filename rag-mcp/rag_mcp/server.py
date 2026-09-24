@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -10,7 +11,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.auth import AccessToken, TokenVerifier
 from fastmcp.server.dependencies import get_access_token
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 from rag_mcp.audit import new_invocation_id, now_millis, publish_tool_log
 from rag_mcp.clients import (
@@ -99,6 +100,19 @@ async def _private_target(knowledge_base_id: int) -> None:
         raise ToolError(str(exc)) from exc
     if not access or not access.get("accessible"):
         raise ToolError("仅支持操作本人创建的个人私有知识库")
+
+
+def _coerce_list_arg(value: Any) -> Any:
+    """兼容部分 MCP 客户端把列表参数序列化成 JSON 字符串的情况"""
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("["):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return [value]
+        return [value]
+    return value
 
 
 def _validate_file_name(file_name: str) -> None:
@@ -276,6 +290,7 @@ async def search_knowledge_base_by_keywords(
     keywords: Annotated[
         list[str],
         Field(description="用于精确匹配的关键词列表，至少提供一个术语、错误码或原文短语。", min_length=1),
+        BeforeValidator(_coerce_list_arg),
     ],
     match_mode: Annotated[
         Literal["AND", "OR"],
@@ -285,6 +300,7 @@ async def search_knowledge_base_by_keywords(
     document_ids: Annotated[
         list[int] | None,
         Field(description="可选的 documentId 列表；提供后仅在这些文档中检索。"),
+        BeforeValidator(_coerce_list_arg),
     ] = None,
 ) -> dict:
     """使用明确术语、配置项、错误码或原文短语在知识库中执行关键词精确检索。"""
@@ -304,6 +320,7 @@ async def search_knowledge_base_by_semantics(
     queries: Annotated[
         list[str],
         Field(description="用于扩大召回范围的语义查询列表，提供 1 到 10 条不同表述。", min_length=1, max_length=10),
+        BeforeValidator(_coerce_list_arg),
     ],
     top_k: Annotated[int, Field(description="最多返回的相关片段数，取值范围 1 到 50。", ge=1, le=50)] = 10,
 ) -> dict:
