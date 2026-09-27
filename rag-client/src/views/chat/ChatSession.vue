@@ -209,6 +209,24 @@ const handleSend = (text) => {
   inputExpanded.value = false
 }
 
+// 小游戏彩蛋提示：每次请求弹出，整个请求（流式输出）结束后隐藏
+const gameTipVisible = ref(false)
+let gameTipTimer = null
+const gameTipText = computed(() =>
+  isMobile.value ? '等待回复时，可点开菜单底部头像玩小游戏' : '等待回复时，可点击左下角头像玩小游戏'
+)
+watch(isGenerating, (generating) => {
+  clearTimeout(gameTipTimer)
+  if (generating) {
+    // 延迟弹出，回复较快时不闪烁
+    gameTipTimer = setTimeout(() => {
+      gameTipVisible.value = true
+    }, 800)
+  } else {
+    gameTipVisible.value = false
+  }
+}, {immediate: true})
+
 // Thinking collapse handler
 const handleThinkingChange = (msg, keys) => {
   if (!msg) return
@@ -231,6 +249,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', checkIsMobile)
   window.removeEventListener('keydown', handleKeyboardShortcut)
+  clearTimeout(gameTipTimer)
 })
 
 watch(selectedModel, () => {
@@ -484,6 +503,12 @@ const confirmContextCustom = () => {
         >
           <VerticalAlignBottomOutlined/>
         </button>
+      </transition>
+      <!-- 等待回复时的小游戏提示（吸附在消息区底部） -->
+      <transition name="game-tip-fade">
+        <div v-if="gameTipVisible" class="game-tip">
+          {{ gameTipText }}
+        </div>
       </transition>
     </div>
 

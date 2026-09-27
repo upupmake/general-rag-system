@@ -262,6 +262,36 @@
 }
 
 /* ================= 输入区域 & Sender ================= */
+/* 等待回复时的小游戏彩蛋提示 */
+.game-tip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 20px;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 5px 14px;
+  border: 1px solid rgba(22, 119, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  color: #5b6b7c;
+  font-size: 12px;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+.game-tip-fade-enter-active,
+.game-tip-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.game-tip-fade-enter-from,
+.game-tip-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
 .shortcut-list {
   display: flex;
   flex-direction: column;
@@ -655,6 +685,14 @@
   .chat-header,
   .messages-container {
     padding: 8px 16px;
+  }
+
+  .game-tip {
+    bottom: 14px;
+    max-width: calc(100vw - 32px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .header-content {

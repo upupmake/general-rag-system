@@ -2,8 +2,14 @@
 import {ref, watch, computed, onMounted, onUnmounted} from 'vue'
 import {useRouter, useRoute} from 'vue-router'
 import SessionList from '@/components/SessionList.vue'
+import Game2048 from '@/components/Game2048.vue'
+import Gomoku from '@/components/Gomoku.vue'
+import PuzzleGame from '@/components/PuzzleGame.vue'
 import {useThemeStore} from '@/stores/theme'
 import {useUserStore} from '@/stores/user'
+import {useGame2048Store} from '@/stores/game2048'
+import {useGameGomokuStore} from '@/stores/gameGomoku'
+import {useGamePuzzleStore} from '@/stores/gamePuzzle'
 import {
   LogoutOutlined, 
   UserOutlined,
@@ -12,7 +18,10 @@ import {
   GithubOutlined,
   KeyOutlined,
   AppstoreOutlined,
-  DownOutlined
+  DownOutlined,
+  GiftOutlined,
+  BorderOutlined,
+  PictureOutlined
 } from '@ant-design/icons-vue';
 // 引入本地静态资源 URL
 import lightThemeUrl from '@/assets/github-markdown.min.css?url';
@@ -24,11 +33,17 @@ const route = useRoute()
 const selectedKeys = ref([])
 const themeStore = useThemeStore();
 const userStore = useUserStore();
+const game2048Store = useGame2048Store();
+const gameGomokuStore = useGameGomokuStore();
+const gamePuzzleStore = useGamePuzzleStore();
 const currentWorkspace = ref(null)
 const isFooterExpanded = ref(false) // 控制底部用户菜单展开/收起
 const footerMenuRef = ref(null)
 const collapsed = ref(false) // 控制侧边栏收起/展开
 const isMobile = ref(false)
+const isGameOpen = ref(false) // 2048 彩蛋弹窗
+const isGomokuOpen = ref(false) // 五子棋 彩蛋弹窗
+const isPuzzleOpen = ref(false) // 图片拼图 彩蛋弹窗
 
 // 加载当前工作空间信息
 const loadCurrentWorkspace = async () => {
@@ -111,6 +126,39 @@ const workspaceDisplayName = computed(() => {
 const toggleFooter = () => {
   isFooterExpanded.value = !isFooterExpanded.value
 }
+
+// 打开 2048 彩蛋弹窗(同时收起用户菜单)
+const openGame = () => {
+  isFooterExpanded.value = false
+  isGameOpen.value = true
+}
+
+// 弹窗可见性同步到游戏状态: 打开时恢复 AI 托管, 关闭时挂起(棋盘/分数/开关状态保留)
+watch(isGameOpen, (open) => {
+  game2048Store.setActive(open)
+})
+
+// 打开 五子棋 彩蛋弹窗(同时收起用户菜单)
+const openGomoku = () => {
+  isFooterExpanded.value = false
+  isGomokuOpen.value = true
+}
+
+// 关闭弹窗终止 AI 计算并保留棋局, 重新打开后按需续算
+watch(isGomokuOpen, (open) => {
+  gameGomokuStore.setActive(open)
+})
+
+// 打开 图片拼图 彩蛋弹窗(同时收起用户菜单)
+const openPuzzle = () => {
+  isFooterExpanded.value = false
+  isPuzzleOpen.value = true
+}
+
+// 关闭弹窗强制关停 AI 托管(含 Worker), 拼图状态保留
+watch(isPuzzleOpen, (open) => {
+  gamePuzzleStore.setActive(open)
+})
 
 // 切换侧边栏收起/展开
 const toggleCollapsed = () => {
@@ -354,6 +402,30 @@ const go = (path) => {
                   GitHub 开源地址
                 </a-button>
 
+                <!-- 2048 彩蛋 -->
+                <a-button type="text" @click.stop="openGame" title="2048 小游戏(彩蛋)">
+                  <template #icon>
+                    <gift-outlined />
+                  </template>
+                  2048 小游戏
+                </a-button>
+
+                <!-- 五子棋 彩蛋 -->
+                <a-button type="text" @click.stop="openGomoku" title="五子棋(彩蛋)">
+                  <template #icon>
+                    <border-outlined />
+                  </template>
+                  五子棋
+                </a-button>
+
+                <!-- 图片拼图 彩蛋 -->
+                <a-button type="text" @click.stop="openPuzzle" title="图片拼图(彩蛋)">
+                  <template #icon>
+                    <picture-outlined />
+                  </template>
+                  图片拼图
+                </a-button>
+
                 <!-- 退出登录 -->
                 <a-button type="text" danger @click.stop="handleLogout" title="退出登录">
                   <template #icon>
@@ -424,6 +496,48 @@ const go = (path) => {
         <router-view/>
       </a-layout-content>
     </a-layout>
+
+    <!-- 2048 彩蛋弹窗 -->
+    <a-modal
+      v-model:open="isGameOpen"
+      :title="null"
+      :footer="null"
+      :centered="true"
+      :width="isMobile ? '94%' : 440"
+      :body-style="{ padding: isMobile ? '12px' : '24px' }"
+      :mask-closable="false"
+      destroy-on-close
+    >
+      <Game2048 />
+    </a-modal>
+
+    <!-- 五子棋 彩蛋弹窗 -->
+    <a-modal
+      v-model:open="isGomokuOpen"
+      :title="null"
+      :footer="null"
+      :centered="true"
+      :width="isMobile ? '94%' : 480"
+      :body-style="{ padding: isMobile ? '12px' : '24px' }"
+      :mask-closable="false"
+      destroy-on-close
+    >
+      <Gomoku />
+    </a-modal>
+
+    <!-- 图片拼图 彩蛋弹窗 -->
+    <a-modal
+      v-model:open="isPuzzleOpen"
+      :title="null"
+      :footer="null"
+      :centered="true"
+      :width="isMobile ? '94%' : 460"
+      :body-style="{ padding: isMobile ? '12px' : '24px' }"
+      :mask-closable="false"
+      destroy-on-close
+    >
+      <PuzzleGame />
+    </a-modal>
   </a-layout>
 </template>
 
