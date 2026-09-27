@@ -6,6 +6,8 @@ import {AntDesignXVueResolver} from 'ant-design-x-vue/resolver';
 import VueJsx from '@vitejs/plugin-vue-jsx'
 
 export default defineConfig({
+    // 相对路径产物: 离线包/子路径部署时无需关心部署前缀
+    base: './',
     plugins: [
         VueJsx(),
         vue(),
