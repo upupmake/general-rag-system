@@ -1,6 +1,7 @@
 /* ================= 布局与容器 ================= */
 .chat-session-container {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: linear-gradient(to bottom, #f5f7fa 0%, #e8ecf1 100%);

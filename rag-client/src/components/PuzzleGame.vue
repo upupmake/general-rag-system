@@ -10,7 +10,7 @@ const statusText = computed(() => {
   if (game.solved) return `已复原! 共 ${game.moves} 步`
   if (game.thinking) return 'AI 思考中…'
   if (game.aiEnabled) return 'AI 托管中…'
-  return '点击空白格旁的方块进行移动(也可用方向键)'
+  return '点击空白格旁的方块进行移动(方向键亦可)'
 })
 
 // 方块显示图片切片: 编号 v 的方块显示其目标位置对应的那块图
@@ -189,6 +189,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap; /* 窄屏时分值盒换行, 不挤压标题 */
 }
 
 .puzzle-title {
@@ -197,6 +198,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 8px;
   font-size: 18px;
   font-weight: 700;
+  white-space: nowrap; /* 标题不折行 */
 }
 
 .puzzle-badge {
@@ -206,6 +208,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   border-radius: 10px;
   color: #1677ff;
   background: rgba(22, 119, 255, 0.12);
+  white-space: nowrap; /* 徽章不折行 */
+  flex-shrink: 0;
 }
 
 .puzzle-scores {
@@ -331,6 +335,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   font-size: 13px;
   text-align: center;
   opacity: 0.75;
+  text-wrap: balance; /* 窄屏换行更均匀, 不留孤字 */
 }
 
 .puzzle-controls {
@@ -370,6 +375,21 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .puzzle-size-label {
   font-size: 12px;
   opacity: 0.75;
+}
+
+@media (max-width: 480px) {
+  .puzzle-title {
+    font-size: 16px;
+  }
+
+  .puzzle-score-box {
+    min-width: 44px;
+    padding: 3px 8px;
+  }
+
+  .puzzle-score-box strong {
+    font-size: 15px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

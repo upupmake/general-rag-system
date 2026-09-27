@@ -275,7 +275,7 @@ const go = (path) => {
       :width="240" 
       :collapsed-width="isMobile ? 0 : 64"
       :theme="themeStore.isDark ? 'dark' : 'light'" 
-      style="position: fixed; left: 0; top: 0; bottom: 0; height: 100vh; z-index: 100;"
+      style="position: fixed; left: 0; top: 0; bottom: 0; z-index: 100;"
       collapsible
       :trigger="null">
       <div class="sidebar-container">
@@ -517,8 +517,8 @@ const go = (path) => {
       :title="null"
       :footer="null"
       :centered="true"
-      :width="isMobile ? '94%' : 480"
-      :body-style="{ padding: isMobile ? '12px' : '24px' }"
+      :width="isMobile ? '96%' : 640"
+      :body-style="{ padding: isMobile ? '8px' : '20px' }"
       :mask-closable="false"
       destroy-on-close
     >
@@ -543,7 +543,7 @@ const go = (path) => {
 
 <style scoped>
 .sidebar-container {
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;

@@ -1,5 +1,5 @@
 <script setup>
-import {computed, onMounted} from 'vue'
+import {computed, onMounted, ref, watch} from 'vue'
 import {useGameGomokuStore} from '@/stores/gameGomoku'
 import {ReloadOutlined, ThunderboltOutlined} from '@ant-design/icons-vue'
 
@@ -7,6 +7,12 @@ const game = useGameGomokuStore()
 
 onMounted(() => {
   if (game.moves.length === 0) game.newGame()
+})
+
+// 触屏两段式落子: 第一次轻触选点(大标记), 再次点击同点确认, 防小屏误触
+const selectedCell = ref(-1)
+watch(() => [game.moves.length, game.gameOver], () => {
+  selectedCell.value = -1
 })
 
 const sideText = computed(() =>
@@ -18,14 +24,26 @@ const statusText = computed(() => {
     if (game.winner === 3) return '和棋! 点「新游戏」再来一局'
     return `${game.winner === game.humanSide ? '你赢了!' : 'AI 获胜!'} 点「新游戏」再来一局`
   }
+  if (selectedCell.value >= 0) return '再次点击同一位置确认落子'
   if (game.thinking) return 'AI 思考中…'
   if (game.aiEnabled) return 'AI 托管中, 正在替你落子…'
   return '点击棋盘落子 (PC / 手机通用)'
 })
 
 function onCellClick(idx) {
-  if (!game.canHumanPlay) return
+  if (!game.canHumanPlay || game.board[idx] !== 0) return
   game.play(idx)
+}
+
+function onCellTouchEnd(idx, e) {
+  e.preventDefault() // 阻止合成 click, 触屏走两段式确认
+  if (!game.canHumanPlay || game.board[idx] !== 0) return
+  if (selectedCell.value === idx) {
+    selectedCell.value = -1
+    game.play(idx)
+  } else {
+    selectedCell.value = idx
+  }
 }
 </script>
 
@@ -48,6 +66,7 @@ function onCellClick(idx) {
         class="gomoku-cell"
         :class="{ 'can-play': game.canHumanPlay && v === 0 }"
         @click="onCellClick(idx)"
+        @touchend="onCellTouchEnd(idx, $event)"
       >
         <span
           v-if="v"
@@ -57,6 +76,11 @@ function onCellClick(idx) {
             'stone-white': v === 2,
             'is-last': idx === game.lastMove,
           }"
+        ></span>
+        <span
+          v-else-if="idx === selectedCell"
+          class="gomoku-stone gomoku-selected"
+          :class="game.currentSide === 1 ? 'stone-black' : 'stone-white'"
         ></span>
         <span
           v-else-if="game.canHumanPlay"
@@ -95,7 +119,7 @@ function onCellClick(idx) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(100%, 460px);
+  width: 100%;
   margin: 0 auto;
   user-select: none;
 }
@@ -221,6 +245,12 @@ function onCellClick(idx) {
   animation: none; /* 预览点挂载时不播放入场动画, 否则轮到玩家时满屏闪烁棋子 */
 }
 
+.gomoku-selected {
+  opacity: 0.65;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.9);
+  animation: none;
+}
+
 .gomoku-cell.can-play:hover .gomoku-preview {
   opacity: 0.35;
 }
@@ -296,7 +326,10 @@ function onCellClick(idx) {
   }
 
   .gomoku-board {
-    border-radius: 10px;
+    /* 吃掉弹窗 content/body 的横向内边距, 棋盘满宽最大化格子尺寸 */
+    width: calc(100% + 64px);
+    margin: 0 -32px;
+    border-radius: 0;
   }
 
   .gomoku-controls :deep(.ant-btn) {
