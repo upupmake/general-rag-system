@@ -56,7 +56,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <div class="g2048-header">
       <div class="g2048-title">
         2048
-        <span class="g2048-badge">隐藏彩蛋</span>
       </div>
       <div class="g2048-scores">
         <div class="g2048-score-box">
@@ -157,15 +156,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 [data-theme='dark'] .g2048-title {
   color: #e8e6e3;
-}
-
-.g2048-badge {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 10px;
-  color: #1677ff;
-  background: rgba(22, 119, 255, 0.12);
 }
 
 .g2048-scores {

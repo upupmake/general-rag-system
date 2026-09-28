@@ -209,7 +209,7 @@ const handleSend = (text) => {
   inputExpanded.value = false
 }
 
-// 小游戏彩蛋提示：每次请求弹出，整个请求（流式输出）结束后隐藏
+// 小游戏提示：每次请求弹出，整个请求（流式输出）结束后隐藏
 const gameTipVisible = ref(false)
 let gameTipTimer = null
 const gameTipText = computed(() =>

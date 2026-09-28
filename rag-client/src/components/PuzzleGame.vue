@@ -39,11 +39,12 @@ function onSizeChange(e) {
 }
 
 function onKeydown(e) {
+  // 方向键 = 方块沿该方向移动(与滑动手势一致, 与 2048 的方向语义一致)
   const dirs = {
-    ArrowUp: [-1, 0],
-    ArrowDown: [1, 0],
-    ArrowLeft: [0, -1],
-    ArrowRight: [0, 1],
+    ArrowUp: [1, 0],
+    ArrowDown: [-1, 0],
+    ArrowLeft: [0, 1],
+    ArrowRight: [0, -1],
   }
   const d = dirs[e.key]
   if (!d || game.view !== 'game') return
@@ -54,7 +55,9 @@ function onKeydown(e) {
 let touchStart = null
 
 function onTouchStart(e) {
-  touchStart = e.touches[0]
+  // 存普通对象: Touch.x/y 别名并不可靠, 必须取 clientX/clientY
+  const t = e.touches[0]
+  touchStart = {x: t.clientX, y: t.clientY}
 }
 
 function onTouchEnd(e) {
@@ -65,9 +68,11 @@ function onTouchEnd(e) {
   const dx = e.changedTouches[0].clientX - touchStart.x
   const dy = e.changedTouches[0].clientY - touchStart.y
   touchStart = null
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return // 触点按点击处理
-  if (Math.abs(dx) > Math.abs(dy)) game.moveBlank(0, dx > 0 ? 1 : -1)
-  else game.moveBlank(dy > 0 ? 1 : -1, 0)
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 32) return // 视为点击, 交给 click 处理
+  e.preventDefault() // 滑动后抑制浏览器合成 click, 防止一次手势走两步
+  // 滑动方向 = 方块移动方向(跟手): 向某方向滑, 就把该方向的方块滑入空位
+  if (Math.abs(dx) > Math.abs(dy)) game.moveBlank(0, dx > 0 ? -1 : 1)
+  else game.moveBlank(dy > 0 ? -1 : 1, 0)
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown))
@@ -79,7 +84,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <div class="puzzle-header">
       <div class="puzzle-title">
         图片拼图
-        <span class="puzzle-badge">隐藏彩蛋</span>
       </div>
       <div class="puzzle-scores">
         <div class="puzzle-score-box">
@@ -199,17 +203,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   font-size: 18px;
   font-weight: 700;
   white-space: nowrap; /* 标题不折行 */
-}
-
-.puzzle-badge {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 10px;
-  color: #1677ff;
-  background: rgba(22, 119, 255, 0.12);
-  white-space: nowrap; /* 徽章不折行 */
-  flex-shrink: 0;
 }
 
 .puzzle-scores {

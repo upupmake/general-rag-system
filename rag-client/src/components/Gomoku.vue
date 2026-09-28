@@ -52,7 +52,6 @@ function onCellTouchEnd(idx, e) {
     <div class="gomoku-header">
       <div class="gomoku-title">
         五子棋
-        <span class="gomoku-badge">隐藏彩蛋</span>
       </div>
       <div class="gomoku-side" :class="{ 'side-black': game.humanSide === 1 }">
         {{ sideText }}
@@ -144,15 +143,6 @@ function onCellTouchEnd(idx, e) {
 
 [data-theme='dark'] .gomoku-title {
   color: #e8e6e3;
-}
-
-.gomoku-badge {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 10px;
-  color: #1677ff;
-  background: rgba(22, 119, 255, 0.12);
 }
 
 .gomoku-side {

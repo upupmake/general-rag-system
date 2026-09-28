@@ -16,7 +16,7 @@ function tilesFromState(state, n) {
 }
 
 export const useGamePuzzleStore = defineStore('gamePuzzle', () => {
-  const n = ref(4) // 棋盘尺寸, 可选 3x3 / 4x4
+  const n = ref(3) // 棋盘尺寸, 可选 3x3 / 4x4(默认 3x3)
   const tiles = ref([]) // [{id, value, r, c}], 空位无 tile
   const moves = ref(0)
   const history = ref([]) // [{tiles, moves}], 仅保留最近 MAX_HISTORY 步
