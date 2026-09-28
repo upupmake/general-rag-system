@@ -5,11 +5,13 @@ import SessionList from '@/components/SessionList.vue'
 import Game2048 from '@/components/Game2048.vue'
 import Gomoku from '@/components/Gomoku.vue'
 import PuzzleGame from '@/components/PuzzleGame.vue'
+import SokobanGame from '@/components/SokobanGame.vue'
 import {useThemeStore} from '@/stores/theme'
 import {useUserStore} from '@/stores/user'
 import {useGame2048Store} from '@/stores/game2048'
 import {useGameGomokuStore} from '@/stores/gameGomoku'
 import {useGamePuzzleStore} from '@/stores/gamePuzzle'
+import {useGameSokobanStore} from '@/stores/gameSokoban'
 import {
   LogoutOutlined, 
   UserOutlined,
@@ -21,7 +23,8 @@ import {
   DownOutlined,
   GiftOutlined,
   BorderOutlined,
-  PictureOutlined
+  PictureOutlined,
+  BoxPlotOutlined
 } from '@ant-design/icons-vue';
 // 引入本地静态资源 URL
 import lightThemeUrl from '@/assets/github-markdown.min.css?url';
@@ -36,14 +39,16 @@ const userStore = useUserStore();
 const game2048Store = useGame2048Store();
 const gameGomokuStore = useGameGomokuStore();
 const gamePuzzleStore = useGamePuzzleStore();
+const gameSokobanStore = useGameSokobanStore();
 const currentWorkspace = ref(null)
 const isFooterExpanded = ref(false) // 控制底部用户菜单展开/收起
 const footerMenuRef = ref(null)
 const collapsed = ref(false) // 控制侧边栏收起/展开
 const isMobile = ref(false)
-const isGameOpen = ref(false) // 2048 彩蛋弹窗
-const isGomokuOpen = ref(false) // 五子棋 彩蛋弹窗
-const isPuzzleOpen = ref(false) // 图片拼图 彩蛋弹窗
+const isGameOpen = ref(false) // 2048 小游戏弹窗
+const isGomokuOpen = ref(false) // 五子棋 小游戏弹窗
+const isPuzzleOpen = ref(false) // 图片拼图 小游戏弹窗
+const isSokobanOpen = ref(false) // 推箱子 小游戏弹窗
 
 // 加载当前工作空间信息
 const loadCurrentWorkspace = async () => {
@@ -127,7 +132,7 @@ const toggleFooter = () => {
   isFooterExpanded.value = !isFooterExpanded.value
 }
 
-// 打开 2048 彩蛋弹窗(同时收起用户菜单)
+// 打开 2048 小游戏弹窗(同时收起用户菜单)
 const openGame = () => {
   isFooterExpanded.value = false
   isGameOpen.value = true
@@ -138,7 +143,7 @@ watch(isGameOpen, (open) => {
   game2048Store.setActive(open)
 })
 
-// 打开 五子棋 彩蛋弹窗(同时收起用户菜单)
+// 打开 五子棋 小游戏弹窗(同时收起用户菜单)
 const openGomoku = () => {
   isFooterExpanded.value = false
   isGomokuOpen.value = true
@@ -149,7 +154,7 @@ watch(isGomokuOpen, (open) => {
   gameGomokuStore.setActive(open)
 })
 
-// 打开 图片拼图 彩蛋弹窗(同时收起用户菜单)
+// 打开 图片拼图 小游戏弹窗(同时收起用户菜单)
 const openPuzzle = () => {
   isFooterExpanded.value = false
   isPuzzleOpen.value = true
@@ -158,6 +163,17 @@ const openPuzzle = () => {
 // 关闭弹窗强制关停 AI 托管(含 Worker), 拼图状态保留
 watch(isPuzzleOpen, (open) => {
   gamePuzzleStore.setActive(open)
+})
+
+// 打开 推箱子 小游戏弹窗(同时收起用户菜单)
+const openSokoban = () => {
+  isFooterExpanded.value = false
+  isSokobanOpen.value = true
+}
+
+// 关闭弹窗强制关停 AI 托管(含 Worker), 棋盘状态保留
+watch(isSokobanOpen, (open) => {
+  gameSokobanStore.setActive(open)
 })
 
 // 切换侧边栏收起/展开
@@ -402,28 +418,36 @@ const go = (path) => {
                   GitHub 开源地址
                 </a-button>
 
-                <!-- 2048 彩蛋 -->
-                <a-button type="text" @click.stop="openGame" title="2048 小游戏(彩蛋)">
+                <!-- 2048 小游戏 -->
+                <a-button type="text" @click.stop="openGame" title="2048">
                   <template #icon>
                     <gift-outlined />
                   </template>
-                  2048 小游戏
+                  2048
                 </a-button>
 
-                <!-- 五子棋 彩蛋 -->
-                <a-button type="text" @click.stop="openGomoku" title="五子棋(彩蛋)">
+                <!-- 五子棋 小游戏 -->
+                <a-button type="text" @click.stop="openGomoku" title="五子棋">
                   <template #icon>
                     <border-outlined />
                   </template>
                   五子棋
                 </a-button>
 
-                <!-- 图片拼图 彩蛋 -->
-                <a-button type="text" @click.stop="openPuzzle" title="图片拼图(彩蛋)">
+                <!-- 图片拼图 小游戏 -->
+                <a-button type="text" @click.stop="openPuzzle" title="图片拼图">
                   <template #icon>
                     <picture-outlined />
                   </template>
                   图片拼图
+                </a-button>
+
+                <!-- 推箱子 小游戏 -->
+                <a-button type="text" @click.stop="openSokoban" title="推箱子">
+                  <template #icon>
+                    <box-plot-outlined />
+                  </template>
+                  推箱子
                 </a-button>
 
                 <!-- 退出登录 -->
@@ -497,7 +521,7 @@ const go = (path) => {
       </a-layout-content>
     </a-layout>
 
-    <!-- 2048 彩蛋弹窗 -->
+    <!-- 2048 小游戏弹窗 -->
     <a-modal
       v-model:open="isGameOpen"
       :title="null"
@@ -511,7 +535,7 @@ const go = (path) => {
       <Game2048 />
     </a-modal>
 
-    <!-- 五子棋 彩蛋弹窗 -->
+    <!-- 五子棋 小游戏弹窗 -->
     <a-modal
       v-model:open="isGomokuOpen"
       :title="null"
@@ -525,7 +549,7 @@ const go = (path) => {
       <Gomoku />
     </a-modal>
 
-    <!-- 图片拼图 彩蛋弹窗 -->
+    <!-- 图片拼图 小游戏弹窗 -->
     <a-modal
       v-model:open="isPuzzleOpen"
       :title="null"
@@ -537,6 +561,20 @@ const go = (path) => {
       destroy-on-close
     >
       <PuzzleGame />
+    </a-modal>
+
+    <!-- 推箱子 小游戏弹窗 -->
+    <a-modal
+      v-model:open="isSokobanOpen"
+      :title="null"
+      :footer="null"
+      :centered="true"
+      :width="isMobile ? '94%' : 600"
+      :body-style="{ padding: isMobile ? '12px' : '24px' }"
+      :mask-closable="false"
+      destroy-on-close
+    >
+      <SokobanGame />
     </a-modal>
   </a-layout>
 </template>
