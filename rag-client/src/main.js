@@ -7,7 +7,6 @@ import App from './App.vue'
 import { createPinia } from 'pinia'
 import 'highlight.js/styles/github.css';
 import 'ant-design-vue/dist/reset.css';
-import Antd from 'ant-design-vue';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 dayjs.locale('zh-cn');
@@ -20,5 +19,4 @@ const pinia = createPinia()
 const app = createApp(App);
 app.use(router)
 app.use(pinia)
-app.use(Antd)
 app.mount('#app');

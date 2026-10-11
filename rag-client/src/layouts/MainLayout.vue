@@ -1,17 +1,14 @@
 <script setup>
-import {ref, watch, computed, onMounted, onUnmounted} from 'vue'
+import {ref, watch, computed, onMounted, onUnmounted, defineAsyncComponent} from 'vue'
 import {useRouter, useRoute} from 'vue-router'
 import SessionList from '@/components/SessionList.vue'
-import Game2048 from '@/components/Game2048.vue'
-import Gomoku from '@/components/Gomoku.vue'
-import PuzzleGame from '@/components/PuzzleGame.vue'
-import SokobanGame from '@/components/SokobanGame.vue'
+// 游戏组件按需异步加载，避免求解器/素材进入首屏 bundle
+const Game2048 = defineAsyncComponent(() => import('@/components/Game2048.vue'))
+const Gomoku = defineAsyncComponent(() => import('@/components/Gomoku.vue'))
+const PuzzleGame = defineAsyncComponent(() => import('@/components/PuzzleGame.vue'))
+const SokobanGame = defineAsyncComponent(() => import('@/components/SokobanGame.vue'))
 import {useThemeStore} from '@/stores/theme'
 import {useUserStore} from '@/stores/user'
-import {useGame2048Store} from '@/stores/game2048'
-import {useGameGomokuStore} from '@/stores/gameGomoku'
-import {useGamePuzzleStore} from '@/stores/gamePuzzle'
-import {useGameSokobanStore} from '@/stores/gameSokoban'
 import {
   LogoutOutlined, 
   UserOutlined,
@@ -36,10 +33,6 @@ const route = useRoute()
 const selectedKeys = ref([])
 const themeStore = useThemeStore();
 const userStore = useUserStore();
-const game2048Store = useGame2048Store();
-const gameGomokuStore = useGameGomokuStore();
-const gamePuzzleStore = useGamePuzzleStore();
-const gameSokobanStore = useGameSokobanStore();
 const currentWorkspace = ref(null)
 const isFooterExpanded = ref(false) // 控制底部用户菜单展开/收起
 const footerMenuRef = ref(null)
@@ -139,8 +132,9 @@ const openGame = () => {
 }
 
 // 弹窗可见性同步到游戏状态: 打开时恢复 AI 托管, 关闭时挂起(棋盘/分数/开关状态保留)
-watch(isGameOpen, (open) => {
-  game2048Store.setActive(open)
+watch(isGameOpen, async (open) => {
+  const {useGame2048Store} = await import('@/stores/game2048')
+  useGame2048Store().setActive(open)
 })
 
 // 打开 五子棋 小游戏弹窗(同时收起用户菜单)
@@ -150,8 +144,9 @@ const openGomoku = () => {
 }
 
 // 关闭弹窗终止 AI 计算并保留棋局, 重新打开后按需续算
-watch(isGomokuOpen, (open) => {
-  gameGomokuStore.setActive(open)
+watch(isGomokuOpen, async (open) => {
+  const {useGameGomokuStore} = await import('@/stores/gameGomoku')
+  useGameGomokuStore().setActive(open)
 })
 
 // 打开 图片拼图 小游戏弹窗(同时收起用户菜单)
@@ -161,8 +156,9 @@ const openPuzzle = () => {
 }
 
 // 关闭弹窗强制关停 AI 托管(含 Worker), 拼图状态保留
-watch(isPuzzleOpen, (open) => {
-  gamePuzzleStore.setActive(open)
+watch(isPuzzleOpen, async (open) => {
+  const {useGamePuzzleStore} = await import('@/stores/gamePuzzle')
+  useGamePuzzleStore().setActive(open)
 })
 
 // 打开 推箱子 小游戏弹窗(同时收起用户菜单)
@@ -172,8 +168,9 @@ const openSokoban = () => {
 }
 
 // 关闭弹窗强制关停 AI 托管(含 Worker), 棋盘状态保留
-watch(isSokobanOpen, (open) => {
-  gameSokobanStore.setActive(open)
+watch(isSokobanOpen, async (open) => {
+  const {useGameSokobanStore} = await import('@/stores/gameSokoban')
+  useGameSokobanStore().setActive(open)
 })
 
 // 切换侧边栏收起/展开

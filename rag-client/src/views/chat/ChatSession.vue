@@ -32,7 +32,7 @@ import {useMessageEdit} from './composables/useMessageEdit.js'
 import {usePasteUpload} from './composables/usePasteUpload.js'
 
 // Utils
-import {md} from './markdown.js'
+import {renderCached} from './markdown.js'
 import {allKnownTools, toolConfigs, assistantAvatar, userAvatar} from './constants.js'
 
 const route = useRoute()
@@ -375,7 +375,7 @@ const confirmContextCustom = () => {
                       }
                       if (p.content) {
                         item.content = h(Typography, {
-                          innerHTML: md.render(p.content),
+                          innerHTML: renderCached(p, 'content', p.content),
                         })
                       }
                       return item
@@ -421,7 +421,7 @@ const confirmContextCustom = () => {
                       <div class="thinking-content-wrapper">
                         <Typography>
                           <div
-                              class="markdown-body thinking-markdown" v-html="md.render(msg.thinking || '')">
+                              class="markdown-body thinking-markdown" v-html="renderCached(msg, 'thinking', msg.thinking)">
                           </div>
                         </Typography>
                       </div>
@@ -432,7 +432,7 @@ const confirmContextCustom = () => {
 
                 <!-- 显示回答内容 -->
                 <Typography>
-                  <div class="markdown-body message-content" v-html="md.render(msg.content || '')"/>
+                  <div class="markdown-body message-content" v-html="renderCached(msg, 'content', msg.content)"/>
                 </Typography>
               </div>
 
