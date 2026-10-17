@@ -114,7 +114,7 @@
 | 环境变量 | 代码默认值 | 说明 |
 | --- | --- | --- |
 | `JAVA_OPENAPI_BASE_URL` | `https://starvpn.forwardforever.top:5616/api/openapi/v1` | Java Access Key 鉴权、知识库授权和文档变更 OpenAPI |
-| `RAG_LLM_BASE_URL` | `http://192.168.188.6:8848/rag` | 内网 `rag-llm` 基础地址；检索路径追加 `/retrieval/keywords`、`/semantic`、`/files`、`/chunks` 或 `/context` |
+| `RAG_LLM_BASE_URL` | `http://192.168.188.14:6667/rag` | 内网 `rag-llm` 基础地址；检索路径追加 `/retrieval/keywords`、`/semantic`、`/files`、`/chunks` 或 `/context` |
 | `MCP_HOST` | `0.0.0.0` | MCP 监听地址 |
 | `MCP_PORT` | `8858` | MCP 监听端口 |
 | `RABBITMQ_HOST` | `192.168.188.6` | 审计消息 RabbitMQ 地址 |
@@ -124,8 +124,11 @@
 | `MCP_AUDIT_EXCHANGE` | `rag.audit.exchange` | 审计 Direct 类型交换机名称 |
 | `MCP_AUDIT_ROUTING_KEY` | `rag.mcp.tool.log.v1` | 审计消息路由键 |
 | `MCP_AUDIT_PUBLISH_TIMEOUT` | `3` | 审计消息发布超时（秒）；超时只记录日志，不阻塞工具返回 |
+| `MCP_RETRIEVAL_TIMEOUT` | `60` | 调用 `rag-llm` 检索接口的超时（秒）；多 query 语义检索可适当放大 |
 
 `MCP_PUBLIC_URL` 不是当前配置项，不要设置或恢复它。客户端知道完整的 `/mcp` 地址并直接提供 Bearer Access Key。
+
+检索工具的结果摘要会包含 `matchedTotal`、`keptBeforeTopK`、`topScore`、`scoreThreshold`、`truncated`、`failedQueries`（存在时），便于在审计中区分截断、部分召回和弱相关结果。
 
 ## 安装与运行
 

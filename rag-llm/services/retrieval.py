@@ -83,6 +83,12 @@ def _format_chunks(knowledge_base_id: int, result: dict[str, Any]) -> dict[str, 
         "knowledgeBaseId": knowledge_base_id,
         "results": chunks,
         "totalHits": result["total_hits"],
+        "matchedTotal": result.get("matched_total"),
+        "truncated": result.get("truncated", False),
+        "keptBeforeTopK": result.get("kept_before_top_k"),
+        "topScore": result.get("top_score"),
+        "scoreThreshold": result.get("threshold"),
+        "failedQueries": result.get("failed_queries", 0),
     }
 
 

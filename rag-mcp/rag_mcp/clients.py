@@ -2,7 +2,7 @@ from typing import Any
 
 import httpx
 
-from rag_mcp.config import JAVA_OPENAPI_BASE_URL, RAG_LLM_BASE_URL
+from rag_mcp.config import JAVA_OPENAPI_BASE_URL, MCP_RETRIEVAL_TIMEOUT, RAG_LLM_BASE_URL
 
 
 class ServiceError(RuntimeError):
@@ -36,6 +36,7 @@ async def _request(
     *,
     headers: dict[str, str] | None = None,
     json: dict[str, Any] | None = None,
+    timeout: float = 30.0,
 ) -> dict[str, Any]:
     try:
         response = await _get_http_client().request(
@@ -43,7 +44,7 @@ async def _request(
             url,
             headers=headers,
             json=json,
-            timeout=30,
+            timeout=timeout,
         )
         response.raise_for_status()
         return response.json()
@@ -128,4 +129,9 @@ async def authorize_knowledge_base(knowledge_base_id: int, access_key: str) -> d
 
 
 async def rag_retrieve(path: str, body: dict[str, Any]) -> dict[str, Any]:
-    return await _request("POST", f"{RAG_LLM_BASE_URL}{path}", json=body)
+    return await _request(
+        "POST",
+        f"{RAG_LLM_BASE_URL}{path}",
+        json=body,
+        timeout=MCP_RETRIEVAL_TIMEOUT,
+    )

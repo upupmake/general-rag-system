@@ -5,6 +5,7 @@
 - 自定义决策流程(无黑盒Agent)
 - 全程可追踪、可调试
 """
+import asyncio
 import json
 import logging
 import os
@@ -20,20 +21,13 @@ from agentic_rag_controller import CONTROLLER_SYSTEM_PROMPT, get_retrieval_contr
 from agentic_rag_toolkit import RetrievalToolkit
 from milvus_utils import MilvusClientManager
 from prompts import CLAUDE_DISGUISE_SYSTEM_PROMPT
-from utils import merge_consecutive_chunks, get_embedding_instance, get_token_count
+from utils import merge_consecutive_chunks, get_embedding_instance
 from utils import get_official_llm, unified_llm_stream
 
 logger = logging.getLogger(__name__)
 
-ANSWER_CONTEXT_MAX_TOKENS = int(os.environ.get("ANSWER_CONTEXT_MAX_TOKENS", "24000"))
-
-
-def _truncate_to_token_budget(text: str, max_tokens: int) -> str:
-    encoding = tiktoken.get_encoding("o200k_base")
-    tokens = encoding.encode(text)
-    if len(tokens) <= max_tokens:
-        return text
-    return encoding.decode(tokens[:max_tokens])
+# 单个检索工具的超时，避免一个慢 query 拖死整轮 Agentic 检索
+RETRIEVAL_TOOL_TIMEOUT = float(os.environ.get("RETRIEVAL_TOOL_TIMEOUT", "30"))
 
 
 # ============= 核心Agentic RAG类 =============
@@ -193,13 +187,40 @@ class AgenticRAGService:
             return f"找到 {len(results)} 个文件:\n" + "\n".join(table_lines)
 
         retrieved = tool_result.get("total_hits", 0)
-        lines = [
-            f"工具 {tool_name} 执行完成。",
-            "",
-            f"检索到 {retrieved} 个文档切片，新增 {new_added} 个，累计 {accumulated} 个。"
-        ]
-
+        matched_total = tool_result.get("matched_total")
+        truncated = tool_result.get("truncated")
+        kept_before_top_k = tool_result.get("kept_before_top_k")
+        top_score = tool_result.get("top_score")
+        threshold = tool_result.get("threshold")
         failed_queries = tool_result.get("failed_queries", 0)
+
+        lines = [f"工具 {tool_name} 执行完成。", ""]
+        if tool_name == "keyword_search":
+            if matched_total is not None:
+                lines.append(
+                    f"范围内命中 {matched_total} 个切片，返回 {retrieved} 个"
+                    + ("（已截断）" if truncated else "")
+                )
+            else:
+                lines.append(
+                    f"返回 {retrieved} 个切片"
+                    + ("（候选可能已截断）" if truncated else "")
+                )
+        elif kept_before_top_k is not None:
+            lines.append(
+                f"动态阈值保留 {kept_before_top_k} 个切片，top_k 截断后返回 {retrieved} 个"
+                + ("（已截断）" if truncated else "")
+            )
+        else:
+            lines.append(f"检索到 {retrieved} 个文档切片")
+
+        if top_score is not None:
+            score_line = f"最高分 {top_score:.4f}"
+            if threshold is not None:
+                score_line += f"，动态阈值 {threshold:.4f}"
+            lines.append(score_line)
+
+        lines.append(f"新增 {new_added} 个，累计 {accumulated} 个。")
         if failed_queries:
             lines.append(f"⚠️ 有 {failed_queries} 个 query 检索失败，本次为部分召回结果。")
 
@@ -242,7 +263,7 @@ class AgenticRAGService:
             self,
             question: str,
             history: Optional[list] = None,
-            max_rounds: int = 20
+            max_rounds: int = 10
     ):
         """
         Agentic检索主流程（生成器版本，yield process信息）
@@ -293,13 +314,49 @@ class AgenticRAGService:
                 )
             except Exception as e:
                 logger.error(f"❌ 第{round_no}轮决策失败，停止检索并基于已有结果生成答案: {e}")
+                fallback_added = 0
+                if not reference_docs:
+                    try:
+                        fallback_result = await asyncio.wait_for(
+                            self.toolkit.execute_tool(
+                                "semantic_search",
+                                {"queries": [question], "top_k": 10},
+                                exclude_pks=set(),
+                            ),
+                            timeout=RETRIEVAL_TOOL_TIMEOUT,
+                        )
+                        for doc in fallback_result.get("results", []):
+                            pk = doc.metadata.get("pk")
+                            if pk and pk not in reference_docs:
+                                doc.metadata["retrieved_round"] = round_no
+                                reference_docs[pk] = doc
+                                fallback_added += 1
+                            doc_id = doc.metadata.get("documentId")
+                            if doc_id and doc_id not in all_docs:
+                                all_docs[doc_id] = Document(
+                                    page_content="",
+                                    metadata={
+                                        "fileName": doc.metadata.get("fileName"),
+                                        "documentId": doc.metadata.get("documentId"),
+                                        "maxChunkIndex": doc.metadata.get("maxChunkIndex"),
+                                    }
+                                )
+                        logger.info(f"↩️ 决策失败兜底检索新增 {fallback_added} 个切片")
+                    except Exception as fallback_error:
+                        logger.error(f"❌ 决策失败兜底检索失败: {fallback_error}")
+
+                if fallback_added:
+                    fallback_note = f"已兜底执行一次语义检索，新增 {fallback_added} 个切片。"
+                else:
+                    fallback_note = f"将基于当前已检索到的 {len(reference_docs)} 个文档切片生成答案。"
+
                 yield {
                     "type": "process",
                     "payload": {
                         "step": f"round_{round_no}",
                         "title": "决策失败",
                         "description": "检索决策模型调用失败，已停止检索并将基于已有结果生成答案",
-                        "content": f"**决策失败**\n\n错误: {str(e)}\n\n将基于当前已检索到的 {len(reference_docs)} 个文档切片生成答案。",
+                        "content": f"**决策失败**\n\n错误: {str(e)}\n\n{fallback_note}",
                         "status": "error"
                     }
                 }
@@ -355,10 +412,13 @@ class AgenticRAGService:
 
                 # 执行工具（串行：每个工具执行时取当前最新的已读排除集合）
                 try:
-                    tool_result = await self.toolkit.execute_tool(
-                        tool_name,
-                        tool_args,
-                        exclude_pks=set(reference_docs.keys())
+                    tool_result = await asyncio.wait_for(
+                        self.toolkit.execute_tool(
+                            tool_name,
+                            tool_args,
+                            exclude_pks=set(reference_docs.keys())
+                        ),
+                        timeout=RETRIEVAL_TOOL_TIMEOUT,
                     )
                     new_docs = tool_result["results"]
                     newly_added_docs = []
@@ -409,6 +469,18 @@ class AgenticRAGService:
                         "accumulated": accumulated,
                     })
 
+                except asyncio.TimeoutError:
+                    error_message = f"工具执行超时（>{RETRIEVAL_TOOL_TIMEOUT:g}s）"
+                    logger.error(f"❌ 工具 {tool_name} {error_message}")
+                    append_controller_message(ToolMessage(
+                        content=f"工具执行出错: {error_message}",
+                        tool_call_id=tool_call_id
+                    ))
+                    round_tool_calls.append({
+                        "name": tool_name,
+                        "args": tool_args,
+                        "error": error_message,
+                    })
                 except Exception as e:
                     logger.error(f"❌ 工具 {tool_name} 执行失败: {e}")
                     # 将错误信息作为 ToolMessage 回传给 LLM
@@ -496,7 +568,7 @@ class AgenticRAGService:
             model_info: dict,
             system_prompt: Optional[str] = None,
             options: dict = None,
-            max_rounds: int = 20,
+            max_rounds: int = 10,
     ):
         """
         带过程信息的流式Agentic RAG响应生成器
@@ -550,35 +622,14 @@ class AgenticRAGService:
             else:
                 raise RuntimeError("Agentic检索流程未返回最终结果")
 
-            # 合并连续切片并构建上下文
+            # 合并连续切片并构建上下文；检索规模由 max_rounds 控制，不再截断最终上下文
             if reference_documents:
                 merged_docs = merge_consecutive_chunks(reference_documents)
-
-                context_parts = []
-                context_tokens = 0
-                context_truncated = False
-                for doc in merged_docs:
-                    part = f"[来源: {doc.metadata.get('fileName')}]: {doc.page_content}"
-                    part_tokens = get_token_count(part)
-                    remaining = ANSWER_CONTEXT_MAX_TOKENS - context_tokens
-                    if remaining <= 0:
-                        break
-                    if part_tokens > remaining:
-                        if not context_parts:
-                            truncated = _truncate_to_token_budget(part, remaining)
-                            context_parts.append(truncated)
-                            context_tokens += get_token_count(truncated)
-                        context_truncated = True
-                        break
-                    context_parts.append(part)
-                    context_tokens += part_tokens
-
+                context_parts = [
+                    f"[来源: {doc.metadata.get('fileName')}]: {doc.page_content}"
+                    for doc in merged_docs
+                ]
                 context = "\n\n".join(context_parts) if context_parts else "具体内容为空"
-                if context_truncated or len(context_parts) < len(merged_docs):
-                    logger.warning(
-                        f"参考上下文超过 {ANSWER_CONTEXT_MAX_TOKENS} tokens，"
-                        f"已保留 {len(context_parts)}/{len(merged_docs)} 个切片"
-                    )
 
                 merged_docs_table_lines = [
                     "| 文件名 | 最大索引 | 索引范围 |",
@@ -599,10 +650,7 @@ class AgenticRAGService:
                     "payload": {
                         "step": "context_construction",
                         "title": "构建上下文",
-                        "description": (
-                            f"基于检索结果构建了回答上下文，包含 "
-                            f"{len(context_parts)}/{len(merged_docs)} 个切片，约 {context_tokens} tokens"
-                        ),
+                        "description": f"基于检索结果构建了回答上下文，包含 {len(merged_docs)} 个切片",
                         "content": merged_docs_table,
                         "status": "completed"
                     }

@@ -89,11 +89,13 @@ MILVUS_URI=<Milvus URI>
 MILVUS_TOKEN=<Milvus 令牌>
 ```
 
-但是当前 `main.py` 在导入这些模块之前直接给上述变量赋值，会覆盖进程外传入的同名值。按现有代码部署时需要修改 `main.py` 中的连接值；若要由部署环境注入，则应先改造入口为仅在变量缺失时设置默认值。不要把真实密码、访问密钥或令牌写入 README、提交到 Git 或复制到日志中。
+`main.py` 在导入这些模块之前通过 `os.environ.setdefault` 设置本地默认值；部署环境显式设置的同名变量优先。不要把真实密码、访问密钥或令牌写入 README、提交到 Git 或复制到日志中。
+
+Agentic 检索工具的单次执行超时由 `RETRIEVAL_TOOL_TIMEOUT` 控制，默认 30 秒。
 
 ### 模型配置文件
 
-聊天模型配置从 `model_config.json` 读取。文件路径相对于进程工作目录，服务每次调用配置读取函数时都会从磁盘重新读取，不使用进程内缓存。请根据部署环境准备该文件；本 README 不提供密钥、内网地址或具体供应商凭据。
+聊天模型配置从 `model_config.json` 读取。文件路径相对于进程工作目录，服务按文件 mtime/size 缓存配置，文件变化后的下一次调用会自动重新读取。请根据部署环境准备该文件；本 README 不提供密钥、内网地址或具体供应商凭据。
 
 聊天配置的顶层结构为 `chat`，按提供方组织；每个提供方包含 `settings` 默认候选和可选的模型名候选。候选可以是对象或列表，列表项默认启用，也可以使用 `enabled: false` 禁用。候选通常包含以下字段：
 
@@ -226,6 +228,10 @@ data: {"type":"usage","payload":{...}}
 - 只有关键词检索和语义检索传递已命中的 chunk PK 以尽量避免重复；连续读取和上下文扩展不做排除过滤。
 - 同一轮内的多个工具调用按顺序串行执行，每个工具执行时取当前最新的已读 chunk 排除集合。
 - 检索失败（Milvus 异常、表达式错误等）以错误 ToolMessage 返回，与"没有检索到内容"区分；单个 query 失败时返回部分召回并在 ToolMessage 中标注失败数量。
+- `keyword_search` 会先 over-fetch 候选，再按关键词覆盖率、词频和文件名命中做轻量排序；ToolMessage 中的 `matchedTotal` 是范围内真实命中数，`truncated` 表示只返回了 `top_k` 的一部分。
+- `semantic_search` 会批量计算 query 向量，并在向量召回和关键词补召回之间复用同一向量；ToolMessage 返回 `topScore`、`threshold`、`keptBeforeTopK`、`truncated` 和 `failedQueries`。
+- 排除已读切片时，语义检索会按排除数量额外 over-fetch（上限 200），避免后几轮因排除集合过大而出现“无新增”。
+- 单个检索工具默认超时 30 秒，可通过 `RETRIEVAL_TOOL_TIMEOUT` 调整；控制器调用失败且尚无参考文档时，会兜底执行一次 `semantic_search([question])`。
 - Milvus 结果保留 `fileName`，用于展示和来源归因。
 - Agentic RAG 使用 `text-embedding-v4/qwen` 作为配置标识，但当前 Embedding 实例实际固定连接本地 `8890` 服务。
 
@@ -283,6 +289,8 @@ data: {"type":"usage","payload":{...}}
 
 Milvus 客户端按用户和知识库获取，服务维护集合生命周期，并运行后台释放任务。检索和向量化都依赖 `MILVUS_URI`、`MILVUS_TOKEN` 以及相应知识库集合。
 
+老 collection 可能缺少 `documentId`、`fileName` 或 `text` 索引，导致关键词检索退化为全表扫描、`find_files` 的 `order_by` 变慢。可运行 `scripts/ensure_milvus_indexes.py` 检查；脚本默认 dry-run，只有加 `--apply` 才会创建 `STL_SORT` / `INVERTED` / `NGRAM` 索引。新建 collection 应确保这三类索引齐全。
+
 ## 关键约束
 
 - 端口必须以当前入口为准：`8848`；FastAPI `root_path` 为 `/rag`。
@@ -291,8 +299,9 @@ Milvus 客户端按用户和知识库获取，服务维护集合生命周期，�
 - 文件定位使用数值 `documentId`；不能用 `fileName` 替代文档定位。
 - 五个 `/rag/retrieval/*` 接口没有公共认证，必须只允许受信任内部调用。
 - `model_config.json` 按文件 mtime/size 缓存；修改文件后下一次调用会自动重新读取。
+- 生产 Milvus 为 Docker `milvusdb/milvus:v2.6.11`；该版本表达式解析器不支持 `r"..."` raw string，`LIKE` 中的 `%`/`_` 需要在普通字符串里用双反斜杠转义（`agentic_rag_toolkit._escape_like` 已处理）。
 - 官方 LLM 默认超时为 60 秒。候选已显式配置 `timeout` 时，以候选值为准。
-- 最终回答的参考上下文默认限制为 24000 tokens，可通过 `ANSWER_CONTEXT_MAX_TOKENS` 调整；超出部分按切片顺序截断。
+- 最终回答不设置上下文 token 上限；检索规模由最大检索轮次控制（聊天默认 10 轮，可通过 `options.maxRounds` 调整）。
 - LLM fallback 只允许发生在流开始之前；已经输出有效流内容后，不能切换到下一个候选。`ainvoke` 失败时仍可按候选顺序 fallback。
 - 当提供方为 `other` 且模型名以 `gemini` 开头时，流式入口改用 `ainvoke`，以兼容该类 OpenAI 兼容 Gemini 中继返回空流内容的情况。
 - 不要把任何真实 API 密钥、RabbitMQ 密码、MinIO 密钥或 Milvus 令牌写入文档、示例、提交记录或日志。

@@ -46,12 +46,17 @@ CONTROLLER_SYSTEM_PROMPT = """你是 Agentic RAG 的检索决策控制器。你�
 - 如果相同参数重复检索多轮后仍有新增，应判断是否确实需要继续穷举；若只是为了回答当前问题，应优先换查询角度、使用 read_file_chunks/expand_context 精读关键位置，或调用 stop_search。
 - read_file_chunks 和 expand_context 使用 documentId 保持同一文档的连续上下文，可能查到已读 chunk；系统会在最终参考文档中按 chunk 去重。
 
-### 4. 防止无效循环
+### 4. 关注召回信号
+- keyword_search 返回 matchedTotal/truncated：matchedTotal 是当前范围内的真实命中总数，truncated 表示只返回了 top_k 的一部分。命中很多时优先用 AND、document_ids 或更具体的关键词收敛，不要假设已经看到全部。
+- semantic_search 返回 topScore/threshold/keptBeforeTopK/truncated：topScore 接近或明显低于 threshold 时结果可能弱相关，但不要仅凭绝对分数停止，应结合切片内容判断；truncated 表示动态阈值保留数超过 top_k，可提高 top_k 或换角度。
+- failedQueries>0 表示部分 query 检索失败，本次为部分召回结果。
+
+### 5. 防止无效循环
 - 不要重复调用完全相同的工具和参数
 - 连续无增量时应换工具或 stop_search
 - 同一方向检索连续无增量，应换工具或 stop_search
 
-### 5. 停止条件（调用 stop_search）
+### 6. 停止条件（调用 stop_search）
 - 当前信息足以回答问题
 - 检索结果持续无关
 - 没有合理的新参数可构造

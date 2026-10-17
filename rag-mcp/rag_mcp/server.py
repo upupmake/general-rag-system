@@ -164,7 +164,16 @@ def _result_summary(result: Any) -> dict[str, Any] | None:
     if not isinstance(result, dict):
         return None
     summary: dict[str, Any] = {}
-    for key in ("knowledgeBaseId", "totalHits"):
+    for key in (
+        "knowledgeBaseId",
+        "totalHits",
+        "matchedTotal",
+        "keptBeforeTopK",
+        "topScore",
+        "scoreThreshold",
+        "truncated",
+        "failedQueries",
+    ):
         if key in result:
             summary[key] = result[key]
     if isinstance(result.get("results"), list):

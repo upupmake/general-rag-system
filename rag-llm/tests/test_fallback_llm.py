@@ -87,6 +87,9 @@ def _install_dependency_stubs():
 
 
 _install_dependency_stubs()
+# 其他测试模块可能已经导入过真实 utils；这里清掉后按 stubs 重新导入，
+# 避免 pytest 收集顺序影响 fallback 测试。
+sys.modules.pop("utils", None)
 import utils
 
 

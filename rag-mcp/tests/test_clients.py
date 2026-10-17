@@ -21,3 +21,25 @@ def test_http_client_is_reused_and_closed_on_shutdown():
 
     assert client.is_closed
     assert clients._http_client is None
+
+
+def test_rag_retrieve_uses_configured_timeout(monkeypatch):
+    captured = {}
+
+    async def fake_request(method, url, *, headers=None, json=None, timeout=30.0):
+        captured.update({
+            "method": method,
+            "url": url,
+            "json": json,
+            "timeout": timeout,
+        })
+        return {"ok": True}
+
+    monkeypatch.setattr(clients, "_request", fake_request)
+
+    result = asyncio.run(clients.rag_retrieve("/retrieval/semantic", {"queries": ["q"]}))
+
+    assert result == {"ok": True}
+    assert captured["method"] == "POST"
+    assert captured["url"].endswith("/retrieval/semantic")
+    assert captured["timeout"] == clients.MCP_RETRIEVAL_TIMEOUT
