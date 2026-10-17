@@ -4,6 +4,7 @@ import os
 from typing import Optional, Callable, Awaitable, Any, Union, Dict
 
 import aio_pika
+from aio_pika import DeliveryMode
 from aio_pika.abc import AbstractIncomingMessage
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,8 @@ class AsyncRabbitMQClient:
             await exchange.publish(
                 aio_pika.Message(
                     body=message_body,
-                    content_type=content_type
+                    content_type=content_type,
+                    delivery_mode=DeliveryMode.PERSISTENT,
                 ),
                 routing_key=routing_key
             )

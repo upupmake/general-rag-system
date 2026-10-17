@@ -290,8 +290,9 @@ Milvus 客户端按用户和知识库获取，服务维护集合生命周期，�
 - Agentic RAG 固定使用六工具；`stop_search` 由编排层处理，不作为普通检索结果工具执行。
 - 文件定位使用数值 `documentId`；不能用 `fileName` 替代文档定位。
 - 五个 `/rag/retrieval/*` 接口没有公共认证，必须只允许受信任内部调用。
-- `model_config.json` 每次访问都从磁盘读取；修改配置后无需依赖进程内缓存刷新。
+- `model_config.json` 按文件 mtime/size 缓存；修改文件后下一次调用会自动重新读取。
 - 官方 LLM 默认超时为 60 秒。候选已显式配置 `timeout` 时，以候选值为准。
+- 最终回答的参考上下文默认限制为 24000 tokens，可通过 `ANSWER_CONTEXT_MAX_TOKENS` 调整；超出部分按切片顺序截断。
 - LLM fallback 只允许发生在流开始之前；已经输出有效流内容后，不能切换到下一个候选。`ainvoke` 失败时仍可按候选顺序 fallback。
 - 当提供方为 `other` 且模型名以 `gemini` 开头时，流式入口改用 `ainvoke`，以兼容该类 OpenAI 兼容 Gemini 中继返回空流内容的情况。
 - 不要把任何真实 API 密钥、RabbitMQ 密码、MinIO 密钥或 Milvus 令牌写入文档、示例、提交记录或日志。

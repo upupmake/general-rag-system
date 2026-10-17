@@ -40,33 +40,37 @@ public class RabbitConsumer {
         if ("success".equals(response.getStatus())) {
             Documents doc = documentsService.getById(response.getDocumentId());
             if (doc != null) {
+                if (response.getChunks() == null || response.getChunks().isEmpty()) {
+                    doc.setStatus("failed");
+                    doc.setErrorMessage("文档未解析出任何有效内容");
+                    documentsService.updateById(doc);
+                    return;
+                }
                 doc.setStatus("ready");
                 doc.setErrorMessage("");
                 documentsService.updateById(doc);
 
-                if (response.getChunks() != null && !response.getChunks().isEmpty()) {
-                    LambdaQueryWrapper<DocumentChunks> queryWrapper = new LambdaQueryWrapper<>();
-                    queryWrapper.eq(DocumentChunks::getDocumentId, response.getDocumentId());
-                    documentChunksService.remove(queryWrapper);
+                LambdaQueryWrapper<DocumentChunks> queryWrapper = new LambdaQueryWrapper<>();
+                queryWrapper.eq(DocumentChunks::getDocumentId, response.getDocumentId());
+                documentChunksService.remove(queryWrapper);
 
-                    List<DocumentChunks> chunks = response.getChunks().stream().map(dto -> {
-                        DocumentChunks chunk = new DocumentChunks();
-                        chunk.setDocumentId(response.getDocumentId());
-                        chunk.setKbId(doc.getKbId());
-                        chunk.setChunkIndex(dto.getChunkIndex());
-                        chunk.setText(dto.getText());
-                        chunk.setTokenLength(dto.getTokenLength());
-                        chunk.setVectorId(dto.getVectorId());
-                        try {
-                            chunk.setMetadata(objectMapper.writeValueAsString(dto.getMetadata()));
-                        } catch (Exception e) {
-                            chunk.setMetadata("{}");
-                        }
-                        chunk.setCreatedAt(new Date());
-                        return chunk;
-                    }).collect(Collectors.toList());
-                    documentChunksService.saveBatch(chunks);
-                }
+                List<DocumentChunks> chunks = response.getChunks().stream().map(dto -> {
+                    DocumentChunks chunk = new DocumentChunks();
+                    chunk.setDocumentId(response.getDocumentId());
+                    chunk.setKbId(doc.getKbId());
+                    chunk.setChunkIndex(dto.getChunkIndex());
+                    chunk.setText(dto.getText());
+                    chunk.setTokenLength(dto.getTokenLength());
+                    chunk.setVectorId(dto.getVectorId());
+                    try {
+                        chunk.setMetadata(objectMapper.writeValueAsString(dto.getMetadata()));
+                    } catch (Exception e) {
+                        chunk.setMetadata("{}");
+                    }
+                    chunk.setCreatedAt(new Date());
+                    return chunk;
+                }).collect(Collectors.toList());
+                documentChunksService.saveBatch(chunks);
             }
         } else {
             Documents doc = documentsService.getById(response.getDocumentId());

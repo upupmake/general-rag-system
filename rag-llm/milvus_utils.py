@@ -19,6 +19,8 @@ class _MilvusWrapper:
         self.store = store
         self.last_access = time.time()
         self.lock = asyncio.Lock()
+        self.loaded = False
+        self.load_checked_at = 0.0
 
 
 class MilvusClientManager:
@@ -33,6 +35,8 @@ class MilvusClientManager:
 
     # 空闲释放阈值（秒）
     IDLE_TTL = 30 * 60  # 30 分钟
+    # 已加载状态的复用窗口，避免每次检索都做一次远程状态检查
+    LOAD_STATE_TTL = 5.0
 
     @classmethod
     async def get_instance(
@@ -71,11 +75,28 @@ class MilvusClientManager:
 
             wrapper = cls._instances[key]
 
-        # 单 collection 串行管理
+        now = time.time()
+        if wrapper.loaded and now - wrapper.load_checked_at < cls.LOAD_STATE_TTL:
+            wrapper.last_access = now
+            return wrapper.store
+
+        # 只有一个请求负责检查/加载状态，其余并发查询在加载完成后直接放行
         async with wrapper.lock:
-            wrapper.last_access = time.time()
-            # 确保 collection 已加载
-            res = wrapper.store.client.get_load_state(collection_name)
+            now = time.time()
+            if wrapper.loaded and now - wrapper.load_checked_at < cls.LOAD_STATE_TTL:
+                wrapper.last_access = now
+                return wrapper.store
+
+            wrapper.last_access = now
+            try:
+                # pymilvus 的同步客户端会阻塞事件循环，放到线程池执行
+                res = await asyncio.to_thread(
+                    wrapper.store.client.get_load_state, collection_name
+                )
+            except Exception as e:
+                logger.error(f"[Milvus] get load state failed {key}: {e}")
+                return None
+
             state = res.get('state', LoadState.NotLoad)
             if state == LoadState.NotLoad:
                 try:
@@ -84,6 +105,12 @@ class MilvusClientManager:
                 except Exception as e:
                     logger.error(f"[Milvus] load collection failed {key}: {e}")
                     return None
+                wrapper.loaded = True
+            elif state == LoadState.Loaded:
+                wrapper.loaded = True
+            else:
+                wrapper.loaded = False
+            wrapper.load_checked_at = time.time()
         return wrapper.store
 
     @classmethod
@@ -102,13 +129,17 @@ class MilvusClientManager:
         for key, wrapper in release_keys:
             async with wrapper.lock:
                 try:
-                    res = wrapper.store.client.get_load_state(wrapper.store.collection_name)
+                    res = await asyncio.to_thread(
+                        wrapper.store.client.get_load_state,
+                        wrapper.store.collection_name,
+                    )
                     state = res.get('state', LoadState.NotLoad)
                     if state == LoadState.Loaded:
                         logger.info(f"[Milvus] release collection: {key}")
                         await wrapper.store.aclient.release_collection(wrapper.store.collection_name)
                     else:
                         logger.info(f"[Milvus] collection already released: {key}")
+                    wrapper.loaded = False
                 except Exception as e:
                     logger.warning(f"[Milvus] release failed {key}: {e}")
 
@@ -127,7 +158,10 @@ class MilvusClientManager:
         for key, wrapper in items:
             async with wrapper.lock:
                 try:
-                    res = wrapper.store.client.get_load_state(wrapper.store.collection_name)
+                    res = await asyncio.to_thread(
+                        wrapper.store.client.get_load_state,
+                        wrapper.store.collection_name,
+                    )
                     state = res.get('state', LoadState.NotLoad)
                     if state == LoadState.Loaded:
                         logger.info(f"[Milvus] shutdown release collection: {key}")

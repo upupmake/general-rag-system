@@ -1,6 +1,7 @@
 package com.rag.ragserver.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.rag.ragserver.configuration.MinioConfig;
 import com.rag.ragserver.configuration.MilvusConfig;
@@ -232,9 +233,15 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
             throw new BusinessException(400, "仅处理失败的文档可以重试");
         }
 
-        document.setStatus("processing");
-        document.setErrorMessage("");
-        this.updateById(document);
+        boolean claimed = this.update(new UpdateWrapper<Documents>()
+                .eq("id", docId)
+                .eq("kb_id", kbId)
+                .eq("status", "failed")
+                .set("status", "processing")
+                .set("error_message", ""));
+        if (!claimed) {
+            throw new BusinessException(400, "仅处理失败的文档可以重试");
+        }
 
         DocumentProcessMessage message = DocumentProcessMessage.builder()
                 .documentId(document.getId())

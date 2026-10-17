@@ -123,6 +123,7 @@
 | `RABBITMQ_PASSWORD` | 代码内默认值 | RabbitMQ 密码；生产环境应通过环境变量设置 |
 | `MCP_AUDIT_EXCHANGE` | `rag.audit.exchange` | 审计 Direct 类型交换机名称 |
 | `MCP_AUDIT_ROUTING_KEY` | `rag.mcp.tool.log.v1` | 审计消息路由键 |
+| `MCP_AUDIT_PUBLISH_TIMEOUT` | `3` | 审计消息发布超时（秒）；超时只记录日志，不阻塞工具返回 |
 
 `MCP_PUBLIC_URL` 不是当前配置项，不要设置或恢复它。客户端知道完整的 `/mcp` 地址并直接提供 Bearer Access Key。
 

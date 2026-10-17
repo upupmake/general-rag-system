@@ -41,13 +41,11 @@ class DocumentsServiceImplTest {
     void reprocessResetsStatusAndRepublishesExistingFile() {
         Documents document = document("failed");
         doReturn(document).when(service).getOne(any());
-        doReturn(true).when(service).updateById(any());
+        doReturn(true).when(service).update(any());
 
         service.reprocessDocument(1L, 5L, 7L);
 
-        assertEquals("processing", document.getStatus());
-        assertEquals("", document.getErrorMessage());
-        verify(service).updateById(document);
+        verify(service).update(any());
         ArgumentCaptor<DocumentProcessMessage> captor = ArgumentCaptor.forClass(DocumentProcessMessage.class);
         verify(rabbitTemplate).convertAndSend(
                 eq("server.interact.llm.exchange"), eq("rag.document.process.key"), captor.capture());
@@ -63,6 +61,19 @@ class DocumentsServiceImplTest {
     @Test
     void reprocessRejectsDocumentsThatAreNotFailed() {
         doReturn(document("ready")).when(service).getOne(any());
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> service.reprocessDocument(1L, 5L, 7L));
+
+        assertEquals(400, error.getCode());
+        verifyNoInteractions(rabbitTemplate);
+    }
+
+    @Test
+    void reprocessRejectsConcurrentClaim() {
+        Documents document = document("failed");
+        doReturn(document).when(service).getOne(any());
+        doReturn(false).when(service).update(any());
 
         BusinessException error = assertThrows(BusinessException.class,
                 () -> service.reprocessDocument(1L, 5L, 7L));

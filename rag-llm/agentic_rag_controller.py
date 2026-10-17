@@ -174,3 +174,14 @@ class RetrievalController:
         except Exception as e:
             logger.error(f"❌ 决策失败: {e}")
             raise
+
+
+_controller_instance = None
+
+
+def get_retrieval_controller() -> RetrievalController:
+    """复用无状态的检索控制器，避免每个请求重建 LLM 客户端。"""
+    global _controller_instance
+    if _controller_instance is None:
+        _controller_instance = RetrievalController()
+    return _controller_instance

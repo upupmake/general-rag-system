@@ -26,18 +26,31 @@ from wrapper import ResponseWrapper
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_PATH = "model_config.json"
+_CONFIG_CACHE = {"signature": None, "config": None}
+
+_LLM_INSTANCE_CACHE = {}
+_LLM_INSTANCE_CACHE_MAX = 64
+
+_local_embedding_instance = None
+
 
 # 统一返回结构
 
 
 def _load_config():
-    """Load configuration from disk each time."""
-    config_path = "model_config.json"
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file {config_path} not found")
+    """Load configuration from disk and reuse it until the file changes."""
+    try:
+        stat = os.stat(_CONFIG_PATH)
+    except OSError as exc:
+        raise FileNotFoundError(f"Configuration file {_CONFIG_PATH} not found") from exc
 
-    with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    signature = (stat.st_mtime_ns, stat.st_size)
+    if _CONFIG_CACHE["signature"] != signature:
+        with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+            _CONFIG_CACHE["config"] = json.load(f)
+        _CONFIG_CACHE["signature"] = signature
+    return _CONFIG_CACHE["config"]
 
 
 def _normalize_candidate_list(config_value, config_name: str):
@@ -128,9 +141,22 @@ class FallbackLLMInstance:
         base_url = settings.get("base_url")
         timeout = settings.get("timeout", self.timeout)
         max_retries = settings.get("max_retries", self.max_retries)
+        cache_key = (
+            provider,
+            model_name,
+            json.dumps(settings, sort_keys=True, ensure_ascii=False, default=str),
+            self.enable_web_search,
+            self.enable_thinking,
+            timeout,
+            max_retries,
+            self.prompt_cache_key if (model_name or "").startswith("gpt-") else None,
+        )
+        cached = _LLM_INSTANCE_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
 
         if provider == "gemini":
-            return GeminiInstance(
+            llm = GeminiInstance(
                 model_name=model_name,
                 api_key=api_key,
                 base_url=base_url,
@@ -139,17 +165,23 @@ class FallbackLLMInstance:
                 timeout=timeout,
                 max_retries=max_retries,
             )
-        return OpenAIInstance(
-            model_name=model_name,
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout,
-            max_retries=max_retries,
-            enable_web_search=self.enable_web_search,
-            enable_thinking=self.enable_thinking,
-            provider=provider,
-            prompt_cache_key=self.prompt_cache_key,
-        )
+        else:
+            llm = OpenAIInstance(
+                model_name=model_name,
+                api_key=api_key,
+                base_url=base_url,
+                timeout=timeout,
+                max_retries=max_retries,
+                enable_web_search=self.enable_web_search,
+                enable_thinking=self.enable_thinking,
+                provider=provider,
+                prompt_cache_key=self.prompt_cache_key,
+            )
+
+        if len(_LLM_INSTANCE_CACHE) >= _LLM_INSTANCE_CACHE_MAX:
+            _LLM_INSTANCE_CACHE.pop(next(iter(_LLM_INSTANCE_CACHE)))
+        _LLM_INSTANCE_CACHE[cache_key] = llm
+        return llm
 
     def _candidate_name(self, settings: dict, index: int):
         return f"candidate-{index + 1}"
@@ -238,15 +270,18 @@ def get_official_llm(
 
 
 def get_local_embedding_instance(embedding_info: dict):
-    base_url = "http://192.168.188.6:8890"
-    model_name = "Qwen/Qwen3-Embedding-0.6B"
-    return init_embeddings(
-        model=model_name,
-        api_key="local",
-        base_url=base_url,
-        provider="openai",
-        check_embedding_ctx_length=False
-    )
+    global _local_embedding_instance
+    if _local_embedding_instance is None:
+        base_url = "http://192.168.188.6:8890"
+        model_name = "Qwen/Qwen3-Embedding-0.6B"
+        _local_embedding_instance = init_embeddings(
+            model=model_name,
+            api_key="local",
+            base_url=base_url,
+            provider="openai",
+            check_embedding_ctx_length=False
+        )
+    return _local_embedding_instance
 
 
 def get_embedding_instance(embedding_info: dict):
@@ -445,6 +480,7 @@ async def image_split(
         file_input,
         chunk_size: int = 2048,
         chunk_overlap: int = 100,
+        mime_type: str = "image/jpeg",
 ):
     # 1. 读取图片数据并转Base64
     image_data = None
@@ -499,7 +535,7 @@ async def image_split(
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64_image}"
+                        "url": f"data:{mime_type};base64,{base64_image}"
                     },
                 },
                 {"type": "text", "text": prompt},
@@ -516,8 +552,7 @@ async def image_split(
         logger.info(f"Image description generated, length: {len(text)}")
     except Exception as e:
         logger.error(f"Failed to generate image description: {e}")
-        # 降级处理：如果调用失败，尝试返回空或者报错，这里选择返回空列表
-        return []
+        raise RuntimeError(f"图片内容识别失败: {e}") from e
     return markdown_split(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
 

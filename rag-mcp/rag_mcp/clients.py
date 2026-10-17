@@ -9,6 +9,27 @@ class ServiceError(RuntimeError):
     pass
 
 
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=5.0),
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        )
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    client = _http_client
+    _http_client = None
+    if client is not None and not client.is_closed:
+        await client.aclose()
+
+
 async def _request(
     method: str,
     url: str,
@@ -17,10 +38,15 @@ async def _request(
     json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.request(method, url, headers=headers, json=json)
-            response.raise_for_status()
-            return response.json()
+        response = await _get_http_client().request(
+            method,
+            url,
+            headers=headers,
+            json=json,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
     except (httpx.HTTPError, ValueError) as exc:
         raise ServiceError("下游检索服务当前不可用") from exc
 
@@ -50,14 +76,14 @@ async def java_post(path: str, access_key: str, body: dict[str, Any]) -> Any:
 
 async def java_upload_file(path: str, access_key: str, file_name: str, content: bytes) -> Any:
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                f"{JAVA_OPENAPI_BASE_URL}{path}",
-                headers={"Authorization": f"Bearer {access_key}"},
-                files={"files": (file_name, content, "application/octet-stream")},
-            )
-            response.raise_for_status()
-            payload = response.json()
+        response = await _get_http_client().post(
+            f"{JAVA_OPENAPI_BASE_URL}{path}",
+            headers={"Authorization": f"Bearer {access_key}"},
+            files={"files": (file_name, content, "application/octet-stream")},
+            timeout=60,
+        )
+        response.raise_for_status()
+        payload = response.json()
     except (httpx.HTTPError, ValueError) as exc:
         raise ServiceError("下游文档服务当前不可用") from exc
     if payload.get("code") != 200:

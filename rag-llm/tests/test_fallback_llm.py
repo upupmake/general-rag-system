@@ -1,6 +1,8 @@
 import asyncio
+import io
 import os
 import sys
+import tempfile
 import types
 from pathlib import Path
 
@@ -309,7 +311,9 @@ def test_openai_candidate_build_uses_provider_and_candidate_settings():
             calls.append(kwargs)
 
     original_openai = utils.OpenAIInstance
+    original_cache = utils._LLM_INSTANCE_CACHE
     try:
+        utils._LLM_INSTANCE_CACHE = {}
         utils.OpenAIInstance = FakeOpenAIInstance
         llm = utils.FallbackLLMInstance(
             model_info={"provider": "deepseek", "name": "deepseek-v4-flash"},
@@ -334,6 +338,7 @@ def test_openai_candidate_build_uses_provider_and_candidate_settings():
         }]
     finally:
         utils.OpenAIInstance = original_openai
+        utils._LLM_INSTANCE_CACHE = original_cache
 
 
 def test_gemini_candidate_build_uses_gemini_instance():
@@ -344,7 +349,9 @@ def test_gemini_candidate_build_uses_gemini_instance():
             calls.append(kwargs)
 
     original_gemini = utils.GeminiInstance
+    original_cache = utils._LLM_INSTANCE_CACHE
     try:
+        utils._LLM_INSTANCE_CACHE = {}
         utils.GeminiInstance = FakeGeminiInstance
         llm = utils.FallbackLLMInstance(
             model_info={"provider": "gemini", "name": "gemini-2.5-flash"},
@@ -366,6 +373,7 @@ def test_gemini_candidate_build_uses_gemini_instance():
         }]
     finally:
         utils.GeminiInstance = original_gemini
+        utils._LLM_INSTANCE_CACHE = original_cache
 
 
 async def _collect_stream_text(llm):
@@ -624,6 +632,124 @@ def test_unified_stream_forwards_provider_response_metadata():
     assert asyncio.run(_collect_unified_stream(MetadataLLM())) == [metadata]
 
 
+def test_image_split_uses_the_supplied_mime_type():
+    captured = {}
+
+    class FakeImageLLM:
+        def __init__(self, **kwargs):
+            pass
+
+        async def ainvoke(self, messages):
+            captured["messages"] = messages
+            return utils.ResponseWrapper("image description")
+
+    original_llm = utils.OpenAIInstance
+    original_get_setting = utils._get_model_setting
+    original_markdown_split = utils.markdown_split
+    try:
+        utils.OpenAIInstance = FakeImageLLM
+        utils._get_model_setting = lambda model_info: {
+            "api_key": "test-key",
+            "base_url": "http://test",
+        }
+        utils.markdown_split = lambda *args, **kwargs: ["chunk"]
+
+        result = asyncio.run(
+            utils.image_split(io.BytesIO(b"png-bytes"), mime_type="image/png")
+        )
+    finally:
+        utils.OpenAIInstance = original_llm
+        utils._get_model_setting = original_get_setting
+        utils.markdown_split = original_markdown_split
+
+    assert result == ["chunk"]
+    image_url = captured["messages"][0]["content"][0]["image_url"]["url"]
+    assert image_url.startswith("data:image/png;base64,")
+
+
+def test_image_split_raises_when_recognition_fails():
+    class FailingImageLLM:
+        def __init__(self, **kwargs):
+            pass
+
+        async def ainvoke(self, messages):
+            raise RuntimeError("vision unavailable")
+
+    original_llm = utils.OpenAIInstance
+    original_get_setting = utils._get_model_setting
+    try:
+        utils.OpenAIInstance = FailingImageLLM
+        utils._get_model_setting = lambda model_info: {
+            "api_key": "test-key",
+            "base_url": "http://test",
+        }
+        try:
+            asyncio.run(utils.image_split(io.BytesIO(b"bytes")))
+        except RuntimeError as exc:
+            assert "图片内容识别失败" in str(exc)
+        else:
+            raise AssertionError("image_split should raise when recognition fails")
+    finally:
+        utils.OpenAIInstance = original_llm
+        utils._get_model_setting = original_get_setting
+
+
+def test_load_config_caches_until_the_file_changes():
+    original_path = utils._CONFIG_PATH
+    original_cache = utils._CONFIG_CACHE
+    try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "model_config.json"
+            config_path.write_text('{"chat": {}}', encoding="utf-8")
+            utils._CONFIG_PATH = str(config_path)
+            utils._CONFIG_CACHE = {"signature": None, "config": None}
+
+            first = utils._load_config()
+            second = utils._load_config()
+            assert first is second
+
+            config_path.write_text('{"chat": {"deepseek": {}}}', encoding="utf-8")
+            third = utils._load_config()
+            assert third["chat"] == {"deepseek": {}}
+    finally:
+        utils._CONFIG_PATH = original_path
+        utils._CONFIG_CACHE = original_cache
+
+
+def test_official_llm_reuses_built_clients():
+    calls = []
+
+    class FakeOpenAIInstance:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+    original_openai = utils.OpenAIInstance
+    original_cache = utils._LLM_INSTANCE_CACHE
+    try:
+        utils._LLM_INSTANCE_CACHE = {}
+        utils.OpenAIInstance = FakeOpenAIInstance
+
+        first = utils.FallbackLLMInstance(
+            model_info={"provider": "deepseek", "name": "deepseek-v4-flash"},
+            candidates=[{"api_key": "key", "base_url": "url"}],
+            prompt_cache_key="cache-key",
+        )
+        second = utils.FallbackLLMInstance(
+            model_info={"provider": "deepseek", "name": "deepseek-v4-flash"},
+            candidates=[{"api_key": "key", "base_url": "url"}],
+            prompt_cache_key="cache-key",
+        )
+
+        first_client = first._build_llm(first.candidates[0])
+        second_client = second._build_llm(second.candidates[0])
+
+        assert first_client is second_client
+        assert len(calls) == 1
+    finally:
+        utils.OpenAIInstance = original_openai
+        utils._LLM_INSTANCE_CACHE = original_cache
+
+
 def _run_tests():
     tests = [
         test_old_dict_config_merges_to_single_candidate,
@@ -646,6 +772,10 @@ def _run_tests():
         test_responses_input_replays_native_provider_items,
         test_responses_astream_strips_historical_reasoning_content,
         test_unified_stream_forwards_provider_response_metadata,
+        test_image_split_uses_the_supplied_mime_type,
+        test_image_split_raises_when_recognition_fails,
+        test_load_config_caches_until_the_file_changes,
+        test_official_llm_reuses_built_clients,
     ]
     for test in tests:
         test()

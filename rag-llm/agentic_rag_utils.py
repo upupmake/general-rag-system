@@ -16,14 +16,24 @@ import tiktoken
 from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 
-from agentic_rag_controller import CONTROLLER_SYSTEM_PROMPT, RetrievalController
+from agentic_rag_controller import CONTROLLER_SYSTEM_PROMPT, get_retrieval_controller
 from agentic_rag_toolkit import RetrievalToolkit
 from milvus_utils import MilvusClientManager
 from prompts import CLAUDE_DISGUISE_SYSTEM_PROMPT
-from utils import merge_consecutive_chunks, get_embedding_instance
+from utils import merge_consecutive_chunks, get_embedding_instance, get_token_count
 from utils import get_official_llm, unified_llm_stream
 
 logger = logging.getLogger(__name__)
+
+ANSWER_CONTEXT_MAX_TOKENS = int(os.environ.get("ANSWER_CONTEXT_MAX_TOKENS", "24000"))
+
+
+def _truncate_to_token_budget(text: str, max_tokens: int) -> str:
+    encoding = tiktoken.get_encoding("o200k_base")
+    tokens = encoding.encode(text)
+    if len(tokens) <= max_tokens:
+        return text
+    return encoding.decode(tokens[:max_tokens])
 
 
 # ============= 核心Agentic RAG类 =============
@@ -81,7 +91,7 @@ class AgenticRAGService:
         self.toolkit = RetrievalToolkit(self.vector_store)
 
         # 初始化决策控制器
-        self.controller = RetrievalController()
+        self.controller = get_retrieval_controller()
 
         logger.info("✅ AgenticRAG初始化完成")
 
@@ -211,23 +221,22 @@ class AgenticRAGService:
         return "\n".join(lines)
 
     @staticmethod
-    def _estimate_messages_tokens(messages: List) -> int:
-        """
-        估算完整 controller messages 的总 token 数
-        使用 tiktoken o200k_base 编码，一次性拼接后计算
-        """
+    def _estimate_message_tokens(message) -> int:
         parts = []
-        for msg in messages:
-            if getattr(msg, "content", None):
-                parts.append(str(msg.content))
-            tool_calls = getattr(msg, "tool_calls", None)
-            if tool_calls:
-                parts.append(json.dumps(tool_calls, ensure_ascii=False, default=str))
+        if getattr(message, "content", None):
+            parts.append(str(message.content))
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls:
+            parts.append(json.dumps(tool_calls, ensure_ascii=False, default=str))
         if not parts:
             return 0
-        combined = "\n".join(parts)
         encoding = tiktoken.get_encoding("o200k_base")
-        return len(encoding.encode(combined))
+        return len(encoding.encode("\n".join(parts)))
+
+    @classmethod
+    def _estimate_messages_tokens(cls, messages: List) -> int:
+        """估算完整 controller messages 的总 token 数。"""
+        return sum(cls._estimate_message_tokens(message) for message in messages)
 
     async def retrieve_with_process(
             self,
@@ -262,6 +271,13 @@ class AgenticRAGService:
             SystemMessage(content=CONTROLLER_SYSTEM_PROMPT),
             HumanMessage(content=self._build_controller_initial_prompt(question, history, max_rounds)),
         ]
+        controller_tokens = self._estimate_messages_tokens(controller_messages)
+
+        def append_controller_message(message) -> None:
+            nonlocal controller_tokens
+            controller_messages.append(message)
+            controller_tokens += self._estimate_message_tokens(message)
+
         total_rounds = 0
         should_stop = False
 
@@ -305,7 +321,7 @@ class AgenticRAGService:
                 break
 
             # 将 AIMessage 加入检索控制器消息历史
-            controller_messages.append(response)
+            append_controller_message(response)
 
             # 记录本轮调用的工具名（用于 yield）
             round_tool_calls = []
@@ -319,7 +335,7 @@ class AgenticRAGService:
                 if tool_name == "stop_search":
                     stop_reason = tool_args.get("reason", "")
                     logger.info(f"⏹️ stop_search: {stop_reason}")
-                    controller_messages.append(ToolMessage(
+                    append_controller_message(ToolMessage(
                         content=f"检索已停止: {stop_reason}" if stop_reason else "检索已停止",
                         tool_call_id=tool_call_id
                     ))
@@ -380,7 +396,7 @@ class AgenticRAGService:
                     tool_message_content = self._format_tool_message_content(
                         tool_name, tool_result, newly_added_docs, new_added, accumulated
                     )
-                    controller_messages.append(ToolMessage(
+                    append_controller_message(ToolMessage(
                         content=tool_message_content,
                         tool_call_id=tool_call_id
                     ))
@@ -396,7 +412,7 @@ class AgenticRAGService:
                 except Exception as e:
                     logger.error(f"❌ 工具 {tool_name} 执行失败: {e}")
                     # 将错误信息作为 ToolMessage 回传给 LLM
-                    controller_messages.append(ToolMessage(
+                    append_controller_message(ToolMessage(
                         content=f"工具执行出错: {str(e)}",
                         tool_call_id=tool_call_id
                     ))
@@ -447,7 +463,7 @@ class AgenticRAGService:
                 }
 
             # 检查累积 token 是否超限（256k），超限则提前终止
-            total_tokens = self._estimate_messages_tokens(controller_messages)
+            total_tokens = controller_tokens
             logger.info(f"📏 当前 controller_messages 累积 token: {total_tokens}")
             if total_tokens > 256_000:
                 logger.warning(f"⚠️ token 超限 ({total_tokens} > 256000)，提前终止检索")
@@ -538,10 +554,31 @@ class AgenticRAGService:
             if reference_documents:
                 merged_docs = merge_consecutive_chunks(reference_documents)
 
-                context = "\n\n".join([
-                    f"[来源: {doc.metadata.get('fileName')}]: {doc.page_content}"
-                    for i, doc in enumerate(merged_docs)
-                ])
+                context_parts = []
+                context_tokens = 0
+                context_truncated = False
+                for doc in merged_docs:
+                    part = f"[来源: {doc.metadata.get('fileName')}]: {doc.page_content}"
+                    part_tokens = get_token_count(part)
+                    remaining = ANSWER_CONTEXT_MAX_TOKENS - context_tokens
+                    if remaining <= 0:
+                        break
+                    if part_tokens > remaining:
+                        if not context_parts:
+                            truncated = _truncate_to_token_budget(part, remaining)
+                            context_parts.append(truncated)
+                            context_tokens += get_token_count(truncated)
+                        context_truncated = True
+                        break
+                    context_parts.append(part)
+                    context_tokens += part_tokens
+
+                context = "\n\n".join(context_parts) if context_parts else "具体内容为空"
+                if context_truncated or len(context_parts) < len(merged_docs):
+                    logger.warning(
+                        f"参考上下文超过 {ANSWER_CONTEXT_MAX_TOKENS} tokens，"
+                        f"已保留 {len(context_parts)}/{len(merged_docs)} 个切片"
+                    )
 
                 merged_docs_table_lines = [
                     "| 文件名 | 最大索引 | 索引范围 |",
@@ -562,7 +599,10 @@ class AgenticRAGService:
                     "payload": {
                         "step": "context_construction",
                         "title": "构建上下文",
-                        "description": f"基于检索结果构建了回答上下文，包含 {len(merged_docs)} 个切片",
+                        "description": (
+                            f"基于检索结果构建了回答上下文，包含 "
+                            f"{len(context_parts)}/{len(merged_docs)} 个切片，约 {context_tokens} tokens"
+                        ),
                         "content": merged_docs_table,
                         "status": "completed"
                     }

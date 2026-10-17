@@ -4,6 +4,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -17,6 +18,7 @@ from rag_mcp.audit import new_invocation_id, now_millis, publish_tool_log
 from rag_mcp.clients import (
     ServiceError,
     authorize_knowledge_base,
+    close_http_client,
     java_delete,
     java_get,
     java_post,
@@ -24,9 +26,17 @@ from rag_mcp.clients import (
     rag_retrieve,
     verify_access_key,
 )
-from rag_mcp.config import MCP_HOST, MCP_PORT
+from rag_mcp.config import MCP_AUDIT_PUBLISH_TIMEOUT, MCP_HOST, MCP_PORT
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _app_lifespan(_mcp: FastMCP):
+    try:
+        yield
+    finally:
+        await close_http_client()
 
 
 class AccessKeyVerifier(TokenVerifier):
@@ -56,6 +66,7 @@ mcp = FastMCP(
         "上传或删除文件仅支持调用者本人创建的个人私有知识库。"
     ),
     auth=AccessKeyVerifier(),
+    lifespan=_app_lifespan,
 )
 
 
@@ -234,7 +245,10 @@ async def _audit_tool(
 
 async def _publish_audit_safely(message: dict[str, Any], tool_name: str) -> None:
     try:
-        await publish_tool_log(message)
+        await asyncio.wait_for(
+            publish_tool_log(message),
+            timeout=MCP_AUDIT_PUBLISH_TIMEOUT,
+        )
     except Exception:
         logger.exception("Failed to publish MCP tool log: %s", tool_name)
 
