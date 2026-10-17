@@ -9,7 +9,7 @@ export function fetchAvailableModels() {
     return commonApi.get('/models/available')
 }
 
-export function fetchModelPerformance(hours = 24) {
+export function fetchModelPerformance(hours = 48) {
     return commonApi.get(`/models/performance?hours=${hours}`)
 }
 

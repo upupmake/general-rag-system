@@ -1,62 +1,100 @@
 <template>
-  <div class="workspace-management">
-    <a-card title="工作空间管理" :bordered="false">
-      <template #extra>
-        <a-button type="primary" @click="showCreateModal">
-          <template #icon>
-            <PlusOutlined/>
-          </template>
-          创建工作空间
-        </a-button>
-      </template>
+  <div class="workspace-page">
+    <div class="page-header">
+      <div class="page-heading">
+        <h2>工作空间管理</h2>
+        <p>共 {{ totalCount }} 个工作空间，切换后可共享知识库与成员</p>
+      </div>
+      <a-button type="primary" class="create-btn" @click="showCreateModal">
+        <template #icon>
+          <PlusOutlined/>
+        </template>
+        创建工作空间
+      </a-button>
+    </div>
 
-      <a-tabs v-model:activeKey="activeTab">
-        <!-- 拥有的工作空间 -->
-        <a-tab-pane key="owned" tab="我拥有的">
-          <a-list
-              :data-source="ownedWorkspaces"
-              :loading="loading"
-              :grid="{ gutter: 16, xs: 1, sm: 2, md: 2, lg: 3, xl: 3, xxl: 4 }"
-          >
-            <template #renderItem="{ item }">
-              <a-list-item>
-                <WorkspaceCard
-                    :workspace="item"
-                    :is-current="currentWorkspace?.id === item.id"
-                    :is-owner="true"
-                    @switch="handleSwitch"
-                    @edit="handleEdit"
-                    @delete="handleDelete"
-                    @invite="handleInvite"
-                    @view-members="handleViewMembers"
-                />
-              </a-list-item>
-            </template>
-          </a-list>
-        </a-tab-pane>
+    <a-tabs v-model:activeKey="activeTab">
+      <!-- 拥有的工作空间 -->
+      <a-tab-pane key="owned">
+        <template #tab>
+          <span class="tab-label">
+            <UserOutlined/>
+            我拥有的
+            <span class="tab-count">{{ ownedWorkspaces.length }}</span>
+          </span>
+        </template>
 
-        <!-- 加入的工作空间 -->
-        <a-tab-pane key="member" tab="我加入的">
-          <a-list
-              :data-source="memberWorkspaces"
-              :loading="loading"
-              :grid="{ gutter: 16, xs: 1, sm: 2, md: 2, lg: 3, xl: 3, xxl: 4 }"
-          >
-            <template #renderItem="{ item }">
-              <a-list-item>
-                <WorkspaceCard
-                    :workspace="item"
-                    :is-current="currentWorkspace?.id === item.id"
-                    :is-owner="false"
-                    @switch="handleSwitch"
-                    @view-members="handleViewMembers"
-                />
-              </a-list-item>
-            </template>
-          </a-list>
-        </a-tab-pane>
-      </a-tabs>
-    </a-card>
+        <div v-if="loading" class="ws-grid">
+          <div v-for="n in 3" :key="n" class="ws-skeleton">
+            <div class="ws-skeleton-head">
+              <span class="ws-skeleton-icon"></span>
+              <span class="ws-skeleton-line w-50"></span>
+            </div>
+            <span class="ws-skeleton-line w-90"></span>
+            <span class="ws-skeleton-line w-30"></span>
+          </div>
+        </div>
+
+        <div v-else-if="!ownedWorkspaces.length" class="ws-empty">
+          <a-empty description="还没有创建工作空间">
+            <a-button type="primary" @click="showCreateModal">创建工作空间</a-button>
+          </a-empty>
+        </div>
+
+        <div v-else class="ws-grid">
+          <WorkspaceCard
+              v-for="item in ownedWorkspaces"
+              :key="item.id"
+              :workspace="item"
+              :is-current="currentWorkspace?.id === item.id"
+              :is-owner="true"
+              @switch="handleSwitch"
+              @edit="handleEdit"
+              @delete="handleDelete"
+              @invite="handleInvite"
+              @view-members="handleViewMembers"
+          />
+        </div>
+      </a-tab-pane>
+
+      <!-- 加入的工作空间 -->
+      <a-tab-pane key="member">
+        <template #tab>
+          <span class="tab-label">
+            <TeamOutlined/>
+            我加入的
+            <span class="tab-count">{{ memberWorkspaces.length }}</span>
+          </span>
+        </template>
+
+        <div v-if="loading" class="ws-grid">
+          <div v-for="n in 3" :key="n" class="ws-skeleton">
+            <div class="ws-skeleton-head">
+              <span class="ws-skeleton-icon"></span>
+              <span class="ws-skeleton-line w-50"></span>
+            </div>
+            <span class="ws-skeleton-line w-90"></span>
+            <span class="ws-skeleton-line w-30"></span>
+          </div>
+        </div>
+
+        <div v-else-if="!memberWorkspaces.length" class="ws-empty">
+          <a-empty description="暂未加入其他工作空间"/>
+        </div>
+
+        <div v-else class="ws-grid">
+          <WorkspaceCard
+              v-for="item in memberWorkspaces"
+              :key="item.id"
+              :workspace="item"
+              :is-current="currentWorkspace?.id === item.id"
+              :is-owner="false"
+              @switch="handleSwitch"
+              @view-members="handleViewMembers"
+          />
+        </div>
+      </a-tab-pane>
+    </a-tabs>
 
     <!-- 创建/编辑工作空间对话框 -->
     <a-modal
@@ -108,6 +146,7 @@
         width="800px"
     >
       <a-table
+          class="members-table"
           :columns="memberColumns"
           :data-source="members"
           :loading="loadingMembers"
@@ -141,14 +180,18 @@
 
 <script setup>
 import {ref, computed, onMounted} from 'vue'
-import {message, Modal} from 'ant-design-vue'
-import {PlusOutlined} from '@ant-design/icons-vue'
+import {message, Modal, theme} from 'ant-design-vue'
+import {PlusOutlined, UserOutlined, TeamOutlined} from '@ant-design/icons-vue'
 import dayjs from 'dayjs'
 import workspaceApi from '@/api/workspaceApi.js'
 import WorkspaceCard from './WorkspaceCard.vue'
 
+const {useToken} = theme
+const {token} = useToken()
+
 const activeTab = ref('owned')
-const loading = ref(false)
+// 初始为 true：首屏直接渲染骨架，避免先闪一帧空状态
+const loading = ref(true)
 const submitting = ref(false)
 const createModalVisible = ref(false)
 const inviteModalVisible = ref(false)
@@ -161,6 +204,8 @@ const memberWorkspaces = ref([])
 const currentWorkspace = ref(null)  // 用户当前选中的工作空间
 const currentViewingWorkspace = ref(null)  // 当前正在查看/操作的工作空间
 const members = ref([])
+
+const totalCount = computed(() => ownedWorkspaces.value.length + memberWorkspaces.value.length)
 
 const formData = ref({
   id: null,
@@ -339,7 +384,144 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.workspace-management {
+.workspace-page {
   padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.page-heading h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+  color: v-bind('token.colorTextHeading');
+}
+
+.page-heading p {
+  margin: 0;
+  font-size: 13px;
+  color: v-bind('token.colorTextDescription');
+}
+
+/* ============ Tabs ============ */
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-count {
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 20px;
+  background: v-bind('token.colorFillSecondary');
+  color: v-bind('token.colorTextDescription');
+}
+
+.ant-tabs-tab-active .tab-count {
+  background: v-bind('token.colorPrimaryBg');
+  color: v-bind('token.colorPrimary');
+}
+
+/* ============ 卡片网格 ============ */
+.ws-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+/* ============ 骨架屏 ============ */
+.ws-skeleton {
+  padding: 20px;
+  border: 1px solid v-bind('token.colorSplit');
+  border-radius: 12px;
+  background: v-bind('token.colorBgContainer');
+}
+
+.ws-skeleton-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ws-skeleton-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: v-bind('token.colorFillSecondary');
+  flex: none;
+}
+
+.ws-skeleton-line {
+  display: block;
+  height: 12px;
+  margin-top: 12px;
+  border-radius: 6px;
+  background: v-bind('token.colorFillSecondary');
+  animation: ws-shimmer 1.2s ease-in-out infinite;
+}
+
+.ws-skeleton-head .ws-skeleton-line {
+  margin-top: 0;
+  flex: 1;
+}
+
+.w-50 { width: 50%; }
+.w-90 { width: 90%; }
+.w-30 { width: 30%; }
+
+@keyframes ws-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ============ 空状态 ============ */
+.ws-empty {
+  padding: 48px 0;
+}
+
+/* ============ 成员表格 ============ */
+.members-table {
+  border: 1px solid v-bind('token.colorSplit');
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.members-table :deep(.ant-table-thead > tr > th) {
+  background: v-bind('token.colorFillTertiary');
+  font-weight: 600;
+  color: v-bind('token.colorText');
+}
+
+/* ============ 响应式：PC / 移动端 ============ */
+@media (max-width: 768px) {
+  .workspace-page {
+    padding: 16px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .create-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 576px) {
+  .ws-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }
 </style>

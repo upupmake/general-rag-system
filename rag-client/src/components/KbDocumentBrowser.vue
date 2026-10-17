@@ -273,7 +273,7 @@ onBeforeUnmount(() => {
 
     <div class="browser-header">
       <div class="kb-name">{{ currentKb?.name || '未选择知识库' }}</div>
-      <a-breadcrumb>
+      <a-breadcrumb separator=">">
         <a-breadcrumb-item><a @click="navigateTo(-1)">根目录</a></a-breadcrumb-item>
         <a-breadcrumb-item v-for="(folder, index) in currentPath" :key="`${folder}-${index}`">
           <a @click="navigateTo(index)">{{ folder }}</a>

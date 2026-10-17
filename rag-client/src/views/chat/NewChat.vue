@@ -12,7 +12,9 @@ import {
   AppstoreOutlined,
   CodeOutlined,
   FileSearchOutlined,
-  BulbOutlined
+  BulbOutlined,
+  SearchOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons-vue'
 
 import {fetchSessionTitle, startChat} from '@/api/chatApi'
@@ -220,6 +222,7 @@ const onSend = async (text) => {
                   class="config-select model-select-with-logo"
                   placeholder="请选择对话模型"
                   size="large"
+                  :virtual="false"
                   style="width: 100%">
                 <a-select-opt-group
                     v-for="(list, provider) in groupedModels"
@@ -291,13 +294,12 @@ const onSend = async (text) => {
             </div>
           </div>
 
-          <div class="config-item">
-            <div class="config-label">
-              <DatabaseOutlined class="config-icon"/>
-              <span>知识库</span>
-              <span
-                  style="font-size: 12px; color: #999; margin-left: 8px; font-weight: normal; white-space: normal;">请在您需要检索知识库中信息时选用</span>
-            </div>
+      <div class="config-item">
+        <div class="config-label">
+          <DatabaseOutlined class="config-icon"/>
+          <span>知识库</span>
+          <span class="config-hint">请在您需要检索知识库中信息时选用</span>
+        </div>
             <div class="kb-select-row" :class="{ 'has-file-button': selectedKb }">
               <KbSelector size="large" class="config-select kb-config-select" :disabled="!isKbSupported"/>
               <a-button v-if="selectedKb" type="text" class="kb-files-button" @click="documentBrowserVisible = true">
@@ -305,7 +307,7 @@ const onSend = async (text) => {
                 <span>查看文件</span>
               </a-button>
             </div>
-            <div v-if="!isKbSupported && selectedModel" style="color: #faad14; font-size: 12px; margin-top: 4px;">
+            <div v-if="!isKbSupported && selectedModel" class="config-warning">
               当前模型不支持知识库功能
             </div>
           </div>
@@ -335,9 +337,18 @@ const onSend = async (text) => {
 
       <!-- 提示区域 -->
       <div class="tips-section">
-        <div class="tip-item">💡 支持多轮对话和上下文理解</div>
-        <div class="tip-item">🔍 可结合知识库进行精准问答</div>
-        <div class="tip-item">⚡ 实时流式输出，响应迅速</div>
+        <div class="tip-item">
+          <BulbOutlined/>
+          <span>支持多轮对话和上下文理解</span>
+        </div>
+        <div class="tip-item">
+          <SearchOutlined/>
+          <span>可结合知识库进行精准问答</span>
+        </div>
+        <div class="tip-item">
+          <ThunderboltOutlined/>
+          <span>实时流式输出，响应迅速</span>
+        </div>
       </div>
     </div>
 
@@ -350,11 +361,13 @@ const onSend = async (text) => {
 <style scoped>
 .new-chat-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-  padding: 40px 24px;
+  padding: 48px 24px;
   display: flex;
   justify-content: center;
   align-items: center;
+  background:
+      radial-gradient(900px 420px at 50% -10%, rgba(22, 119, 255, 0.10), transparent 65%),
+      linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
 }
 
 .content-wrapper {
@@ -376,56 +389,56 @@ const onSend = async (text) => {
 
 .welcome-section {
   text-align: center;
-  margin-bottom: 40px;
-  color: #333;
+  margin-bottom: 32px;
+  color: #344054;
 }
 
 .welcome-icon {
-  font-size: 64px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
   margin-bottom: 20px;
-  animation: bounce 2s infinite;
-}
-
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+  border-radius: 18px;
+  font-size: 30px;
+  color: #fff;
+  background: linear-gradient(135deg, #4096ff 0%, #1677ff 100%);
+  box-shadow: 0 8px 20px rgba(22, 119, 255, 0.25);
 }
 
 .welcome-title {
-  font-size: 36px;
+  margin: 0 0 10px;
+  font-size: 30px;
   font-weight: 600;
-  margin: 0 0 12px 0;
-  color: #333;
+  letter-spacing: -0.02em;
+  color: #101828;
 }
 
 .welcome-subtitle {
-  font-size: 16px;
-  opacity: 0.9;
   margin: 0;
+  font-size: 15px;
+  color: #667085;
 }
 
 .config-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(16, 24, 40, 0.06);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  margin-bottom: 24px;
-  transition: all 0.3s ease;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 32px rgba(16, 24, 40, 0.06);
+  margin-bottom: 20px;
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 
 .config-card:hover {
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 16px 40px rgba(16, 24, 40, 0.09);
   transform: translateY(-2px);
 }
 
 .config-section {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .config-item {
@@ -438,15 +451,29 @@ const onSend = async (text) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
-  font-weight: 500;
-  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+  color: #344054;
   white-space: nowrap;
 }
 
 .config-icon {
-  font-size: 18px;
-  color: #1890ff;
+  font-size: 16px;
+  color: #1677ff;
+}
+
+.config-hint {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #98a2b3;
+  white-space: normal;
+}
+
+.config-warning {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #d48806;
 }
 
 .config-select {
@@ -562,11 +589,11 @@ const onSend = async (text) => {
 }
 
 .chat-sender {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(16, 24, 40, 0.06);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 32px rgba(16, 24, 40, 0.06);
+  transition: box-shadow 0.3s ease;
 }
 
 .chat-sender :deep(textarea) {
@@ -576,7 +603,7 @@ const onSend = async (text) => {
 }
 
 .chat-sender:hover {
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 16px 40px rgba(16, 24, 40, 0.09);
 }
 
 .tips-section {
@@ -587,30 +614,39 @@ const onSend = async (text) => {
 }
 
 .tip-item {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  padding: 8px 16px;
-  border-radius: 20px;
-  color: #555;
-  font-size: 14px;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: #667085;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(16, 24, 40, 0.05);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+  transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.tip-item :deep(.anticon) {
+  color: #1677ff;
 }
 
 .tip-item:hover {
-  background: rgba(255, 255, 255, 0.95);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  color: #1677ff;
+  background: #fff;
+  transform: translateY(-1px);
 }
 
 .new-chat-container.is-dark .tip-item {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #b6bfcc;
   box-shadow: none;
 }
 
 .new-chat-container.is-dark .tip-item:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
 .new-chat-container.is-dark .prompt-template {
@@ -629,11 +665,14 @@ const onSend = async (text) => {
 
 @media (max-width: 768px) {
   .welcome-title {
-    font-size: 28px;
+    font-size: 24px;
   }
 
   .welcome-icon {
-    font-size: 48px;
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    font-size: 26px;
   }
 
   .tips-section {
@@ -791,7 +830,9 @@ const onSend = async (text) => {
 
 /* 暗色模式样式 - 非 scoped 以确保优先级和覆盖 */
 .new-chat-container.is-dark {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background:
+      radial-gradient(900px 420px at 50% -10%, rgba(64, 169, 255, 0.12), transparent 65%),
+      linear-gradient(180deg, #15171c 0%, #1a1d24 100%);
   color: #e0e0e0;
 }
 
@@ -803,20 +844,34 @@ const onSend = async (text) => {
   color: white;
 }
 
+.new-chat-container.is-dark .welcome-subtitle {
+  color: #98a2b3;
+}
+
 .new-chat-container.is-dark .config-card {
   background: rgba(30, 30, 30, 0.95);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .new-chat-container.is-dark .config-label {
-  color: #e0e0e0;
+  color: #e6eaf2;
 }
 
 .new-chat-container.is-dark .config-icon {
   color: #a0aeff;
 }
 
+.new-chat-container.is-dark .config-hint {
+  color: #7b8598;
+}
+
+.new-chat-container.is-dark .config-warning {
+  color: #d8bd14;
+}
+
 .new-chat-container.is-dark .chat-sender {
   background: rgba(30, 30, 30, 0.95);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .new-chat-container.is-dark .kb-select-row {
@@ -830,13 +885,4 @@ const onSend = async (text) => {
   box-shadow: none;
 }
 
-.new-chat-container.is-dark .tip-item {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  box-shadow: none;
-}
-
-.new-chat-container.is-dark .tip-item:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
 </style>

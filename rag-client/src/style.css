@@ -84,3 +84,10 @@ body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb {
 body[data-theme='dark'] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.25);
 }
+
+/* Select 下拉在移动端的滚动体验：关闭虚拟滚动后使用原生滚动，避免手势偶发失效 */
+.ant-select-dropdown .rc-virtual-list-holder {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}

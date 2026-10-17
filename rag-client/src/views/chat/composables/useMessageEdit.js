@@ -1,7 +1,6 @@
 import {ref, reactive} from 'vue'
 import {message as antMessage} from 'ant-design-vue'
 import {editMessageStream, retryMessageStream, startChatStream} from '@/api/chatApi'
-import {contextMultiplier} from '@/vars.js'
 
 export function useMessageEdit(
     messages,
@@ -101,10 +100,6 @@ export function useMessageEdit(
             options.agenticRag = true
         }
 
-        if (contextMultiplier.value !== null) {
-            options.contextMultiplier = contextMultiplier.value
-        }
-
         const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg, options)
         // 首条响应前取消时，问题可能还未落库；此时使用普通发送入口。
         abortController.value = !userMsg.id ? startChatStream(
@@ -163,10 +158,6 @@ export function useMessageEdit(
 
         if (selectedKb.value) {
             options.agenticRag = true
-        }
-
-        if (contextMultiplier.value !== null) {
-            options.contextMultiplier = contextMultiplier.value
         }
 
         const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg, options)

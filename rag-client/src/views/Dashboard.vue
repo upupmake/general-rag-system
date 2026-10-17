@@ -2,17 +2,20 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { BookOutlined, FileTextOutlined, MessageOutlined, ThunderboltOutlined, NotificationOutlined, CloseOutlined } from '@ant-design/icons-vue'
+import { theme } from 'ant-design-vue'
+import dayjs from 'dayjs'
 import { useUserStore } from '@/stores/user'
 import { fetchRecentActivities } from '@/api/logApi'
 import { fetchDashboardSummary } from '@/api/dashboardApi'
 import { fetchLatestNotification } from '@/api/notificationApi'
 import { fetchModelPerformance } from '@/api/chatApi'
 import { providerLogos } from '@/vars.js'
-import md from '@/utils/markdown'
 import markdownit from 'markdown-it'
 
 const noticeMd = markdownit({ html: false, linkify: true, breaks: true })
 
+const { useToken } = theme
+const { token } = useToken()
 const userStore = useUserStore()
 const router = useRouter()
 const activities = ref([])
@@ -90,7 +93,7 @@ const fetchPerformance = async () => {
   performanceLoading.value = true
   performanceError.value = false
   try {
-    const data = await fetchModelPerformance(24)
+    const data = await fetchModelPerformance(48)
     // 展示口径：成功率在返回值基础上随机上浮 0.1~0.9 个百分点，封顶 100%
     performanceData.value = (data || []).map(item => ({
       ...item,
@@ -106,8 +109,10 @@ const fetchPerformance = async () => {
 }
 
 const formatTime = (time) => {
-  return new Date(time).toLocaleString()
+  return dayjs(time).format('YYYY年M月D日 HH:mm')
 }
+
+const todayLabel = computed(() => dayjs().format('YYYY年M月D日 dddd'))
 
 const goTo = path => router.push(path)
 
@@ -125,10 +130,11 @@ onMounted(() => {
   <div class="dashboard-page">
     <!-- Workspace & User -->
     <div class="header">
-      <div>
+      <div class="header-main">
         <h2 class="title">
           👋 欢迎你，{{ userStore.username }}
         </h2>
+        <p class="subtitle">{{ todayLabel }} · 知识库、文档与模型运行概览</p>
       </div>
     </div>
 
@@ -140,8 +146,11 @@ onMounted(() => {
             <NotificationOutlined />
           </div>
           <span class="notice-label">公告</span>
-          <a-button v-if="notification.displayType === 'popup'" type="link" size="small" class="notice-more" @click.stop="notificationModalVisible = true">详情</a-button>
-          <CloseOutlined class="notice-close" @click.stop="notification = null" />
+          <span class="notice-time">更新于 {{ formatTime(notification.updatedAt || notification.createdAt) }}</span>
+          <div class="notice-actions">
+            <a-button v-if="notification.displayType === 'popup'" type="link" size="small" class="notice-more" @click.stop="notificationModalVisible = true">查看详情</a-button>
+            <CloseOutlined class="notice-close" @click.stop="notification = null" />
+          </div>
         </div>
         <div class="notice-text notice-md" v-html="noticeMd.render(notification.content || '')"></div>
       </div>
@@ -152,55 +161,67 @@ onMounted(() => {
       title="公告详情"
       :footer="null"
     >
-      <div class="notice-md" v-html="noticeMd.render(notification.content || '')"></div>
+      <div class="notice-md notice-modal-body" v-html="noticeMd.render(notification.content || '')"></div>
       <div style="margin-top: 16px; color: #999; font-size: 12px; text-align: right;">
-        发布于: {{ formatTime(notification.createdAt) }}
+        更新于: {{ formatTime(notification.updatedAt || notification.createdAt) }}
       </div>
     </a-modal>
 
     <!-- 核心统计 -->
     <a-row :gutter="[12, 12]" class="stats-row">
       <a-col :xs="12" :sm="6">
-        <a-card class="stat-mini-card stat-mini-card--actionable" :bordered="true" role="button" tabindex="0" @click="goTo('/kb')" @keydown.enter="goTo('/kb')">
-          <div class="stat-icon stat-icon--kb">
-            <BookOutlined />
+        <a-card class="stat-card stat-card--actionable" :bordered="false" role="button" tabindex="0" @click="goTo('/kb')" @keydown.enter="goTo('/kb')">
+          <div class="stat-head">
+            <span class="stat-icon stat-icon--kb">
+              <BookOutlined />
+            </span>
+            <span class="stat-label">知识库</span>
           </div>
-          <a-statistic title="知识库" :value="stats.kbCount" />
+          <div class="stat-value">{{ stats.kbCount.toLocaleString() }}</div>
         </a-card>
       </a-col>
       <a-col :xs="12" :sm="6">
-        <a-card class="stat-mini-card stat-mini-card--actionable" :bordered="true" role="button" tabindex="0" @click="goTo('/kb')" @keydown.enter="goTo('/kb')">
-          <div class="stat-icon stat-icon--doc">
-            <FileTextOutlined />
+        <a-card class="stat-card stat-card--actionable" :bordered="false" role="button" tabindex="0" @click="goTo('/kb')" @keydown.enter="goTo('/kb')">
+          <div class="stat-head">
+            <span class="stat-icon stat-icon--doc">
+              <FileTextOutlined />
+            </span>
+            <span class="stat-label">文档数</span>
           </div>
-          <a-statistic title="文档数" :value="stats.documentCount" />
+          <div class="stat-value">{{ stats.documentCount.toLocaleString() }}</div>
         </a-card>
       </a-col>
       <a-col :xs="12" :sm="6">
-        <a-card class="stat-mini-card stat-mini-card--actionable" :bordered="true" role="button" tabindex="0" @click="goTo('/search')" @keydown.enter="goTo('/search')">
-          <div class="stat-icon stat-icon--chat">
-            <MessageOutlined />
+        <a-card class="stat-card stat-card--actionable" :bordered="false" role="button" tabindex="0" @click="goTo('/search')" @keydown.enter="goTo('/search')">
+          <div class="stat-head">
+            <span class="stat-icon stat-icon--chat">
+              <MessageOutlined />
+            </span>
+            <span class="stat-label">对话数</span>
           </div>
-          <a-statistic title="对话数" :value="stats.sessionCount" />
+          <div class="stat-value">{{ stats.sessionCount.toLocaleString() }}</div>
         </a-card>
       </a-col>
       <a-col :xs="12" :sm="6">
-        <a-card class="stat-mini-card stat-mini-card--token" :bordered="true">
-          <div class="stat-icon stat-icon--token">
-            <ThunderboltOutlined />
+        <a-card class="stat-card stat-card--token" :bordered="false">
+          <div class="stat-head">
+            <span class="stat-icon stat-icon--token">
+              <ThunderboltOutlined />
+            </span>
+            <span class="stat-label">今日 Token</span>
           </div>
-          <a-statistic title="今日 Token" :value="stats.todayTokenUsage" group-separator="," />
+          <div class="stat-value">{{ stats.todayTokenUsage.toLocaleString() }}</div>
           <template v-if="stats.dailyMaxTokens && stats.dailyMaxTokens > 0">
             <a-progress
               :percent="Math.min(Math.round((stats.todayTokenUsage / stats.dailyMaxTokens) * 100), 100)"
-              :stroke-color="stats.todayTokenUsage >= stats.dailyMaxTokens ? '#ff4d4f' : '#1890ff'"
+              :stroke-color="stats.todayTokenUsage >= stats.dailyMaxTokens ? '#ff4d4f' : '#1677ff'"
               size="small"
               :show-info="false"
-              style="margin-top: 4px;"
+              class="token-progress"
             />
-            <div class="token-limit">上限 {{ stats.dailyMaxTokens.toLocaleString() }}</div>
+            <div class="stat-note">每日额度上限 {{ stats.dailyMaxTokens.toLocaleString() }}</div>
           </template>
-          <div v-else class="token-limit">无上限</div>
+          <div v-else class="stat-note">每日额度无上限</div>
         </a-card>
       </a-col>
     </a-row>
@@ -209,7 +230,7 @@ onMounted(() => {
     <div class="performance-section" :style="{ marginTop: '16px' }">
       <div class="section-header">
         <h3 class="section-title">模型可用性</h3>
-        <span class="section-subtitle">过去 24 小时</span>
+        <span class="section-pill">过去 48 小时</span>
       </div>
 
       <a-spin :spinning="performanceLoading">
@@ -263,16 +284,17 @@ onMounted(() => {
       <div class="section-header">
         <h3 class="section-title">最近活动</h3>
       </div>
-      <a-card class="activities-card" :loading="loading" :bordered="true">
+      <a-card class="activities-card" :loading="loading" :bordered="false">
         <a-empty v-if="activities.length === 0" description="暂无活动记录">
-            <template #extra><a-button type="link" @click="goTo('/chat/new')">开始新的对话</a-button></template>
-          </a-empty>
+          <template #extra><a-button type="link" @click="goTo('/chat/new')">开始新的对话</a-button></template>
+        </a-empty>
         <div v-else class="activities-list">
           <div v-for="(item, index) in activities" :key="item.id" class="activity-item" :style="{ animationDelay: index * 0.05 + 's' }">
-            <div class="activity-time">{{ formatTime(item.createdAt) }}</div>
-            <div class="activity-content">
-              <span>{{ item.displayMessage || item.action }}</span>
-              <a-tag v-if="item.status === 'FAIL'" color="error" size="small" style="margin-left: 8px;">失败</a-tag>
+            <span class="activity-dot"></span>
+            <div class="activity-main">
+              <span class="activity-content">{{ item.displayMessage || item.action }}</span>
+              <a-tag v-if="item.status === 'FAIL'" color="error" size="small">失败</a-tag>
+              <span class="activity-time">{{ formatTime(item.createdAt) }}</span>
             </div>
           </div>
         </div>
@@ -292,21 +314,26 @@ onMounted(() => {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ============ 页头 ============ */
 .header {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .title {
-  margin-bottom: 4px;
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+  color: v-bind('token.colorTextHeading');
 }
 
 .subtitle {
-  color: #666;
   margin: 0;
+  font-size: 13px;
+  color: v-bind('token.colorTextDescription');
 }
 
+/* ============ 核心统计 ============ */
 .stats-row {
-  margin-bottom: 0;
   align-items: stretch;
 }
 
@@ -314,86 +341,98 @@ onMounted(() => {
   display: flex;
 }
 
-.stat-mini-card {
+.stat-card {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-}
-
-.stat-mini-card {
-  position: relative;
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 12px;
+  border: 1px solid v-bind('token.colorSplit');
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   cursor: default;
 }
 
-.stat-mini-card:hover {
+.stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: v-bind('token.colorPrimaryBorder');
+  box-shadow: v-bind('token.boxShadowSecondary');
 }
 
-.stat-mini-card--actionable {
+.stat-card--actionable {
   cursor: pointer;
 }
 
-.stat-mini-card--actionable:focus-visible {
-  outline: 2px solid #1677ff;
+.stat-card--actionable:focus-visible {
+  outline: 2px solid v-bind('token.colorPrimary');
   outline-offset: 2px;
 }
 
-.stat-mini-card :deep(.ant-card-body) {
+.stat-card :deep(.ant-card-body) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 18px 20px;
+}
+
+.stat-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .stat-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
-  display: flex;
+  border-radius: 10px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  margin-bottom: 8px;
+  flex: none;
 }
 
 .stat-icon--kb {
-  background: linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%);
-  color: #1890ff;
+  background: v-bind('token.colorPrimaryBg');
+  color: v-bind('token.colorPrimary');
 }
 
 .stat-icon--doc {
-  background: linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%);
-  color: #52c41a;
+  background: v-bind('token.colorSuccessBg');
+  color: v-bind('token.colorSuccess');
 }
 
 .stat-icon--chat {
-  background: linear-gradient(135deg, #fff7e6 0%, #ffe7ba 100%);
-  color: #fa8c16;
+  background: v-bind('token.colorWarningBg');
+  color: v-bind('token.colorWarning');
 }
 
 .stat-icon--token {
-  background: linear-gradient(135deg, #fff0f6 0%, #ffd6e7 100%);
-  color: #eb2f96;
+  background: v-bind('token.colorErrorBg');
+  color: v-bind('token.colorError');
 }
 
-.stat-mini-card :deep(.ant-statistic-title) {
-  color: #999;
-  margin-bottom: 2px;
+.stat-label {
+  font-size: 13px;
+  color: v-bind('token.colorTextSecondary');
 }
 
-.stat-mini-card :deep(.ant-statistic-content-value) {
-  font-size: 24px;
+.stat-value {
+  font-size: 28px;
   font-weight: 700;
+  line-height: 1.2;
+  color: v-bind('token.colorTextHeading');
+  font-variant-numeric: tabular-nums;
 }
 
-.token-limit {
-  color: #bbb;
-  margin-top: 2px;
+.token-progress {
+  margin: 0;
+}
+
+.stat-note {
+  font-size: 12px;
+  color: v-bind('token.colorTextTertiary');
 }
 
 .performance-section {
@@ -402,74 +441,79 @@ onMounted(() => {
 
 .section-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   margin-bottom: 14px;
 }
 
 .section-title {
   margin: 0;
+  font-size: 16px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.85);
+  color: v-bind('token.colorTextHeading');
 }
 
-.section-subtitle {
-  color: #999;
+.section-pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: v-bind('token.colorTextSecondary');
+  background: v-bind('token.colorFillTertiary');
 }
 
 .perf-empty {
-  padding: 40px 0;
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
+  padding: 32px 0;
+  background: v-bind('token.colorBgContainer');
+  border-radius: 12px;
+  border: 1px solid v-bind('token.colorSplit');
 }
 
 .provider-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .provider-card {
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #f0f0f0;
+  background: v-bind('token.colorBgContainer');
+  border-radius: 12px;
+  border: 1px solid v-bind('token.colorSplit');
   padding: 14px 16px;
   transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 .provider-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-  border-color: #e0e0e0;
+  box-shadow: v-bind('token.boxShadowSecondary');
+  border-color: v-bind('token.colorPrimaryBorder');
 }
 
 .provider-card-header {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f5f5f5;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid v-bind('token.colorSplit');
 }
 
 .provider-identity {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .provider-card-logo {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .provider-card-logo--fallback {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  font-size: 16px;
+  background: v-bind('token.colorPrimaryBg');
+  color: v-bind('token.colorPrimary');
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -481,8 +525,9 @@ onMounted(() => {
 }
 
 .provider-name {
+  font-size: 14px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.85);
+  color: v-bind('token.colorText');
   text-transform: capitalize;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -490,7 +535,8 @@ onMounted(() => {
 }
 
 .provider-model-count {
-  color: #999;
+  font-size: 12px;
+  color: v-bind('token.colorTextTertiary');
 }
 
 .model-list {
@@ -502,7 +548,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 8px 0;
-  border-top: 1px solid #f5f5f5;
+  border-top: 1px solid v-bind('token.colorSplit');
   gap: 12px;
 }
 
@@ -513,7 +559,8 @@ onMounted(() => {
 .model-name {
   flex: 1;
   min-width: 0;
-  color: rgba(0, 0, 0, 0.75);
+  font-size: 13px;
+  color: v-bind('token.colorText');
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -522,31 +569,32 @@ onMounted(() => {
 
 .model-metrics {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   flex-shrink: 0;
 }
 
 .model-metric-item {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  align-items: flex-end;
+  gap: 1px;
 }
 
 .model-metric-label {
   font-size: 11px;
-  color: #bbb;
+  color: v-bind('token.colorTextTertiary');
   white-space: nowrap;
 }
 
 .model-metric-value {
+  font-size: 13px;
   white-space: nowrap;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .model-metric--latency {
-  color: rgba(0, 0, 0, 0.65);
+  color: v-bind('token.colorTextSecondary');
 }
 
 .notice-banner {
@@ -556,7 +604,7 @@ onMounted(() => {
   border: 1px solid #91d5ff;
   border-radius: 10px;
   cursor: default;
-  transition: all 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .notice-banner:hover {
@@ -590,14 +638,30 @@ onMounted(() => {
 .notice-label {
   font-weight: 600;
   color: #d46b08;
-  flex: 1;
+}
+
+.notice-time {
+  margin-left: 4px;
+  font-size: 12px;
+  color: v-bind('token.colorTextTertiary');
+}
+
+.notice-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .notice-text.notice-md {
-  color: rgba(0, 0, 0, 0.75);
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 6px;
+  color: v-bind('token.colorTextSecondary');
   word-break: break-word;
-  line-height: 1.6;
-  font-size: 14px;
+  line-height: 1.7;
+  font-size: 13px;
 }
 
 .notice-md :deep(p) {
@@ -609,14 +673,14 @@ onMounted(() => {
 }
 
 .notice-md :deep(code) {
-  background: rgba(0, 0, 0, 0.06);
+  background: v-bind('token.colorFillTertiary');
   padding: 2px 4px;
   border-radius: 3px;
   font-size: 0.9em;
 }
 
 .notice-md :deep(pre) {
-  background: rgba(0, 0, 0, 0.04);
+  background: v-bind('token.colorFillQuaternary');
   padding: 8px 12px;
   border-radius: 6px;
   overflow-x: auto;
@@ -636,7 +700,7 @@ onMounted(() => {
   border-left: 3px solid #ffd591;
   padding-left: 12px;
   margin: 0.5em 0;
-  color: rgba(0, 0, 0, 0.55);
+  color: v-bind('token.colorTextTertiary');
 }
 
 .notice-more {
@@ -646,42 +710,60 @@ onMounted(() => {
 }
 
 .notice-close {
-  color: rgba(0, 0, 0, 0.35);
+  color: v-bind('token.colorTextTertiary');
   cursor: pointer;
   transition: color 0.2s ease;
   flex-shrink: 0;
 }
 
 .notice-close:hover {
-  color: rgba(0, 0, 0, 0.65);
+  color: v-bind('token.colorText');
+}
+
+.notice-modal-body {
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .activities-section {
-  margin-top: 16px;
+  margin-top: 20px;
+}
+
+.activities-card {
+  border-radius: 12px;
+  border: 1px solid v-bind('token.colorSplit');
 }
 
 .activities-card :deep(.ant-card-body) {
-  padding: 16px 20px;
+  padding: 8px 12px;
 }
 
 .activities-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
 }
 
 .activity-item {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
-  padding: 10px 12px;
-  border-radius: 6px;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 8px;
   transition: background 0.2s ease;
   animation: slideIn 0.3s ease both;
 }
 
 .activity-item:hover {
-  background: #fafafa;
+  background: v-bind('token.colorFillQuaternary');
+}
+
+.activity-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: v-bind('token.colorPrimary');
 }
 
 @keyframes slideIn {
@@ -689,19 +771,51 @@ onMounted(() => {
   to { opacity: 1; transform: translateX(0); }
 }
 
+.activity-main {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+}
+
 .activity-time {
   font-size: 12px;
-  color: #999;
-  flex-shrink: 0;
-  min-width: 130px;
+  color: v-bind('token.colorTextTertiary');
+  margin-left: auto;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .activity-content {
   font-size: 13px;
-  color: rgba(0, 0, 0, 0.75);
+  color: v-bind('token.colorText');
   flex: 1;
   min-width: 0;
+  word-break: break-word;
+}
+
+@media screen and (max-width: 768px) {
+  .dashboard-page {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .notice-text.notice-md {
+    max-height: 220px;
+  }
+
+  .activity-main {
+    flex-wrap: wrap;
+  }
+
+  .activity-time {
+    width: 100%;
+    margin-left: 0;
+  }
 }
 
 @media screen and (max-width: 576px) {
@@ -709,16 +823,31 @@ onMounted(() => {
     padding: 12px;
   }
 
-  .header {
-    margin-bottom: 16px;
+  .title {
+    font-size: 19px;
   }
 
-  .stat-mini-card :deep(.ant-card-body) {
-    padding: 10px 12px;
+  .notice-banner {
+    padding: 12px 14px;
   }
 
-  .stat-mini-card :deep(.ant-statistic-content-value) {
-    font-size: 18px;
+  .stat-card :deep(.ant-card-body) {
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .stat-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+
+  .provider-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

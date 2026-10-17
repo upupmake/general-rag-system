@@ -1,5 +1,5 @@
 <script setup>
-import {ref, watch, computed, onMounted, onUnmounted, defineAsyncComponent} from 'vue'
+import {ref, watch, computed, nextTick, onMounted, onUnmounted, defineAsyncComponent} from 'vue'
 import {useRouter, useRoute} from 'vue-router'
 import SessionList from '@/components/SessionList.vue'
 // 游戏组件按需异步加载，避免求解器/素材进入首屏 bundle
@@ -65,7 +65,7 @@ const handleDocumentClick = (event) => {
 
 onMounted(() => {
   checkIsMobile()
-  window.addEventListener('resize', checkIsMobile)
+  window.addEventListener('resize', handleWindowResize)
   document.addEventListener('click', handleDocumentClick)
   loadCurrentWorkspace()
   if (userStore.token) {
@@ -79,10 +79,11 @@ onMounted(() => {
       updatePageTitle()
     }
   })
+  restoreMenuBtnPos()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', checkIsMobile)
+  window.removeEventListener('resize', handleWindowResize)
   document.removeEventListener('click', handleDocumentClick)
   events.off('sessionTitleUpdated')
 })
@@ -178,6 +179,161 @@ const toggleCollapsed = () => {
   collapsed.value = !collapsed.value
   isFooterExpanded.value = false
 }
+
+// ============ 移动端展开按钮拖动 ============
+const MENU_BTN_POS_KEY = 'mobile-menu-btn-pos'
+const MENU_BTN_MARGIN = 8
+const MENU_BTN_DEFAULT_SIZE = 40
+
+const menuBtnRef = ref(null)
+const menuBtnPos = ref(null) // {left, top}，null 表示使用默认位置
+const isMenuBtnDragging = ref(false)
+let menuDrag = null
+let menuDragRaf = 0
+let menuDragPending = null
+let suppressMenuBtnClick = false
+
+const getMenuBtnEl = () => menuBtnRef.value?.$el || menuBtnRef.value
+
+const clampMenuBtnPos = (left, top) => {
+  const rect = getMenuBtnEl()?.getBoundingClientRect()
+  const width = rect?.width || MENU_BTN_DEFAULT_SIZE
+  const height = rect?.height || MENU_BTN_DEFAULT_SIZE
+  const maxLeft = Math.max(MENU_BTN_MARGIN, window.innerWidth - width - MENU_BTN_MARGIN)
+  const maxTop = Math.max(MENU_BTN_MARGIN, window.innerHeight - height - MENU_BTN_MARGIN)
+  return {
+    left: Math.min(Math.max(left, MENU_BTN_MARGIN), maxLeft),
+    top: Math.min(Math.max(top, MENU_BTN_MARGIN), maxTop)
+  }
+}
+
+const restoreMenuBtnPos = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MENU_BTN_POS_KEY) || 'null')
+    if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+      menuBtnPos.value = clampMenuBtnPos(saved.left, saved.top)
+    }
+  } catch (e) {
+    localStorage.removeItem(MENU_BTN_POS_KEY)
+  }
+}
+
+const onMenuBtnPointerDown = (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return
+  const el = getMenuBtnEl()
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  menuDrag = {
+    pointerId: e.pointerId,
+    startX: e.clientX,
+    startY: e.clientY,
+    offsetX: e.clientX - rect.left,
+    offsetY: e.clientY - rect.top,
+    // 缓存尺寸，拖动过程中不再读取布局，避免每帧强制 reflow
+    width: rect.width,
+    height: rect.height,
+    left: rect.left,
+    top: rect.top,
+    moved: false
+  }
+  window.addEventListener('pointermove', onMenuBtnPointerMove)
+  window.addEventListener('pointerup', onMenuBtnPointerUp)
+  window.addEventListener('pointercancel', onMenuBtnPointerUp)
+}
+
+const computeMenuBtnPos = (x, y) => {
+  const maxLeft = Math.max(MENU_BTN_MARGIN, window.innerWidth - menuDrag.width - MENU_BTN_MARGIN)
+  const maxTop = Math.max(MENU_BTN_MARGIN, window.innerHeight - menuDrag.height - MENU_BTN_MARGIN)
+  return {
+    left: Math.min(Math.max(x - menuDrag.offsetX, MENU_BTN_MARGIN), maxLeft),
+    top: Math.min(Math.max(y - menuDrag.offsetY, MENU_BTN_MARGIN), maxTop)
+  }
+}
+
+const onMenuBtnPointerMove = (e) => {
+  if (!menuDrag || e.pointerId !== menuDrag.pointerId) return
+  if (!menuDrag.moved && Math.hypot(e.clientX - menuDrag.startX, e.clientY - menuDrag.startY) < 5) return
+  if (!menuDrag.moved) {
+    menuDrag.moved = true
+    isMenuBtnDragging.value = true
+  }
+  e.preventDefault()
+  menuDragPending = {x: e.clientX, y: e.clientY}
+  if (menuDragRaf) return
+  // 每帧最多更新一次，并直接写入 DOM 样式，保证跟手
+  menuDragRaf = requestAnimationFrame(() => {
+    menuDragRaf = 0
+    if (!menuDrag || !menuDragPending) return
+    const pos = computeMenuBtnPos(menuDragPending.x, menuDragPending.y)
+    menuDrag.left = pos.left
+    menuDrag.top = pos.top
+    const el = getMenuBtnEl()
+    if (el) {
+      el.style.left = `${pos.left}px`
+      el.style.top = `${pos.top}px`
+    }
+    // 同步响应式状态，避免其他状态更新重渲染时位置回退
+    menuBtnPos.value = pos
+  })
+}
+
+const onMenuBtnPointerUp = (e) => {
+  if (!menuDrag || (e.pointerId !== undefined && e.pointerId !== menuDrag.pointerId)) return
+  if (menuDragRaf) {
+    cancelAnimationFrame(menuDragRaf)
+    menuDragRaf = 0
+  }
+  if (menuDrag.moved) {
+    // 用松手时的坐标补齐最后一帧，保证落点与手指一致
+    const pointerX = e.type !== 'pointercancel' ? e.clientX : menuDragPending?.x
+    const pointerY = e.type !== 'pointercancel' ? e.clientY : menuDragPending?.y
+    if (Number.isFinite(pointerX) && Number.isFinite(pointerY)) {
+      const pos = computeMenuBtnPos(pointerX, pointerY)
+      menuDrag.left = pos.left
+      menuDrag.top = pos.top
+    }
+    menuBtnPos.value = {left: menuDrag.left, top: menuDrag.top}
+    // 直接写入 DOM，避免 Vue 异步更新造成松手瞬间的位置回跳
+    const el = getMenuBtnEl()
+    if (el) {
+      el.style.left = `${menuDrag.left}px`
+      el.style.top = `${menuDrag.top}px`
+    }
+    localStorage.setItem(MENU_BTN_POS_KEY, JSON.stringify(menuBtnPos.value))
+    // 拖动结束后浏览器仍会触发 click，短暂拦截避免误展开菜单
+    suppressMenuBtnClick = true
+    setTimeout(() => {
+      suppressMenuBtnClick = false
+    }, 300)
+  }
+  menuDrag = null
+  menuDragPending = null
+  isMenuBtnDragging.value = false
+  window.removeEventListener('pointermove', onMenuBtnPointerMove)
+  window.removeEventListener('pointerup', onMenuBtnPointerUp)
+  window.removeEventListener('pointercancel', onMenuBtnPointerUp)
+}
+
+const handleMenuBtnClick = () => {
+  if (suppressMenuBtnClick) return
+  toggleCollapsed()
+}
+
+const handleWindowResize = () => {
+  checkIsMobile()
+  if (menuBtnPos.value) {
+    menuBtnPos.value = clampMenuBtnPos(menuBtnPos.value.left, menuBtnPos.value.top)
+  }
+}
+
+// 按钮出现后按实际尺寸再校正一次位置（如横竖屏切换后）
+watch(collapsed, (visible) => {
+  if (visible && menuBtnPos.value) {
+    nextTick(() => {
+      menuBtnPos.value = clampMenuBtnPos(menuBtnPos.value.left, menuBtnPos.value.top)
+    })
+  }
+})
 
 // 退出登录
 const handleLogout = () => {
@@ -503,10 +659,14 @@ const go = (path) => {
       <!-- 移动端展开按钮 -->
       <a-button 
         v-if="collapsed"
+        ref="menuBtnRef"
         class="mobile-menu-btn"
+        :class="{ 'is-dragging': isMenuBtnDragging }"
         type="primary" 
         shape="circle"
-        @click="toggleCollapsed"
+        :style="menuBtnPos ? { left: menuBtnPos.left + 'px', top: menuBtnPos.top + 'px' } : null"
+        @pointerdown="onMenuBtnPointerDown"
+        @click="handleMenuBtnClick"
       >
         <template #icon>
           <menu-unfold-outlined />
@@ -904,6 +1064,15 @@ const go = (path) => {
   top: 16px;
   left: 80px;
   z-index: 101;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  /* 禁用 ant Button 默认的 transition: all，否则 left/top 变化会滞后于手指 */
+  transition: none;
+}
+
+.mobile-menu-btn.is-dragging {
+  cursor: grabbing;
 }
 
 @media (max-width: 768px) {

@@ -4,7 +4,7 @@ import {
     fetchSessionMessages,
     startChatStream
 } from '@/api/chatApi'
-import {models, selectedModel, selectedKb, contextMultiplier, findKbById, loadChatResources} from '@/vars.js'
+import {models, selectedModel, selectedKb, findKbById, loadChatResources} from '@/vars.js'
 import {useUserStore} from '@/stores/user.js'
 import {buildMessages, getChatSession, releaseChatSession, createStreamCallbacks} from './chatSessions.js'
 
@@ -94,8 +94,6 @@ export function useChat(
             } else {
                 thinkingEnabled.value = false
             }
-
-            contextMultiplier.value = opts.contextMultiplier !== undefined ? opts.contextMultiplier : null
 
             if (currentModel.value?.metadata?.thinking?.editable === false) {
                 thinkingEnabled.value = currentModel.value.metadata.thinking.default
@@ -225,10 +223,6 @@ export function useChat(
 
         if (selectedKb.value) {
             options.agenticRag = true
-        }
-
-        if (contextMultiplier.value !== null) {
-            options.contextMultiplier = contextMultiplier.value
         }
 
         const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg, options)

@@ -10,7 +10,6 @@ import {
   AppstoreOutlined,
   BulbOutlined,
   CaretRightOutlined,
-  HistoryOutlined,
   UpOutlined,
   VerticalAlignBottomOutlined,
   PauseOutlined,
@@ -19,7 +18,7 @@ import {
 import {Bubble, Sender, ThoughtChain} from 'ant-design-x-vue'
 import {useRoute} from 'vue-router'
 import {Typography, theme, Spin} from 'ant-design-vue'
-import {groupedModels, models, providerLogos, selectedKb, selectedModel, contextMultiplier} from '@/vars.js'
+import {groupedModels, models, providerLogos, selectedKb, selectedModel} from '@/vars.js'
 import KbSelector from '@/components/KbSelector.vue'
 import KbDocumentBrowser from '@/components/KbDocumentBrowser.vue'
 import {useThemeStore} from '@/stores/theme'
@@ -317,19 +316,6 @@ const roles = computed(() => ({
   },
 }));
 
-// 上下文长度控制
-const contextCustomInput = ref(null)
-const setContextMultiplier = (val) => {
-  contextMultiplier.value = val
-  contextCustomInput.value = null
-}
-const confirmContextCustom = () => {
-  const v = Number(contextCustomInput.value)
-  if (v >= 1) {
-    contextMultiplier.value = v
-    contextCustomInput.value = null
-  }
-}
 </script>
 
 <template>
@@ -634,6 +620,7 @@ const confirmContextCustom = () => {
                       class="model-select-footer model-select-with-logo"
                       placeholder="选择模型"
                       :bordered="false"
+                      :virtual="false"
                       :dropdownMatchSelectWidth="false"
                   >
                     <a-select-opt-group
@@ -671,62 +658,6 @@ const confirmContextCustom = () => {
                 </div>
               </div>
               <div class="sender-actions">
-                <!-- 上下文长度控制 -->
-                <a-popover
-                    trigger="click"
-                    placement="topRight"
-                    :arrow="false"
-                    overlay-class-name="context-multiplier-popover"
-                >
-                  <div
-                      class="header-tool-item"
-                      :class="{ active: contextMultiplier !== null }"
-                  >
-                    <HistoryOutlined/>
-                    <span>上下文{{ contextMultiplier !== null ? `：${contextMultiplier}x` : '' }}</span>
-                  </div>
-                  <template #content>
-                    <div class="context-multiplier-panel">
-                      <div class="ctx-hint">
-                        仅在翻译、润色等无需长上下文的任务时限制，以节省token使用量。其他情况建议使用模型默认最大上下文长度。
-                      </div>
-                      <div class="ctx-divider"/>
-                      <div
-                          class="ctx-option"
-                          :class="{ 'ctx-option-active': contextMultiplier === null }"
-                          @click="setContextMultiplier(null)"
-                      >默认（跟随模型）
-                      </div>
-                      <div class="ctx-divider"/>
-                      <div class="ctx-list">
-                        <div
-                            v-for="n in 5"
-                            :key="n"
-                            class="ctx-option"
-                            :class="{ 'ctx-option-active': contextMultiplier === n }"
-                            @click="setContextMultiplier(n)"
-                        >
-                          <span>{{ n }}x</span>
-                          <span class="ctx-token-hint">≈ {{ (n * 10240 / 1024).toFixed(0) }}k tokens</span>
-                        </div>
-                      </div>
-                      <div class="ctx-divider"/>
-                      <div class="ctx-custom-row">
-                        <a-input-number
-                            v-model:value="contextCustomInput"
-                            :min="1"
-                            :precision="0"
-                            placeholder="自定义倍率"
-                            size="small"
-                            style="flex:1"
-                            @pressEnter="confirmContextCustom"
-                        />
-                        <a-button size="small" type="primary" @click="confirmContextCustom">确认</a-button>
-                      </div>
-                    </div>
-                  </template>
-                </a-popover>
-
                 <a-button
                     type="text"
                     size="small"

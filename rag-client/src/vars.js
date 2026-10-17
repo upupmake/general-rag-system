@@ -36,9 +36,6 @@ const kbs = ref({
 })
 const selectedKb = ref(null)
 
-// 上下文长度倍率：null 表示走默认逻辑（受模型限制），1-100 表示手动指定（基础 10240 tokens，不超过模型默认上限）
-const contextMultiplier = ref(null)
-
 // 知识库分组配置
 const kbGroupLabels = {
     private: '👤 我创建的',
@@ -89,4 +86,4 @@ const findKbById = (kbId) => {
     return allKbs.find(kb => kb.id === kbId)
 }
 
-export {models, groupedModels, selectedModel, kbs, selectedKb, contextMultiplier, kbGroupLabels, providerLogos, loadChatResources, findKbById}
+export {models, groupedModels, selectedModel, kbs, selectedKb, kbGroupLabels, providerLogos, loadChatResources, findKbById}

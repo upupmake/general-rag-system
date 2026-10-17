@@ -3,7 +3,7 @@ import {onMounted, ref, computed, watch} from "vue";
 import {onUnmounted} from "vue";
 import md from "@/utils/markdown.js";
 import {useRoute, useRouter} from "vue-router";
-import {message} from "ant-design-vue";
+import {message, theme} from "ant-design-vue";
 import {
   LoadingOutlined,
   ArrowLeftOutlined,
@@ -12,7 +12,13 @@ import {
   HomeOutlined,
   MoreOutlined,
   DownOutlined,
-  SearchOutlined
+  SearchOutlined,
+  SettingOutlined,
+  TeamOutlined,
+  MailOutlined,
+  FolderAddOutlined,
+  CloudUploadOutlined,
+  ReloadOutlined
 } from '@ant-design/icons-vue';
 import {
   deleteDocument,
@@ -29,6 +35,8 @@ import {
 } from "@/api/kbApi.js";
 import {useUserStore} from "@/stores/user";
 
+const {useToken} = theme;
+const {token} = useToken();
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
@@ -233,6 +241,21 @@ const canInvite = computed(() => {
   return currentKb.value && currentKb.value.visibility === 'private' && isOwner.value;
 });
 
+// 页头展示的可见性信息
+const visibilityLabel = computed(() => {
+  const v = currentKb.value?.visibility;
+  if (v === 'public') return '公开';
+  if (v === 'shared') return '工作空间共享';
+  return '私有';
+});
+
+const visibilityTagColor = computed(() => {
+  const v = currentKb.value?.visibility;
+  if (v === 'public') return 'orange';
+  if (v === 'shared') return 'green';
+  return 'default';
+});
+
 // Preview related refs
 const previewVisible = ref(false);
 const previewContent = ref('');
@@ -363,6 +386,18 @@ const fetchDocuments = async () => {
       pendingDocumentFetch = false;
       fetchDocuments();
     }
+  }
+};
+
+// 手动刷新列表：只重新拉取文档，保留当前目录与路径过滤条件
+const refreshing = ref(false);
+const handleRefresh = async () => {
+  if (refreshing.value) return;
+  refreshing.value = true;
+  try {
+    await fetchDocuments();
+  } finally {
+    refreshing.value = false;
   }
 };
 
@@ -823,28 +858,36 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div style="padding: 24px; height: 100vh; display: flex; flex-direction: column;">
-    <div class="kb-header" style="flex-shrink: 0;">
+  <div class="kb-page">
+    <div class="kb-header">
       <div class="kb-title-container">
-        <a-button @click="goBack" type="text" shape="circle">
+        <a-button class="kb-back-btn" @click="goBack" type="text" shape="circle">
           <template #icon>
             <arrow-left-outlined/>
           </template>
         </a-button>
-        <h2 class="kb-title">📄 文档管理 - {{ currentKb ? currentKb.name : '' }}</h2>
+        <div class="kb-title-wrap">
+          <h2 class="kb-title">{{ currentKb ? currentKb.name : '' }}</h2>
+          <div class="kb-meta">
+            <span>文档管理</span>
+            <span class="kb-meta-dot">·</span>
+            <span>共 {{ fileList.length }} 个文件</span>
+            <a-tag v-if="currentKb" class="kb-visibility-tag" :color="visibilityTagColor">{{ visibilityLabel }}</a-tag>
+          </div>
+        </div>
       </div>
       <div class="kb-actions">
         <a-button v-if="isOwner" @click="openSettingsModal">
-          <span v-if="!isMobile">⚙️ 设置</span>
-          <span v-else>⚙️</span>
+          <template #icon><setting-outlined/></template>
+          <span v-if="!isMobile">设置</span>
         </a-button>
         <a-button v-if="canInvite" @click="showInvitedUsersModal">
-          <span v-if="!isMobile">👥 查看被邀请用户</span>
-          <span v-else>👥</span>
+          <template #icon><team-outlined/></template>
+          <span v-if="!isMobile">被邀请用户</span>
         </a-button>
         <a-button v-if="canInvite" @click="showInviteModal">
-          <span v-if="!isMobile">📧 邀请用户</span>
-          <span v-else>📧</span>
+          <template #icon><mail-outlined/></template>
+          <span v-if="!isMobile">邀请用户</span>
         </a-button>
         <a-upload
             :customRequest="customRequest"
@@ -854,8 +897,8 @@ onUnmounted(() => {
             directory
             multiple>
           <a-button>
-            <span v-if="!isMobile">📂 上传文件夹</span>
-            <span v-else>📂</span>
+            <template #icon><folder-add-outlined/></template>
+            <span v-if="!isMobile">上传文件夹</span>
           </a-button>
         </a-upload>
         <a-upload
@@ -865,8 +908,8 @@ onUnmounted(() => {
             :before-upload="beforeUpload"
             multiple>
           <a-button type="primary" :loading="uploading">
-            <span v-if="!isMobile">⬆️ 上传文档</span>
-            <span v-else>⬆️</span>
+            <template #icon><cloud-upload-outlined/></template>
+            <span v-if="!isMobile">上传文档</span>
           </a-button>
         </a-upload>
       </div>
@@ -890,38 +933,48 @@ onUnmounted(() => {
 
     <!-- 搜索与面包屑 -->
     <div class="kb-toolbar">
-      <a-breadcrumb>
-        <a-breadcrumb-item>
-          <a @click="navToLevel(-1)">
-            <home-outlined/>
-            根目录</a>
-        </a-breadcrumb-item>
-        <a-breadcrumb-item v-for="(folder, index) in currentPath" :key="index">
-          <a @click="navToLevel(index)">{{ folder }}</a>
-        </a-breadcrumb-item>
-      </a-breadcrumb>
-      <a-input
-          v-model:value="searchKeyword"
-          allow-clear
-          placeholder="按路径过滤文件"
-          class="kb-search-input">
-        <template #prefix><search-outlined style="color: #bfbfbf;"/></template>
-      </a-input>
+      <div class="kb-breadcrumb">
+        <a-breadcrumb separator=">">
+          <a-breadcrumb-item>
+            <a @click="navToLevel(-1)">
+              <home-outlined/>
+              根目录</a>
+          </a-breadcrumb-item>
+          <a-breadcrumb-item v-for="(folder, index) in currentPath" :key="index">
+            <a @click="navToLevel(index)">{{ folder }}</a>
+          </a-breadcrumb-item>
+        </a-breadcrumb>
+      </div>
+      <div class="kb-toolbar-right">
+        <a-input
+            v-model:value="searchKeyword"
+            allow-clear
+            placeholder="按路径过滤文件"
+            class="kb-search-input">
+          <template #prefix><search-outlined/></template>
+        </a-input>
+        <a-tooltip title="刷新列表">
+          <a-button class="kb-refresh-btn" :loading="refreshing" @click="handleRefresh">
+            <template #icon><reload-outlined/></template>
+            <span v-if="!isMobile">刷新</span>
+          </a-button>
+        </a-tooltip>
+      </div>
     </div>
 
-    <a-table :columns="columns" :data-source="displayList" row-key="id" :pagination="false"
+    <a-table class="kb-table" :columns="columns" :data-source="displayList" row-key="id" :pagination="false"
              :scroll="{ x: 800, y: 'calc(100vh - 250px)' }"
              :locale="{ emptyText: isSearching ? '未找到匹配的文件' : '当前目录暂无文件' }">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'icon'">
-          <folder-outlined v-if="record.isFolder" style="color: #1890ff; font-size: 18px;"/>
-          <file-outlined v-else style="color: #666; font-size: 18px;"/>
+          <folder-outlined v-if="record.isFolder" class="kb-cell-icon kb-cell-icon-folder"/>
+          <file-outlined v-else class="kb-cell-icon"/>
         </template>
         <template v-if="column.key === 'fileName'">
-          <a v-if="record.isFolder" @click="enterFolder(record.fileName)" style="font-weight: bold;">
+          <a v-if="record.isFolder" class="kb-file-link kb-file-link-folder" @click="enterFolder(record.fileName)">
             {{ record.fileName }}
           </a>
-          <span v-else>{{ record.fileName.split('/').pop() }}</span>
+          <span v-else class="kb-file-name">{{ record.fileName.split('/').pop() }}</span>
         </template>
         <template v-if="column.key === 'fileSize'">
           <span>{{ (record.fileSize / (1024 * 1024)).toFixed(2) }} MB</span>
@@ -1050,9 +1103,9 @@ onUnmounted(() => {
             <span v-else>私有模式下，仅您本人可访问（被邀请用户除外）。</span>
           </template>
           <a-radio-group v-model:value="settingsForm.visibility" option-type="button">
-            <a-radio value="private">🔒 私有</a-radio>
-            <a-radio value="shared">🏢 工作空间共享</a-radio>
-            <a-radio value="public">🌍 公开</a-radio>
+            <a-radio value="private">私有</a-radio>
+            <a-radio value="shared">工作空间共享</a-radio>
+            <a-radio value="public">公开</a-radio>
           </a-radio-group>
         </a-form-item>
       </a-form>
@@ -1266,28 +1319,87 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
 }
 
-.kb-header {
-  margin-bottom: 16px;
+/* ============ 页面骨架 ============ */
+.kb-page {
+  padding: 24px;
+  height: 100vh;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
 }
 
-.kb-title-container {
+/* ============ 页头 ============ */
+.kb-header {
+  flex-shrink: 0;
+  margin-bottom: 16px;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
   gap: 16px;
 }
 
+.kb-title-container {
+  /* 保证标题区有足够宽度，空间不足时让操作按钮换行而不是把标题压扁 */
+  flex: 1 1 260px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.kb-back-btn {
+  flex: none;
+  color: v-bind('token.colorTextSecondary');
+  transition: color 0.2s ease;
+}
+
+.kb-back-btn:hover {
+  color: v-bind('token.colorPrimary');
+}
+
+.kb-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
 .kb-title {
   margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: v-bind('token.colorText');
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: v-bind('token.colorTextTertiary');
+}
+
+.kb-meta-dot {
+  color: v-bind('token.colorTextQuaternary');
+}
+
+.kb-visibility-tag {
+  margin-inline-end: 0;
 }
 
 .kb-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+  flex: none;
 }
 
+/* ============ 工具栏 ============ */
 .kb-toolbar {
   display: flex;
   justify-content: space-between;
@@ -1298,21 +1410,88 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
+.kb-breadcrumb {
+  min-width: 0;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: v-bind('token.colorFillTertiary');
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.kb-breadcrumb::-webkit-scrollbar {
+  display: none;
+}
+
 .kb-search-input {
   width: 280px;
   max-width: 100%;
 }
 
+.kb-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.kb-search-input :deep(.ant-input-prefix) {
+  color: v-bind('token.colorTextTertiary');
+}
+
 .kb-processing-alert {
   margin-bottom: 12px;
   flex-shrink: 0;
+  border-radius: 8px;
+}
+
+/* ============ 文件表格 ============ */
+.kb-table {
+  border: 1px solid v-bind('token.colorSplit');
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.kb-table :deep(.ant-table-thead > tr > th) {
+  background: v-bind('token.colorFillTertiary');
+  font-weight: 600;
+  color: v-bind('token.colorText');
+}
+
+.kb-cell-icon {
+  font-size: 16px;
+  color: v-bind('token.colorTextTertiary');
+}
+
+.kb-cell-icon-folder {
+  color: v-bind('token.colorPrimary');
+}
+
+.kb-file-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-file-link {
+  color: v-bind('token.colorText');
+  transition: color 0.2s ease;
+}
+
+.kb-file-link-folder {
+  font-weight: 600;
+}
+
+.kb-file-link:hover {
+  color: v-bind('token.colorPrimary');
 }
 
 .document-error-text {
   max-width: 220px;
   margin-top: 4px;
   overflow: hidden;
-  color: #cf1322;
+  color: v-bind('token.colorError');
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1330,9 +1509,13 @@ onUnmounted(() => {
     max-height: calc(100vh - 80px);
   }
 
+  .kb-page {
+    padding: 16px;
+  }
+
   .kb-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 12px;
   }
 
@@ -1342,9 +1525,6 @@ onUnmounted(() => {
 
   .kb-title {
     font-size: 18px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .kb-actions {
@@ -1353,8 +1533,13 @@ onUnmounted(() => {
     flex-wrap: wrap;
   }
 
-  .kb-search-input {
+  .kb-toolbar-right {
     width: 100%;
+  }
+
+  .kb-search-input {
+    flex: 1;
+    width: auto;
   }
 
   .kb-actions .ant-btn {

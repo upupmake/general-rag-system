@@ -44,6 +44,7 @@ const filterKbOption = (input, option) => {
         :style="{ width: adaptiveWidth, maxWidth: '100%' }"
         :size="size"
         :disabled="disabled"
+        :virtual="false"
         placeholder="知识库（可选）"
         allowClear
         show-search
