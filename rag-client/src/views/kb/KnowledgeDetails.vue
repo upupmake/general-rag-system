@@ -2,6 +2,7 @@
 import {onMounted, ref, computed, watch} from "vue";
 import {onUnmounted} from "vue";
 import md from "@/utils/markdown.js";
+import dayjs from "dayjs";
 import {useRoute, useRouter} from "vue-router";
 import {message, theme} from "ant-design-vue";
 import {
@@ -256,6 +257,11 @@ const visibilityTagColor = computed(() => {
   return 'default';
 });
 
+const formatFileDate = (value) => {
+  if (!value) return '—';
+  return dayjs(value).format('YYYY-MM-DD');
+};
+
 // Preview related refs
 const previewVisible = ref(false);
 const previewContent = ref('');
@@ -325,7 +331,7 @@ const columns = [
     },
     sortDirections: ['descend', 'ascend']
   },
-  {title: '操作', key: 'action'},
+  {title: '操作', key: 'action', width: 220},
 ];
 
 const stopDocumentPolling = () => {
@@ -962,7 +968,85 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <a-table class="kb-table" :columns="columns" :data-source="displayList" row-key="id" :pagination="false"
+    <!-- 移动端文件列表 -->
+    <div v-if="isMobile" class="kb-mobile-list">
+      <a-empty
+          v-if="displayList.length === 0"
+          class="kb-mobile-empty"
+          :description="isSearching ? '未找到匹配的文件' : '当前目录暂无文件'"/>
+      <div
+          v-for="record in displayList"
+          :key="record.id"
+          class="kb-mobile-card">
+        <button
+            type="button"
+            class="kb-mobile-main"
+            :aria-label="record.isFolder ? `打开文件夹 ${record.fileName}` : `预览 ${record.fileName.split('/').pop()}`"
+            @click="record.isFolder ? enterFolder(record.fileName) : handlePreview(record)">
+          <span class="kb-mobile-icon" :class="{'is-folder': record.isFolder}">
+            <folder-outlined v-if="record.isFolder"/>
+            <file-outlined v-else/>
+          </span>
+          <span class="kb-mobile-body">
+            <span class="kb-mobile-name">{{ record.isFolder ? record.fileName : record.fileName.split('/').pop() }}</span>
+            <span class="kb-mobile-meta">
+              <span>{{ (record.fileSize / (1024 * 1024)).toFixed(2) }} MB</span>
+              <span class="kb-meta-dot">·</span>
+              <span>{{ formatFileDate(record.createdAt) }}</span>
+              <a-tag v-if="record.status === 'processing'" color="blue" class="kb-mobile-status">
+                <loading-outlined/>
+                向量化中
+              </a-tag>
+              <a-tag v-else-if="record.status === 'failed'" color="red" class="kb-mobile-status">失败</a-tag>
+            </span>
+            <span
+                v-if="!record.isFolder && record.status === 'failed' && record.errorMessage"
+                class="kb-mobile-error">
+              {{ record.errorMessage }}
+            </span>
+          </span>
+        </button>
+        <a-dropdown :trigger="['click']" placement="bottomRight">
+          <a-button type="text" size="small" class="kb-mobile-more" @click.stop>
+            <more-outlined/>
+          </a-button>
+          <template #overlay>
+            <a-menu>
+              <template v-if="record.isFolder">
+                <a-menu-item @click="enterFolder(record.fileName)">打开文件夹</a-menu-item>
+                <a-menu-item danger>
+                  <a-popconfirm
+                      title="确定要删除这个文件夹及其所有内容吗？"
+                      ok-text="确定"
+                      cancel-text="取消"
+                      @confirm="handleDeleteFolder(record.fileName)">
+                    <span>删除文件夹</span>
+                  </a-popconfirm>
+                </a-menu-item>
+              </template>
+              <template v-else>
+                <a-menu-item @click="handlePreview(record)">预览</a-menu-item>
+                <a-menu-item @click="handleDownload(record)">下载</a-menu-item>
+                <a-menu-item @click="handlePreviewChunks(record)">预览切片</a-menu-item>
+                <a-menu-item v-if="record.status === 'failed'" @click="handleReprocess(record)">重试处理</a-menu-item>
+                <a-menu-divider/>
+                <a-menu-item danger>
+                  <a-popconfirm
+                      title="确定要删除这个文件吗？"
+                      ok-text="确定"
+                      cancel-text="取消"
+                      @confirm="handleDelete(record)">
+                    <span>删除文件</span>
+                  </a-popconfirm>
+                </a-menu-item>
+              </template>
+            </a-menu>
+          </template>
+        </a-dropdown>
+      </div>
+    </div>
+
+    <a-table v-else class="kb-table" :columns="columns" :data-source="displayList" row-key="id" :pagination="false"
              :scroll="{ x: 800, y: 'calc(100vh - 250px)' }"
              :locale="{ emptyText: isSearching ? '未找到匹配的文件' : '当前目录暂无文件' }">
       <template #bodyCell="{ column, record }">
@@ -1041,14 +1125,11 @@ onUnmounted(() => {
             </a-dropdown>
 
             <!-- Desktop View: Buttons -->
-            <span v-else>
+            <span v-else class="kb-desktop-actions">
                   <a-button type="link" size="small" @click="handlePreview(record)">预览</a-button>
-                  <a-divider type="vertical"/>
                   <a-button type="link" size="small" @click="handlePreviewChunks(record)">切片</a-button>
-                  <a-divider type="vertical"/>
                   <template v-if="record.status === 'failed'">
                     <a-button type="link" size="small" danger @click="handleReprocess(record)">重试</a-button>
-                    <a-divider type="vertical"/>
                   </template>
                   
                   <a-dropdown>
@@ -1497,6 +1578,125 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.kb-table :deep(.ant-table-tbody > tr > td:last-child) {
+  white-space: nowrap;
+}
+
+.kb-desktop-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ============ 移动端文件卡片 ============ */
+.kb-mobile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kb-mobile-empty {
+  padding: 32px 0;
+}
+
+.kb-mobile-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid v-bind('token.colorSplit');
+  border-radius: 10px;
+  background: v-bind('token.colorBgContainer');
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.kb-mobile-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+}
+
+.kb-mobile-card:active {
+  background: v-bind('token.colorFillQuaternary');
+}
+
+.kb-mobile-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: v-bind('token.colorFillTertiary');
+  color: v-bind('token.colorTextSecondary');
+  font-size: 18px;
+}
+
+.kb-mobile-icon.is-folder {
+  background: v-bind('token.colorPrimaryBg');
+  color: v-bind('token.colorPrimary');
+}
+
+.kb-mobile-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-mobile-name {
+  overflow: hidden;
+  color: v-bind('token.colorText');
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-mobile-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: v-bind('token.colorTextTertiary');
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.kb-mobile-status {
+  margin-inline-end: 0;
+  padding-inline: 6px;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.kb-mobile-error {
+  overflow: hidden;
+  color: v-bind('token.colorError');
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-mobile-more {
+  flex: none;
+  margin-top: -2px;
+  color: v-bind('token.colorTextTertiary');
+}
+
 @media (max-width: 768px) {
   .preview-pdf,
   .preview-scroll,
@@ -1510,7 +1710,11 @@ onUnmounted(() => {
   }
 
   .kb-page {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
     padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
 
   .kb-header {
@@ -1520,6 +1724,7 @@ onUnmounted(() => {
   }
 
   .kb-title-container {
+    flex: none;
     width: 100%;
   }
 
@@ -1531,6 +1736,8 @@ onUnmounted(() => {
     width: 100%;
     justify-content: space-between;
     flex-wrap: wrap;
+    /* 给左上角的悬浮菜单按钮留出位置，避免遮挡第一个操作按钮 */
+    padding-left: 40px;
   }
 
   .kb-toolbar-right {
