@@ -1,6 +1,6 @@
 import markdownit from 'markdown-it';
 import taskLists from 'markdown-it-task-lists';
-import mathjax from 'markdown-it-mathjax3';
+import markdownMath from './markdownMath.js';
 import hljs from './hljs.js';
 import 'highlight.js/styles/atom-one-light.css';
 
@@ -30,6 +30,6 @@ const md = markdownit({
     const result = hljs.highlightAuto(str);
     return '<pre class="hljs"><code>' + result.value + '</code></pre>';
   }
-}).use(taskLists).use(mathjax);
+}).use(taskLists).use(markdownMath);
 
 export default md;
