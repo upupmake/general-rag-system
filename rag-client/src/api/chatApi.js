@@ -3,6 +3,7 @@ import {API_BASE_URL} from "@/consts.js";
 import {useUserStore} from "@/stores/user.js";
 import {fetchEventSource} from "@microsoft/fetch-event-source"
 import {message} from "ant-design-vue"
+import {events} from '@/events.js'
 
 export function fetchAvailableModels() {
     return commonApi.get('/models/available')
@@ -21,8 +22,8 @@ export function startChat({modelId, question, kbId, options}) {
     })
 }
 
-export function fetchSessionMessages(sessionId) {
-    return commonApi.get(`/chat/sessions/${sessionId}/messages`)
+export function fetchSessionMessages(sessionId, config = {}) {
+    return commonApi.get(`/chat/sessions/${sessionId}/messages`, null, config)
 }
 
 export function fetchSessions({lastActiveAt, lastId, pageSize = 20, keyword}) {
@@ -37,8 +38,10 @@ export function searchSessions({keyword, limit, offset}) {
     })
 }
 
-export function deleteSession(sessionId) {
-    return commonApi.delete(`/sessions/${sessionId}`)
+export async function deleteSession(sessionId) {
+    const data = await commonApi.delete(`/sessions/${sessionId}`)
+    events.emit('chatSessionDeleted', sessionId)
+    return data
 }
 
 export function fetchSessionTitle(sessionId) {
@@ -125,7 +128,9 @@ function streamRequest(url, body, onOpen, onMessage, onError, onClose, logTag = 
             throw err
         },
         openWhenHidden: true
-    }).then()
+    }).catch(() => {
+        // onerror 已通知调用方；终止本次请求，不自动重发生成请求。
+    })
     return controller
 }
 

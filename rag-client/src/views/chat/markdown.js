@@ -35,12 +35,13 @@ export const md = markdownit({
 
 const renderCache = new WeakMap()
 
-// 按消息对象缓存渲染结果(text -> html)，流式期间未变化的历史消息直接复用，避免重复 md.render/MathJax
+// Bubble.List 会浅拷贝消息，使用共享标识复用未变化的 Markdown/公式渲染结果。
 export function renderCached(obj, slot, text) {
-  let entry = renderCache.get(obj)
+  const key = obj.renderKey || obj
+  let entry = renderCache.get(key)
   if (!entry) {
     entry = {}
-    renderCache.set(obj, entry)
+    renderCache.set(key, entry)
   }
   const src = text || ''
   const cached = entry[slot]

@@ -1,22 +1,29 @@
 import commonApi from './commonApi'
 import {API_BASE_URL} from "@/consts.js";
+import {events} from '@/events.js'
 
 export function fetchAvailableKbs() {
     return commonApi.get('/kb')
 }
 
-export function createKb(formData) {
-    return commonApi.post('/kb', {
+export async function createKb(formData) {
+    const data = await commonApi.post('/kb', {
         ...formData
     })
+    events.emit('knowledgeBasesChanged')
+    return data
 }
 
-export function deleteKb(kbId) {
-    return commonApi.delete(`/kb/${kbId}`)
+export async function deleteKb(kbId) {
+    const data = await commonApi.delete(`/kb/${kbId}`)
+    events.emit('knowledgeBasesChanged')
+    return data
 }
 
-export function updateKb(kbId, data) {
-    return commonApi.put(`/kb/${kbId}`, data)
+export async function updateKb(kbId, data) {
+    const result = await commonApi.put(`/kb/${kbId}`, data)
+    events.emit('knowledgeBasesChanged')
+    return result
 }
 
 // 列出文件

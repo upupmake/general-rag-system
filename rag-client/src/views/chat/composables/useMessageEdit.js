@@ -1,6 +1,6 @@
 import {ref, reactive} from 'vue'
 import {message as antMessage} from 'ant-design-vue'
-import {editMessageStream, retryMessageStream} from '@/api/chatApi'
+import {editMessageStream, retryMessageStream, startChatStream} from '@/api/chatApi'
 import {contextMultiplier} from '@/vars.js'
 
 export function useMessageEdit(
@@ -12,12 +12,11 @@ export function useMessageEdit(
     selectedTools,
     thinkingEnabled,
     currentModel,
-    isGenerating,
     userScrolledUp,
     scrollToBottom,
     handleStreamCallbacks,
     abortController,
-    isStopped
+    prepareGeneration
 ) {
     const editingIndex = ref(-1)
     const editingContent = ref('')
@@ -28,6 +27,10 @@ export function useMessageEdit(
         // 如果通过引用找不到（可能是Proxy对象），尝试通过ID查找
         if (index === -1 && item.id) {
             index = messages.value.findIndex(m => m.id === item.id)
+        }
+
+        if (index === -1 && item.key != null) {
+            index = messages.value.findIndex(m => m.key === item.key)
         }
 
         // 如果还是找不到，尝试查找最后一个用户消息
@@ -56,13 +59,15 @@ export function useMessageEdit(
         editingContent.value = ''
     }
 
-    const confirmEdit = () => {
+    const confirmEdit = async () => {
         if (!editingContent.value.trim()) {
             antMessage.warning('问题内容不能为空')
             return
         }
 
-        const index = editingIndex.value
+        const ready = prepareGeneration()
+        if (ready !== true && !await ready) return
+        const index = messages.value.findLastIndex(msg => msg.role === 'user')
         const userMsg = messages.value[index]
 
         userMsg.content = editingContent.value
@@ -82,10 +87,7 @@ export function useMessageEdit(
             thinkingCollapseKeys: []
         }))
         const assistant = messages.value[messages.value.length - 1]
-        const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg)
 
-        isGenerating.value = true
-        isStopped.value = false
         const options = {}
         if (selectedTools.value.includes('webSearch')) {
             options.webSearch = true
@@ -103,7 +105,13 @@ export function useMessageEdit(
             options.contextMultiplier = contextMultiplier.value
         }
 
-        abortController.value = editMessageStream(
+        const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg, options)
+        // 首条响应前取消时，问题可能还未落库；此时使用普通发送入口。
+        abortController.value = !userMsg.id ? startChatStream(
+            sessionId.value, selectedModel.value, userMsg.content,
+            isKbSupported.value ? (selectedKb.value || undefined) : undefined,
+            options, onOpen, onMessage, onError, onClose
+        ) : editMessageStream(
             userMsg.id,
             sessionId.value,
             selectedModel.value,
@@ -122,7 +130,10 @@ export function useMessageEdit(
         scrollToBottom('auto', true)
     }
 
-    const onRetry = (userMsgIndex) => {
+    const onRetry = async () => {
+        const ready = prepareGeneration()
+        if (ready !== true && !await ready) return
+        const userMsgIndex = messages.value.findLastIndex(msg => msg.role === 'user')
         const userMsg = messages.value[userMsgIndex]
         userMsg.status = 'pending'
 
@@ -140,10 +151,7 @@ export function useMessageEdit(
             thinkingCollapseKeys: []
         }))
         const assistant = messages.value[messages.value.length - 1]
-        const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg)
 
-        isGenerating.value = true
-        isStopped.value = false
         const options = {}
         if (selectedTools.value.includes('webSearch')) {
             options.webSearch = true
@@ -161,7 +169,12 @@ export function useMessageEdit(
             options.contextMultiplier = contextMultiplier.value
         }
 
-        abortController.value = retryMessageStream(
+        const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg, options)
+        abortController.value = !userMsg.id ? startChatStream(
+            sessionId.value, selectedModel.value, userMsg.content,
+            isKbSupported.value ? (selectedKb.value || undefined) : undefined,
+            options, onOpen, onMessage, onError, onClose
+        ) : retryMessageStream(
             userMsg.id,
             sessionId.value,
             selectedModel.value,
@@ -180,8 +193,7 @@ export function useMessageEdit(
     const onRetryFromAssistant = () => {
         for (let i = messages.value.length - 1; i >= 0; i--) {
             if (messages.value[i].role === 'user') {
-                onRetry(i)
-                return
+                return onRetry(i)
             }
         }
         antMessage.warning('没有找到可重试的用户消息')

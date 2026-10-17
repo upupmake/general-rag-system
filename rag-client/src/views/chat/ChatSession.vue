@@ -86,15 +86,16 @@ const modelSelectWidth = computed(() => {
 const {
   messages,
   loading,
+  loadError,
   isGenerating,
-  streamStarted,
+  isSynchronizing,
   question,
   handleStreamCallbacks,
+  prepareGeneration,
   loadSession,
   onSend,
   stopGeneration,
   abortController,
-  isStopped,
   onCopy,
   lastUserMessage,
   isLastUserMsgGenerating,
@@ -134,12 +135,11 @@ const {
     selectedTools,
     thinkingEnabled,
     currentModel,
-    isGenerating,
     userScrolledUp,
     scrollToBottom,
     handleStreamCallbacks,
     abortController,
-    isStopped
+    prepareGeneration
 )
 
 // Mobile detection
@@ -185,7 +185,7 @@ const handleKeyboardShortcut = (event) => {
     event.preventDefault()
     inputExpanded.value = true
     focusSenderInput()
-  } else if (event.key === 'Escape' && isGenerating.value && streamStarted.value) {
+  } else if (event.key === 'Escape' && isGenerating.value) {
     event.preventDefault()
     stopGeneration()
   } else if (modifier && event.shiftKey && event.key.toLowerCase() === 'c') {
@@ -201,12 +201,14 @@ const handleKeyboardShortcut = (event) => {
   }
 }
 
-const handleSend = (text) => {
+const handleSend = async (text) => {
   const value = typeof text === 'string' ? text : question.value
-  if (!value) return
-  onSend(value)
-  localStorage.removeItem(draftStorageKey.value)
-  inputExpanded.value = false
+  if (!value || loading.value || loadError.value || isGenerating.value || isSynchronizing.value || isLastUserMsgGenerating.value) return
+  if (!await onSend(value)) return
+  if (!question.value) {
+    localStorage.removeItem(draftStorageKey.value)
+    inputExpanded.value = false
+  }
 }
 
 // 小游戏提示：每次请求弹出，整个请求（流式输出）结束后隐藏
@@ -231,7 +233,8 @@ watch(isGenerating, (generating) => {
 const handleThinkingChange = (msg, keys) => {
   if (!msg) return
   const nextKeys = Array.isArray(keys) ? keys : (keys ? [keys] : [])
-  const index = messages.value.findIndex(item => item === msg || (item.id && msg.id && item.id === msg.id))
+  const index = messages.value.findIndex(item => item === msg || (item.id && msg.id && item.id === msg.id)
+      || (item.key != null && item.key === msg.key))
   if (index !== -1) {
     messages.value[index].thinkingCollapseKeys = [...nextKeys]
   }
@@ -262,6 +265,8 @@ watch(
     () => route.params.sessionId,
     (newId, oldId) => {
       if (newId && newId !== oldId) {
+        cancelEdit()
+        documentBrowserVisible.value = false
         userScrolledUp.value = false
         sessionId.value = newId
         loadSession(newId)
@@ -272,19 +277,31 @@ watch(
 
 const streamPhaseText = {
   connecting: {
-    title: '正在建立连接',
-    description: '等待模型开始处理'
+    title: '正在等待服务响应',
+    description: '请求已发送，可随时停止'
+  },
+  waiting: {
+    title: '正在等待响应',
+    description: '连接已建立，等待服务端处理进展'
+  },
+  analyzing: {
+    title: '正在分析问题',
+    description: '准备知识库检索，确定检索方向'
   },
   retrieving: {
     title: '正在检索知识库',
-    description: '分析问题并查找相关资料'
+    description: '查找与问题相关的资料'
+  },
+  context: {
+    title: '正在整理资料',
+    description: '根据检索结果准备回答上下文'
   },
   thinking: {
     title: '正在思考',
     description: '整理信息与推理'
   },
   generating: {
-    title: '正在生成回复',
+    title: '模型正在生成',
     description: '内容将持续更新'
   }
 }
@@ -331,6 +348,17 @@ const confirmContextCustom = () => {
           @touchcancel="endTouchScrolling"
           @scroll="handleScroll">
         <Spin :spinning="loading">
+          <a-alert
+              v-if="loadError"
+              type="error"
+              show-icon
+              message="会话加载失败"
+              :description="loadError"
+              class="session-load-error">
+            <template #action>
+              <a-button size="small" @click="loadSession(sessionId)">重新加载</a-button>
+            </template>
+          </a-alert>
           <Bubble.List
               :auto-scroll="false"
               :roles="roles"
@@ -360,7 +388,11 @@ const confirmContextCustom = () => {
                   <span class="activity-copy">
                     <strong>{{ streamPhaseText[msg.streamPhase]?.title }}</strong>
                     <span>{{ streamPhaseText[msg.streamPhase]?.description }}</span>
+                    <span v-if="msg.idleSeconds >= 20" class="activity-wait-hint">
+                      暂未收到新的进展，服务可能仍在排队或处理。可继续等待，或点击停止。
+                    </span>
                   </span>
+                  <span class="activity-elapsed" aria-live="off">已用时 {{ msg.elapsedSeconds || 0 }} 秒</span>
                 </div>
 
                 <!-- 显示检索过程 -->
@@ -526,19 +558,27 @@ const confirmContextCustom = () => {
     <!-- 输入区域 -->
     <div class="input-container">
       <div class="input-wrapper" ref="inputWrapper" @paste="handlePaste">
-        <button
-            v-if="!inputExpanded"
-            type="button"
-            class="input-collapsed-bar"
-            @click="expandInput"
-        >
-          <span class="input-collapsed-text">{{ question ? question : '输入消息，点击展开' }}</span>
-        </button>
+        <div v-if="!inputExpanded" class="input-collapsed-row">
+          <button
+              type="button"
+              class="input-collapsed-bar"
+              @click="expandInput"
+          >
+            <span class="input-collapsed-text">{{ question ? question : '输入消息，点击展开' }}</span>
+          </button>
+          <a-button
+              v-if="isGenerating"
+              type="primary"
+              danger
+              :icon="h(PauseOutlined)"
+              title="停止生成（Esc）"
+              @click="stopGeneration">停止</a-button>
+        </div>
 
         <Sender
             v-else
             v-model:value="question"
-            :loading="loading || isGenerating || isLastUserMsgGenerating"
+            :loading="loading || isGenerating || isSynchronizing || isLastUserMsgGenerating"
             :actions="false"
             :auto-size="false"
             @submit="handleSend"
@@ -707,16 +747,17 @@ const confirmContextCustom = () => {
                 </a-button>
 
                 <a-button
-                    v-if="isGenerating && streamStarted"
+                    v-if="isGenerating"
                     type="primary"
                     danger
                     :icon="h(PauseOutlined)"
                     title="停止生成"
+                    aria-label="停止生成"
                     @click="stopGeneration"/>
                 <component v-else
-                           :is="(loading || isGenerating || isLastUserMsgGenerating) ? LoadingButton : SendButton"
-                           type="primary" :disabled="loading || isGenerating || isLastUserMsgGenerating || !question"
-                           @click="!loading && !isGenerating && !isLastUserMsgGenerating && handleSend(question)"/>
+                           :is="(loading || isGenerating || isSynchronizing || isLastUserMsgGenerating) ? LoadingButton : SendButton"
+                           type="primary" :disabled="loading || !!loadError || isGenerating || isSynchronizing || isLastUserMsgGenerating || !question"
+                           @click="handleSend(question)"/>
               </div>
             </div>
           </template>

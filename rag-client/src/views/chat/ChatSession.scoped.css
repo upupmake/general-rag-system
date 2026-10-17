@@ -115,6 +115,10 @@
   animation: messageSlideIn 0.3s ease-out;
 }
 
+.session-load-error {
+  margin-bottom: 16px;
+}
+
 .assistant-activity {
   --activity-color: #1677ff;
   --activity-glow: rgba(22, 119, 255, 0.16);
@@ -131,7 +135,8 @@
   box-shadow: 0 5px 16px var(--activity-glow);
 }
 
-.assistant-activity.stream-phase-connecting {
+.assistant-activity.stream-phase-connecting,
+.assistant-activity.stream-phase-waiting {
   --activity-color: #6b7280;
   --activity-glow: rgba(107, 114, 128, 0.12);
 }
@@ -141,6 +146,7 @@
   --activity-glow: rgba(15, 143, 122, 0.14);
 }
 
+.assistant-activity.stream-phase-analyzing,
 .assistant-activity.stream-phase-thinking {
   --activity-color: #d97706;
   --activity-glow: rgba(217, 119, 6, 0.14);
@@ -193,6 +199,33 @@
 .activity-copy span {
   color: #7b8494;
   font-size: 12px;
+}
+
+.activity-elapsed {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-left: auto;
+  color: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.activity-copy .activity-wait-hint {
+  margin-top: 4px;
+  color: inherit;
+  max-width: 360px;
+}
+
+.input-collapsed-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.input-collapsed-row .input-collapsed-bar {
+  flex: 1;
+  min-width: 0;
 }
 
 @keyframes activityPulse {

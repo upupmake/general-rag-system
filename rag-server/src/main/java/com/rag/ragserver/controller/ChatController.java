@@ -441,13 +441,26 @@ public class ChatController {
                 .retrieve()
                 .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
                 })
+                .doOnNext(ignored -> chatStreamRegistry.refresh(sessionId))
+                .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, providerResponseInfo))
+                .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, providerResponseInfo, saved));
+
+        RequestLimitations requestLimitations = requestLimitationsService.getOne(
+                new LambdaQueryWrapper<RequestLimitations>()
+                        .eq(RequestLimitations::getUserId, userId)
+                        .last("limit 1")
+        );
+        Integer delaySecond = requestLimitations == null ? null : requestLimitations.getDelaySecond();
+        if (delaySecond != null && delaySecond > 0) {
+            streamFlux = streamFlux.delaySubscription(Duration.ofSeconds(delaySecond));
+        }
+
+        // 生命周期钩子必须覆盖延迟订阅，否则排队期间取消不会保存本轮结果。
+        return streamFlux
                 .doOnSubscribe(a -> {
                     chatStreamRegistry.markActive(sessionId, currentUserMessageId);
                     markMessageGenerating(sessionId, currentUserMessageId);
                 })
-                .doOnNext(ignored -> chatStreamRegistry.refresh(sessionId))
-                .concatMap(event -> processStreamEvent(event, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, providerResponseInfo))
-                .concatWith(saveCompletedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, providerResponseInfo, saved))
                 .doOnError(e -> {
                     if (saved.compareAndSet(false, true)) {
                         saveStoppedMessage(sessionId, userId, chatStream, currentUserMessageId, sb, thinkingSb, ragProcessList, objectMapper, usageInfo, false)
@@ -461,17 +474,6 @@ public class ChatController {
                     }
                 })
                 .doFinally(signal -> chatStreamRegistry.clear(sessionId));
-
-        RequestLimitations requestLimitations = requestLimitationsService.getOne(
-                new LambdaQueryWrapper<RequestLimitations>()
-                        .eq(RequestLimitations::getUserId, userId)
-                        .last("limit 1")
-        );
-        Integer delaySecond = requestLimitations == null ? null : requestLimitations.getDelaySecond();
-        if (delaySecond != null && delaySecond > 0) {
-            return streamFlux.delaySubscription(Duration.ofSeconds(delaySecond));
-        }
-        return streamFlux;
     }
 
     private String buildPromptCacheKey(Long userId, Long sessionId, Long modelId) {

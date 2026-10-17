@@ -1,11 +1,12 @@
-import {ref, reactive, computed, nextTick} from 'vue'
+import {ref, shallowRef, reactive, computed, nextTick, onScopeDispose} from 'vue'
 import {message as antMessage} from 'ant-design-vue'
 import {
-    fetchAvailableModels,
     fetchSessionMessages,
     startChatStream
 } from '@/api/chatApi'
-import {models, selectedModel, selectedKb, contextMultiplier, findKbById, loadKbs} from '@/vars.js'
+import {models, selectedModel, selectedKb, contextMultiplier, findKbById, loadChatResources} from '@/vars.js'
+import {useUserStore} from '@/stores/user.js'
+import {buildMessages, getChatSession, releaseChatSession, createStreamCallbacks} from './chatSessions.js'
 
 export function useChat(
     sessionId,
@@ -19,245 +20,43 @@ export function useChat(
     userScrolledUp,
     scrollToBottom
 ) {
-    const messages = ref([])
+    const userStore = useUserStore()
+    const activeSession = shallowRef(getChatSession(sessionId.value))
+    const messages = computed({
+        get: () => activeSession.value.messages.value,
+        set: value => { activeSession.value.messages.value = value }
+    })
     const loading = ref(false)
-    const isGenerating = ref(false)
+    const loadError = ref('')
+    const isGenerating = computed(() => activeSession.value.isGenerating.value)
+    const isSynchronizing = computed(() => activeSession.value.synchronizing.value)
     const question = ref('')
-    const abortController = ref(null)
-    const isStopped = ref(false)
-    const currentAssistantMsg = ref(null)
-    const currentUserMsg = ref(null)
-    const stoppedFinalized = ref(false)
-    const streamStarted = ref(false)
+    const abortController = computed({
+        get: () => activeSession.value.abortController.value,
+        set: value => { activeSession.value.abortController.value = value }
+    })
+    const streamStarted = computed(() => activeSession.value.streamStarted.value)
+    let loadVersion = 0
+    let disposed = false
 
-    const buildMessages = (data) => data.map(msg => {
-        let ragProcess = null
-        if (msg.ragContext && msg.role === 'assistant') {
-            try {
-                ragProcess = typeof msg.ragContext === 'string' ? JSON.parse(msg.ragContext) : msg.ragContext
-            } catch (e) {
-                console.error('Failed to parse ragContext:', e)
-            }
-        }
-
-        let options = null
-        if (msg.options) {
-            try {
-                options = typeof msg.options === 'string' ? JSON.parse(msg.options) : msg.options
-            } catch (e) {
-                console.error('Failed to parse options:', e)
-            }
-        }
-        return reactive({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            status: msg.status,
-            loading: msg.role === 'assistant' && msg.status === 'generating',
-            ragProcess: ragProcess,
-            latencyMs: msg.latencyMs,
-            totalTokens: msg.totalTokens,
-            options: options,
-            thinking: msg.thinking,
-            thinkingCollapseKeys: []
-        })
+    onScopeDispose(() => {
+        disposed = true
+        loadVersion++
+        releaseChatSession(activeSession.value)
     })
 
-    const finalizeStopped = () => {
-        if (stoppedFinalized.value) return
-        stoppedFinalized.value = true
-        const assistantMsg = currentAssistantMsg.value
-        const userMsg = currentUserMsg.value
-        if (assistantMsg) {
-            assistantMsg.loading = false
-            assistantMsg.status = 'completed'
-            assistantMsg.streamPhase = null
-            if (assistantMsg.thinking) {
-                nextTick(() => {
-                    assistantMsg.thinkingCollapseKeys = []
-                })
-            }
-        }
+    const handleStreamCallbacks = (assistantMsg, userMsg = null, options = null) => {
         if (userMsg) {
-            userMsg.status = 'completed'
+            userMsg.modelId = selectedModel.value
+            userMsg.kbId = isKbSupported.value ? selectedKb.value : null
+            userMsg.options = options
         }
-        isGenerating.value = false
-        streamStarted.value = false
-        abortController.value = null
-        currentAssistantMsg.value = null
-        currentUserMsg.value = null
-        // 后端异步保存部分内容，延迟拉取消息以获取真实的 user/assistant messageId
-        const sid = sessionId.value
-        setTimeout(async () => {
-            try {
-                const data = await fetchSessionMessages(sid)
-                const local = messages.value
-                const aligned = data.length === local.length && data.every((msg, i) => msg.role === local[i].role)
-                if (aligned) {
-                    data.forEach((msg, i) => {
-                        if (local[i] && !local[i].id && msg.id) {
-                            local[i].id = msg.id
-                        }
-                    })
-                } else {
-                    // 本地与服务端结构不一致（例如后端复用了上一轮的 user 行），整体重建
-                    messages.value = buildMessages(data)
-                }
-            } catch (e) {
-                console.error('停止后刷新消息失败', e)
-            }
-        }, 500)
+        return createStreamCallbacks(activeSession.value, assistantMsg, userMsg)
     }
 
-    const handleStreamCallbacks = (assistantMsg, userMsg = null) => {
-        if (userMsg) {
-            userMsg.status = 'generating'
-        }
-        isStopped.value = false
-        stoppedFinalized.value = false
-        streamStarted.value = false
-        currentAssistantMsg.value = assistantMsg
-        currentUserMsg.value = userMsg
-        assistantMsg.streamPhase = 'connecting'
-        return {
-            onOpen: () => {
-            },
-            onMessage: (data) => {
-                streamStarted.value = true
-                if (data.type === 'content') {
-                    assistantMsg.streamPhase = 'generating'
-                    if (assistantMsg.loading) assistantMsg.loading = false
-                    if (assistantMsg.thinking && assistantMsg.thinkingCollapseKeys?.length) {
-                        nextTick(() => {
-                            assistantMsg.thinkingCollapseKeys = []
-                        })
-                    }
-                    assistantMsg.content += data.content
-                } else if (data.type === 'thinking') {
-                    assistantMsg.streamPhase = 'thinking'
-                    if (assistantMsg.loading) assistantMsg.loading = false
-                    // 收到思考内容时，自动展开
-                    if (!assistantMsg.thinkingCollapseKeys || assistantMsg.thinkingCollapseKeys.length === 0) {
-                        nextTick(() => {
-                            assistantMsg.thinkingCollapseKeys = ['thinking-panel']
-                        })
-                    }
-                    if (typeof assistantMsg.thinking === "string") {
-                        assistantMsg.thinking += data.content
-                    } else {
-                        assistantMsg.thinking = data.content
-                    }
-                } else if (data.type === 'process') {
-                    if (assistantMsg.loading) assistantMsg.loading = false
-
-                    if (!assistantMsg.ragProcess) {
-                        assistantMsg.ragProcess = []
-                    }
-                    const processInfo = data.payload
-                    assistantMsg.streamPhase = processInfo.step === 'generation' ? 'generating' : 'retrieving'
-
-                    const existingIndex = assistantMsg.ragProcess.findIndex(
-                        p => p.step === processInfo.step && p.status === processInfo.status
-                    )
-
-                    if (existingIndex !== -1) {
-                        assistantMsg.ragProcess[existingIndex] = processInfo
-                    } else {
-                        assistantMsg.ragProcess.push(processInfo)
-                    }
-                } else if (data.type === 'done') {
-                    if (userMsg) {
-                        if (data.userMessageId) {
-                            userMsg.id = data.userMessageId
-                        }
-                        userMsg.status = 'completed'
-                    }
-                    if (data.assistantMessageId) {
-                        assistantMsg.id = data.assistantMessageId
-                    }
-                    assistantMsg.status = 'completed'
-                    assistantMsg.loading = false
-                    assistantMsg.streamPhase = null
-                    // 思考结束，立即收起面板
-                    if (assistantMsg.thinking) {
-                        nextTick(() => {
-                            assistantMsg.thinkingCollapseKeys = []
-                        })
-                    }
-                } else if (data.type === 'usage') {
-                    if (data.payload) {
-                        if (data.payload.latency_ms != null) {
-                            assistantMsg.latencyMs = data.payload.latency_ms
-                        }
-                        if (data.payload.completion_tokens != null) {
-                            assistantMsg.completionTokens = data.payload.completion_tokens
-                        }
-                        if (data.payload.total_tokens != null) {
-                            assistantMsg.totalTokens = data.payload.total_tokens
-                        }
-                    }
-                }
-                scrollToBottom('auto')
-            },
-            onError: (err) => {
-                if (isStopped.value) {
-                    // 主动停止：保留已生成内容，标记完成，不显示错误
-                    finalizeStopped()
-                    return
-                }
-                const errorMessage = err?.message || '网络异常，请检查连接后重试'
-                assistantMsg.content += `\n[Error: ${errorMessage}]`
-                assistantMsg.loading = false
-                assistantMsg.status = 'error'
-                assistantMsg.streamPhase = null
-                isGenerating.value = false
-                streamStarted.value = false
-                if (userMsg) {
-                    userMsg.status = 'completed'
-                }
-                abortController.value = null
-                currentAssistantMsg.value = null
-                currentUserMsg.value = null
-            },
-            onClose: () => {
-                if (isStopped.value) {
-                    // 主动停止：保留已生成内容，标记完成
-                    finalizeStopped()
-                    return
-                }
-                assistantMsg.loading = false
-                assistantMsg.status = 'completed'
-                assistantMsg.streamPhase = null
-
-                // 思考结束，确保收起面板
-                if (assistantMsg.thinking) {
-                    nextTick(() => {
-                        assistantMsg.thinkingCollapseKeys = []
-                    })
-                }
-
-                isGenerating.value = false
-                streamStarted.value = false
-                if (userMsg) {
-                    userMsg.status = 'completed'
-                }
-                abortController.value = null
-                currentAssistantMsg.value = null
-                currentUserMsg.value = null
-            }
-        }
-    }
-
-    const loadSession = async (newSessionId) => {
-        loading.value = true
-        isRestoring.value = true
-        messages.value = []
-        models.value = await fetchAvailableModels()
-        await loadKbs()
-        let data = await fetchSessionMessages(newSessionId)
-
+    const restoreSession = (data) => {
         if (data.length > 0) {
-            const lastMsg = data[data.length - 1]
+            const lastMsg = data.findLast(msg => msg.role === 'user') || data[data.length - 1]
             // 恢复模型选择
             if (lastMsg.modelId && models.value.find(m => m.modelId === lastMsg.modelId)) {
                 selectedModel.value = lastMsg.modelId
@@ -275,8 +74,6 @@ export function useChat(
             selectedModel.value = selectedModel.value || null
             selectedKb.value = null
         }
-
-        messages.value = buildMessages(data)
 
         // 恢复工具和思考状态
         const lastUserMsg = messages.value.filter(m => m.role === 'user').pop()
@@ -322,11 +119,33 @@ export function useChat(
                 thinkingEnabled.value = false
             }
         }
+    }
 
-        if (data.length > 0) {
-            const lastMsg = data[data.length - 1]
-            if (lastMsg.role === 'user' && lastMsg.status === 'pending') {
-                const userMsg = messages.value[messages.value.length - 1]
+    const loadSession = async (newSessionId) => {
+        const version = ++loadVersion
+        if (activeSession.value.id !== String(newSessionId)) releaseChatSession(activeSession.value)
+        const session = getChatSession(newSessionId)
+        activeSession.value = session
+        const isCurrent = () => !disposed && version === loadVersion
+            && activeSession.value === session && userStore.token === session.token
+        session.onUpdate = () => {
+            if (isCurrent() && !loading.value) scrollToBottom('auto')
+        }
+        loading.value = true
+        loadError.value = ''
+        isRestoring.value = true
+        try {
+            const [, data] = await Promise.all([
+                loadChatResources(),
+                session.hasLocalStream ? Promise.resolve(null) : fetchSessionMessages(newSessionId)
+            ])
+            if (!isCurrent()) return
+            if (data) session.messages.value = buildMessages(data)
+            restoreSession(messages.value)
+
+            const lastMsg = messages.value[messages.value.length - 1]
+            if (data && lastMsg?.role === 'user' && lastMsg.status === 'pending') {
+                const userMsg = lastMsg
                 messages.value.push(reactive({
                     role: 'assistant',
                     content: '',
@@ -337,37 +156,52 @@ export function useChat(
                     thinkingCollapseKeys: []
                 }))
                 const assistant = messages.value[messages.value.length - 1]
-                const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg)
-                isGenerating.value = true
-
-                let options = null
-                if (lastMsg.options) {
-                    try {
-                        options = typeof lastMsg.options === 'string' ? JSON.parse(lastMsg.options) : lastMsg.options
-                    } catch (e) {
-                        console.error("Parse options failed", e)
-                    }
-                }
-
+                const options = userMsg.options
+                const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg, options)
                 abortController.value = startChatStream(newSessionId, selectedModel.value, null, selectedKb.value || undefined, options, onOpen, onMessage, onError, onClose)
             }
+            userScrolledUp.value = false
+            session.flush?.()
+        } catch (e) {
+            if (isCurrent()) loadError.value = e?.message || '会话加载失败，请重试'
+        } finally {
+            if (isCurrent()) {
+                loading.value = false
+                await nextTick()
+                if (isCurrent()) {
+                    scrollToBottom('auto', true)
+                    isRestoring.value = false
+                }
+            }
         }
-        loading.value = false
-        userScrolledUp.value = false
-        nextTick(() => {
-            scrollToBottom('auto', true)
-            setTimeout(() => {
-                isRestoring.value = false
-            }, 0)
+    }
+
+    const prepareGeneration = () => {
+        if (loading.value || loadError.value || isGenerating.value || isSynchronizing.value) return false
+        const session = activeSession.value
+        const version = loadVersion
+        if (!session.synchronize) return true
+        return session.synchronize().then(ready => {
+            if (disposed || session !== activeSession.value || version !== loadVersion) return false
+            if (!ready) antMessage.warning('上一轮结果尚未同步，请稍后重试；已生成内容已保留')
+            return ready
         })
     }
 
-    const onSend = (text) => {
-        if (loading.value || isGenerating.value) return
-        question.value = ''
+    const onSend = async (text) => {
+        const ready = prepareGeneration()
+        if (ready !== true && !await ready) return false
+        if (question.value === text) question.value = ''
         userScrolledUp.value = false
-        const userMsg = reactive({role: 'user', content: text, status: 'pending'})
-        messages.value.push(userMsg)
+        const unpersisted = activeSession.value.unpersistedRound
+        if (unpersisted) {
+            messages.value.splice(messages.value.indexOf(unpersisted.userMsg), 2)
+            activeSession.value.unpersistedRound = null
+        }
+        const lastMsg = messages.value[messages.value.length - 1]
+        const userMsg = lastMsg?.role === 'user' ? lastMsg : reactive({role: 'user', content: text, status: 'pending'})
+        userMsg.content = text
+        if (userMsg !== lastMsg) messages.value.push(userMsg)
         messages.value.push(reactive({
             role: 'assistant',
             content: '',
@@ -379,8 +213,6 @@ export function useChat(
         }))
         scrollToBottom('auto', true)
         const assistant = messages.value[messages.value.length - 1]
-        const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg)
-        isGenerating.value = true
 
         const options = {}
         if (selectedTools.value.includes('webSearch')) {
@@ -399,18 +231,13 @@ export function useChat(
             options.contextMultiplier = contextMultiplier.value
         }
 
+        const {onOpen, onMessage, onError, onClose} = handleStreamCallbacks(assistant, userMsg, options)
         abortController.value = startChatStream(sessionId.value, selectedModel.value, text, isKbSupported.value ? (selectedKb.value || undefined) : undefined, options, onOpen, onMessage, onError, onClose)
+        return true
     }
 
     const stopGeneration = () => {
-        if (!isGenerating.value) return
-        isStopped.value = true
-        if (abortController.value) {
-            abortController.value.abort()
-            abortController.value = null
-        }
-        // fetchEventSource 在 abort 时不会触发 onerror/onclose，需在此直接 finalize
-        finalizeStopped()
+        activeSession.value.stop?.()
     }
 
     const onCopy = (textToCopy) => {
@@ -460,6 +287,7 @@ export function useChat(
     })
 
     const canEditOrRetry = computed(() => {
+        if (loading.value || loadError.value || isGenerating.value || isSynchronizing.value) return false
         const msg = lastUserMessage.value
         if (!msg) return false
         // 上一轮中断/失败（user 后没有 assistant）时也允许编辑/重试
@@ -471,26 +299,30 @@ export function useChat(
         const last = lastUserMessage.value
         if (!last) return false
         return item === last || (item.id && last.id && item.id === last.id)
+            || (item.key != null && item.key === last.key)
     }
 
     const isLastAssistantMessage = (item) => {
         const last = lastAssistantMessage.value
         if (!last) return false
         return item === last || (item.id && last.id && item.id === last.id)
+            || (item.key != null && item.key === last.key)
     }
 
     return {
         messages,
         loading,
+        loadError,
         isGenerating,
+        isSynchronizing,
         streamStarted,
         question,
         handleStreamCallbacks,
+        prepareGeneration,
         loadSession,
         onSend,
         stopGeneration,
         abortController,
-        isStopped,
         onCopy,
         lastUserMessage,
         isLastUserMsgGenerating,

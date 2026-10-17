@@ -15,8 +15,8 @@ import {
   BulbOutlined
 } from '@ant-design/icons-vue'
 
-import {fetchAvailableModels, fetchSessionTitle, startChat} from '@/api/chatApi'
-import {models, groupedModels, providerLogos, selectedModel, selectedKb, loadKbs} from "@/vars.js";
+import {fetchSessionTitle, startChat} from '@/api/chatApi'
+import {models, groupedModels, providerLogos, selectedModel, selectedKb, loadChatResources} from "@/vars.js";
 import {events} from "@/events.js";
 import KbSelector from "@/components/KbSelector.vue";
 import KbDocumentBrowser from '@/components/KbDocumentBrowser.vue'
@@ -60,7 +60,7 @@ const toolConfigs = {
 onMounted(async () => {
   restoreDraft()
   // 默认选择 provider 为 minimax 的第一个模型
-  models.value = await fetchAvailableModels().then()
+  await loadChatResources()
 
   if (!selectedModel.value) {
     // 优先选择 provider 为 minimax 的第一个模型
@@ -73,9 +73,6 @@ onMounted(async () => {
       selectedModel.value = models.value[models.value.length - 1]?.modelId || null
     }
   }
-
-  // 加载知识库列表
-  await loadKbs()
 
   // 初始化时同步一次配置
   updateModelConfig()

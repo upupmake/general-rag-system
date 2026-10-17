@@ -1,5 +1,8 @@
 import {computed, ref} from "vue";
 import {fetchAvailableKbs} from "@/api/kbApi";
+import {fetchAvailableModels} from "@/api/chatApi";
+import {useUserStore} from "@/stores/user.js";
+import {events} from "@/events.js";
 
 const providerLogoModules = import.meta.glob('./assets/providers/*-logo.*', {eager: true, query: '?url', import: 'default'})
 const providerLogos = Object.fromEntries(
@@ -44,15 +47,39 @@ const kbGroupLabels = {
     invited: '📧 受邀访问的'
 }
 
-// 加载知识库列表
-const loadKbs = async () => {
-    const data = await fetchAvailableKbs()
-    kbs.value = {
-        private: data.private || [],
-        shared: data.shared || [],
-        public: data.public || [],
-        invited: data.invited || []
+let chatResources = null
+
+events.on('knowledgeBasesChanged', () => {
+    chatResources = null
+})
+
+// 工作空间切换会整页刷新；标签页内按登录 Token 隔离，缓存一分钟并合并在途请求。
+const loadChatResources = () => {
+    const scope = useUserStore().token
+    if (chatResources?.scope === scope) {
+        if (chatResources.promise) return chatResources.promise
+        if (Date.now() < chatResources.expiresAt) return Promise.resolve()
     }
+    const entry = {scope, expiresAt: 0, promise: null}
+    chatResources = entry
+    entry.promise = Promise.all([fetchAvailableModels(), fetchAvailableKbs()]).then(([availableModels, data]) => {
+        if (useUserStore().token !== scope) return
+        if (chatResources !== entry) return loadChatResources()
+        models.value = availableModels
+        kbs.value = {
+            private: data.private || [],
+            shared: data.shared || [],
+            public: data.public || [],
+            invited: data.invited || []
+        }
+        entry.expiresAt = Date.now() + 60_000
+    }).catch(error => {
+        if (chatResources === entry) chatResources = null
+        throw error
+    }).finally(() => {
+        entry.promise = null
+    })
+    return entry.promise
 }
 
 // 检查 kbId 是否存在于知识库列表中
@@ -62,4 +89,4 @@ const findKbById = (kbId) => {
     return allKbs.find(kb => kb.id === kbId)
 }
 
-export {models, groupedModels, selectedModel, kbs, selectedKb, contextMultiplier, kbGroupLabels, providerLogos, loadKbs, findKbById}
+export {models, groupedModels, selectedModel, kbs, selectedKb, contextMultiplier, kbGroupLabels, providerLogos, loadChatResources, findKbById}

@@ -1,10 +1,20 @@
-import {ref, nextTick} from 'vue'
+import {ref, nextTick, onScopeDispose} from 'vue'
 
 export function useScroll() {
   const messagesContainer = ref(null)
   const userScrolledUp = ref(false)
   const isAutoScrolling = ref(false)
   const isTouchHolding = ref(false)
+  let scrollQueued = false
+  let pendingBehavior = 'auto'
+  let pendingForce = false
+  let resetTimer = null
+  let disposed = false
+
+  onScopeDispose(() => {
+    disposed = true
+    clearTimeout(resetTimer)
+  })
 
   const nearBottomThreshold = 50
 
@@ -34,18 +44,25 @@ export function useScroll() {
   const scrollToBottom = (behavior = 'smooth', force = false) => {
     if (!messagesContainer.value || isTouchHolding.value || (!force && userScrolledUp.value)) return
 
-    isAutoScrolling.value = true
+    pendingBehavior = behavior
+    pendingForce = pendingForce || force
+    if (scrollQueued) return
+    scrollQueued = true
     nextTick(() => {
+      scrollQueued = false
+      const forceScroll = pendingForce
+      pendingForce = false
       const container = messagesContainer.value
-      if (container) {
-        container.scrollTo({
-          top: container.scrollHeight,
-          behavior: behavior
-        })
-      }
-      setTimeout(() => {
+      if (disposed || !container || isTouchHolding.value || (!forceScroll && userScrolledUp.value)) return
+      isAutoScrolling.value = true
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: pendingBehavior
+      })
+      clearTimeout(resetTimer)
+      resetTimer = setTimeout(() => {
         isAutoScrolling.value = false
-      }, behavior === 'smooth' ? 300 : 0)
+      }, pendingBehavior === 'smooth' ? 300 : 0)
     })
   }
 
