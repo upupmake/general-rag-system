@@ -220,6 +220,35 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reprocessDocument(Long kbId, Long docId, Long userId) {
+        LambdaQueryWrapper<Documents> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(Documents::getId, docId).eq(Documents::getKbId, kbId);
+        Documents document = this.getOne(queryWrapper);
+        if (document == null) {
+            throw new BusinessException(404, "文档不存在");
+        }
+        if (!"failed".equals(String.valueOf(document.getStatus()))) {
+            throw new BusinessException(400, "仅处理失败的文档可以重试");
+        }
+
+        document.setStatus("processing");
+        document.setErrorMessage("");
+        this.updateById(document);
+
+        DocumentProcessMessage message = DocumentProcessMessage.builder()
+                .documentId(document.getId())
+                .kbId(kbId)
+                .userId(document.getUploaderId())
+                .filePath(document.getFilePath())
+                .fileName(document.getFileName())
+                .bucketName(minioConfig.getBucketName())
+                .build();
+        rabbitTemplate.convertAndSend("server.interact.llm.exchange", "rag.document.process.key", message);
+        log.info("Document reprocess message sent: documentId={}", document.getId());
+    }
+
+    @Override
     public void previewDocument(Long docId, Long userId, HttpServletResponse response) {
         Documents document = this.getById(docId);
         if (document == null) {

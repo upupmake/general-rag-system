@@ -99,6 +99,7 @@ CREATE TABLE `documents` (
   `file_size` BIGINT NOT NULL COMMENT '文件大小（字节）' ,
   `uploader_id` BIGINT NOT NULL COMMENT '上传者用户 ID' ,
   `status` ENUM('processing','ready','failed') NOT NULL DEFAULT 'processing'  COMMENT '处理状态：processing/ready/failed' ,
+  `error_message` VARCHAR(1024) NULL COMMENT '处理失败原因',
   `checksum` VARCHAR(64) NULL COMMENT '文件内容校验值（用于去重）' ,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '创建时间' ,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '更新时间' ,

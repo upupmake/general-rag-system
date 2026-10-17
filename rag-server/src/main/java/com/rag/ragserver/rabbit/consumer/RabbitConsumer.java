@@ -41,6 +41,7 @@ public class RabbitConsumer {
             Documents doc = documentsService.getById(response.getDocumentId());
             if (doc != null) {
                 doc.setStatus("ready");
+                doc.setErrorMessage("");
                 documentsService.updateById(doc);
 
                 if (response.getChunks() != null && !response.getChunks().isEmpty()) {
@@ -71,6 +72,13 @@ public class RabbitConsumer {
             Documents doc = documentsService.getById(response.getDocumentId());
             if (doc != null) {
                 doc.setStatus("failed");
+                String reason = response.getMessage();
+                if (reason == null || reason.trim().isEmpty()) {
+                    reason = "文档处理失败";
+                } else if (reason.length() > 1000) {
+                    reason = reason.substring(0, 1000);
+                }
+                doc.setErrorMessage(reason);
                 documentsService.updateById(doc);
             }
         }

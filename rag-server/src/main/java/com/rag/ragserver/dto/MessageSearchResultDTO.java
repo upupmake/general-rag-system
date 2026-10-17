@@ -7,6 +7,7 @@ import java.util.Date;
 public class MessageSearchResultDTO {
     private Long messageId;
     private String content;
+    private String matchType;
     private Long sessionId;
     private String sessionTitle;
     private Date createdAt;

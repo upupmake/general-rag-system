@@ -10,7 +10,7 @@ import {
   ReloadOutlined,
   SearchOutlined,
 } from '@ant-design/icons-vue'
-import {deleteDocument, listDocuments, previewDocument} from '@/api/kbApi.js'
+import {deleteDocument, listDocuments, previewDocument, reprocessDocument} from '@/api/kbApi.js'
 import {findKbById} from '@/vars.js'
 import {useUserStore} from '@/stores/user.js'
 import md from '@/utils/markdown.js'
@@ -218,6 +218,16 @@ const removeFolder = async (folder) => {
   }
 }
 
+const reprocessFile = async (file) => {
+  try {
+    await reprocessDocument(props.kbId, file.id)
+    message.success('已重新提交处理')
+    await fetchDocuments()
+  } catch (e) {
+    console.error('Reprocess failed', e)
+  }
+}
+
 const handleResize = () => {
   isMobile.value = window.innerWidth <= 768
 }
@@ -291,15 +301,29 @@ onBeforeUnmount(() => {
             <span class="document-info">
               <span class="document-name" :title="item.fileName">{{ item.fileName }}</span>
               <span class="document-meta">{{ metaParts(item) }}</span>
+              <span v-if="!item.isFolder && item.status === 'failed' && item.errorMessage" class="document-error" :title="item.errorMessage">
+                {{ item.errorMessage }}
+              </span>
             </span>
           </button>
 
           <div class="document-actions">
             <a-tag v-if="item.status === 'processing'" color="blue"><LoadingOutlined/> 处理中</a-tag>
             <a-tag v-else-if="item.status === 'ready'" color="green">完成</a-tag>
-            <a-tag v-else-if="item.status === 'failed'" color="red">失败</a-tag>
+            <a-tooltip v-else-if="item.status === 'failed'" :title="item.errorMessage || '文档处理失败'">
+              <a-tag color="red">失败</a-tag>
+            </a-tooltip>
             <a-tag v-else>{{ item.status }}</a-tag>
 
+            <a-button
+                v-if="!item.isFolder && item.status === 'failed' && canDeleteFile(item)"
+                type="text"
+                size="small"
+                title="重试处理"
+                :disabled="deleting"
+                @click="reprocessFile(item)">
+              <ReloadOutlined/>
+            </a-button>
             <a-popconfirm
                 v-if="item.isFolder ? item.canDelete : canDeleteFile(item)"
                 :title="item.isFolder ? '确定删除该目录及其全部文件吗？' : '确定删除该文件吗？'"
@@ -413,6 +437,14 @@ onBeforeUnmount(() => {
   flex: 1;
   flex-direction: column;
   min-width: 0;
+}
+
+.document-error {
+  overflow: hidden;
+  color: #cf1322;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .document-name {

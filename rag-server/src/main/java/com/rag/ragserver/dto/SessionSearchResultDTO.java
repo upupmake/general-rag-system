@@ -17,5 +17,6 @@ public class SessionSearchResultDTO {
     public static class Snippet {
         private String content;
         private String createdAt;
+        private String matchType;
     }
 }

@@ -11,8 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
-import com.rag.ragserver.dto.SessionSearchResultDTO;
-import java.util.List;
+import com.rag.ragserver.dto.SessionSearchPageDTO;
 import java.util.Map;
 
 import com.rag.ragserver.dto.SessionSearchQuery;
@@ -26,7 +25,7 @@ public class QuerySessionController {
     private final HttpServletRequest request;
 
     @PostMapping("/search")
-    public R<List<SessionSearchResultDTO>> searchSessions(
+    public R<SessionSearchPageDTO> searchSessions(
         @RequestBody @Validated SessionSearchQuery query
     ) {
         Long userId = (Long) request.getAttribute("userId");

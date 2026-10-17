@@ -148,6 +148,16 @@ public class KbController {
         return R.success();
     }
 
+    @PostMapping("/{kbId}/documents/{docId}/reprocess")
+    public R<Void> reprocessDocument(@PathVariable Long kbId, @PathVariable Long docId) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (!kbPermissionService.canModifyDocument(docId, userId)) {
+            throw new BusinessException(403, "没有权限重新处理该文档");
+        }
+        documentsService.reprocessDocument(kbId, docId, userId);
+        return R.success();
+    }
+
     @GetMapping("/{kbId}/documents/{docId}/chunks")
     public R<IPage<DocumentChunks>> listChunks(@PathVariable Long kbId,
                                                @PathVariable Long docId,

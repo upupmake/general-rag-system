@@ -18,7 +18,23 @@ export const useSearchStore = defineStore('search', () => {
   }
   
   const appendResults = (newResults) => {
-    results.value.push(...newResults)
+    newResults.forEach(item => {
+      const existing = results.value.find(result => result.sessionId === item.sessionId)
+      if (!existing) {
+        results.value.push(item)
+        return
+      }
+      const snippets = existing.contentList || (existing.contentList = [])
+      const seen = new Set(snippets.map(snippet =>
+          `${snippet.matchType || 'content'}\u0000${snippet.createdAt || ''}\u0000${snippet.content || ''}`))
+      ;(item.contentList || []).forEach(snippet => {
+        const key = `${snippet.matchType || 'content'}\u0000${snippet.createdAt || ''}\u0000${snippet.content || ''}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          snippets.push(snippet)
+        }
+      })
+    })
   }
 
   const setOffset = (val) => {

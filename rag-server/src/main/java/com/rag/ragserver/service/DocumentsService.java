@@ -22,5 +22,7 @@ public interface DocumentsService extends IService<Documents> {
 
     void deleteDocument(Long kbId, Long docId, Long userId);
 
+    void reprocessDocument(Long kbId, Long docId, Long userId);
+
     void previewDocument(Long docId, Long userId, HttpServletResponse response);
 }

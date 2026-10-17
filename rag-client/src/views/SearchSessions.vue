@@ -35,18 +35,15 @@ const loadMoreSearchResults = async () => {
   
   searchLoading.value = true
   try {
-    const res = await searchSessions({
+    const page = await searchSessions({
       keyword: keyword.value,
       limit: 20,
       offset: offset.value
     })
-    
-    if (res && res.length > 0) {
-      searchStore.appendResults(res)
-      searchStore.setOffset(offset.value + res.length)
-    } else {
-      searchStore.setHasMore(false)
-    }
+    const items = page?.items || []
+    if (items.length > 0) searchStore.appendResults(items)
+    searchStore.setOffset(page?.nextOffset ?? (offset.value + items.length))
+    searchStore.setHasMore(!!page?.hasMore)
   } catch (e) {
     message.error('搜索失败')
   } finally {
@@ -69,13 +66,17 @@ const handleDelete = async (sessionId) => {
 }
 
 const highlightText = (text) => {
-  if (!keyword.value || !text) return text
+  const escapeHtml = (value) => value.replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char])
+  const safeText = escapeHtml(text || '')
+  if (!keyword.value || !safeText) return safeText
   const kw = keyword.value.trim()
-  if (!kw) return text
+  if (!kw) return safeText
 
   const escapedKw = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escapedKw})`, 'gi');
-  return text.replace(regex, '<span class="highlight-text">$1</span>');
+  return safeText.replace(regex, '<span class="highlight-text">$1</span>');
 }
 
 // Restore scroll position
@@ -137,6 +138,7 @@ onBeforeRouteLeave((to, from, next) => {
                        <div class="search-content-snippet">
                           <div v-for="(snippet, idx) in item.contentList" :key="idx" class="snippet-item">
                              <div class="snippet-header">
+                                <span v-if="snippet.matchType === 'title'" class="snippet-match-title">标题匹配</span>
                                 <span class="snippet-time">{{ snippet.createdAt }}</span>
                              </div>
                              <div class="snippet-content" v-html="highlightText(snippet.content)"></div>
@@ -208,6 +210,15 @@ onBeforeRouteLeave((to, from, next) => {
   margin-bottom: 4px;
   font-size: 12px;
   color: #999;
+}
+
+.snippet-match-title {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 6px;
+  color: #0958d9;
+  background: #e6f4ff;
+  border-radius: 4px;
 }
 
 .snippet-content {

@@ -27,6 +27,7 @@ import com.rag.ragserver.dto.MessageSearchResultDTO;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.rag.ragserver.dto.SessionSearchPageDTO;
 import com.rag.ragserver.dto.SessionSearchResultDTO;
 
 /**
@@ -44,12 +45,18 @@ public class QuerySessionsServiceImpl extends ServiceImpl<QuerySessionsMapper, Q
     private final QuerySessionsMapper querySessionsMapper;
 
     @Override
-    public List<SessionSearchResultDTO> searchSessions(Long userId, Long workspaceId, String keyword, int limit, int offset) {
-        // 1. 获取包含关键词的消息列表（分页针对消息）
-        List<MessageSearchResultDTO> messages = querySessionsMapper.searchMessages(userId, workspaceId, keyword, limit, offset);
-        
+    public SessionSearchPageDTO searchSessions(Long userId, Long workspaceId, String keyword, int limit, int offset) {
+        int pageSize = Math.max(limit, 1);
+        // 多取一条用于判断是否还有下一页；offset 始终按实际消费的命中行推进。
+        List<MessageSearchResultDTO> messages = querySessionsMapper.searchMessages(
+                userId, workspaceId, keyword, pageSize + 1, offset);
+        boolean hasMore = messages.size() > pageSize;
+        if (hasMore) {
+            messages = new ArrayList<>(messages.subList(0, pageSize));
+        }
+
         if (messages.isEmpty()) {
-            return Collections.emptyList();
+            return new SessionSearchPageDTO(Collections.emptyList(), offset, false);
         }
 
         // 2. 按 Session 分组并聚合，同时处理内容摘要
@@ -67,16 +74,19 @@ public class QuerySessionsServiceImpl extends ServiceImpl<QuerySessionsMapper, Q
 
             // 提取摘要：关键词前后约100字符
             List<String> extracted = extractSnippets(msg.getContent(), keyword);
+            if (extracted.isEmpty() && "title".equals(msg.getMatchType())) {
+                extracted = Collections.singletonList(msg.getContent());
+            }
             String timeStr = msg.getCreatedAt() != null ? sdf.format(msg.getCreatedAt()) : "";
-            
+
             for (String content : extracted) {
                 sessionMap.get(msg.getSessionId()).getContentList().add(
-                    new SessionSearchResultDTO.Snippet(content, timeStr)
+                    new SessionSearchResultDTO.Snippet(content, timeStr, msg.getMatchType())
                 );
             }
         }
 
-        return new ArrayList<>(sessionMap.values());
+        return new SessionSearchPageDTO(new ArrayList<>(sessionMap.values()), offset + messages.size(), hasMore);
     }
 
     private List<String> extractSnippets(String content, String keyword) {

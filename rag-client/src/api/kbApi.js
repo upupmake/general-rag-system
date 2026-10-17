@@ -51,6 +51,10 @@ export function deleteDocument(kbId, docId) {
     return commonApi.delete(`/kb/${kbId}/documents/${docId}`)
 }
 
+export function reprocessDocument(kbId, docId) {
+    return commonApi.post(`/kb/${kbId}/documents/${docId}/reprocess`)
+}
+
 // 邀请用户访问知识库
 export function inviteUserToKb(kbId, data) {
     return commonApi.post(`/kb/${kbId}/invite`, data)

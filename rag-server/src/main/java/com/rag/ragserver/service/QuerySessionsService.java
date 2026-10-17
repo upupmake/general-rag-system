@@ -5,8 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.rag.ragserver.domain.session.vo.SessionListVO;
 import com.rag.ragserver.dto.SessionCursorQuery;
 
-import com.rag.ragserver.dto.SessionSearchResultDTO;
-import java.util.List;
+import com.rag.ragserver.dto.SessionSearchPageDTO;
 
 /**
 * @author make
@@ -23,5 +22,5 @@ public interface QuerySessionsService extends IService<QuerySessions> {
     Boolean deleteSession(Long sessionId, Long userId, Long workspaceId);
     String renameSession(Long sessionId, Long userId, Long workspaceId, String title);
 
-    List<SessionSearchResultDTO> searchSessions(Long userId, Long workspaceId, String keyword, int limit, int offset);
+    SessionSearchPageDTO searchSessions(Long userId, Long workspaceId, String keyword, int limit, int offset);
 }

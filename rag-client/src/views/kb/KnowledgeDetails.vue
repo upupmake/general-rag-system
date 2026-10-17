@@ -19,6 +19,7 @@ import {
   previewDocument,
   listDocuments,
   uploadDocument,
+  reprocessDocument,
   listChunks,
   inviteUserToKb,
   getInvitedUsers,
@@ -37,6 +38,14 @@ const uploading = ref(false);
 const currentKb = ref(null);
 const currentPath = ref([]);
 const searchKeyword = ref('');
+const processingCount = computed(() => fileList.value.filter(file => file.status === 'processing').length);
+const failedCount = computed(() => fileList.value.filter(file => file.status === 'failed').length);
+const processedNotice = ref('');
+let documentPollTimer = null;
+let noticeTimer = null;
+let documentsFetching = false;
+let pendingDocumentFetch = false;
+let hadProcessing = false;
 
 const currentPathString = computed(() => {
   return currentPath.value.join('/');
@@ -251,42 +260,8 @@ const activeUploadsCount = ref(0);
 // Download/Preview progress related refs
 const downloadProgress = ref({
   visible: false,
-  percent: 0,
   title: ''
 });
-
-let progressTimer = null;
-
-const startSimulatedProgress = () => {
-  downloadProgress.value.percent = 0;
-  if (progressTimer) clearInterval(progressTimer);
-
-  progressTimer = setInterval(() => {
-    if (downloadProgress.value.percent < 99) {
-      // Slow down as it gets higher
-      // Start fast, then slow down
-      let increment = 5;
-      if (downloadProgress.value.percent > 50) increment = 2;
-      if (downloadProgress.value.percent > 80) increment = 1;
-      if (downloadProgress.value.percent > 95) {
-        // Very slow at the end, maybe stop at 99
-        if (Math.random() > 0.8) increment = 1;
-        else increment = 0;
-      }
-
-      downloadProgress.value.percent = Math.min(99, downloadProgress.value.percent + increment);
-    }
-  }, 200);
-};
-
-const finishSimulatedProgress = () => {
-  if (progressTimer) clearInterval(progressTimer);
-  downloadProgress.value.percent = 100;
-  // Delay slightly to show 100%
-  setTimeout(() => {
-    downloadProgress.value.visible = false;
-  }, 500);
-};
 
 watch(uploadProgressModalVisible, (val) => {
   if (!val && activeUploadsCount.value === 0) {
@@ -330,9 +305,75 @@ const columns = [
   {title: '操作', key: 'action'},
 ];
 
+const stopDocumentPolling = () => {
+  if (documentPollTimer) {
+    clearTimeout(documentPollTimer);
+    documentPollTimer = null;
+  }
+};
+
+const scheduleDocumentPolling = () => {
+  stopDocumentPolling();
+  if (processingCount.value === 0) {
+    if (hadProcessing) {
+      hadProcessing = false;
+      processedNotice.value = failedCount.value > 0 ? 'warning' : 'success';
+      clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => {
+        processedNotice.value = '';
+      }, 6000);
+    }
+    return;
+  }
+  hadProcessing = true;
+  processedNotice.value = '';
+  documentPollTimer = setTimeout(fetchDocuments, 3000);
+};
+
+const syncUploadProgress = () => {
+  uploadProgressList.value.forEach(item => {
+    if (item.status !== 'done' || !item.processing) return;
+    const file = fileList.value.find(doc =>
+        (doc.fileName || '').split('/').pop() === item.name);
+    if (file?.status === 'ready') {
+      item.processing = false;
+    } else if (file?.status === 'failed') {
+      item.status = 'error';
+      item.processing = false;
+      item.error = file.errorMessage || '文档处理失败';
+    }
+  });
+};
 
 const fetchDocuments = async () => {
-  fileList.value = await listDocuments(kbId).then();
+  if (documentsFetching) {
+    pendingDocumentFetch = true;
+    return;
+  }
+  documentsFetching = true;
+  try {
+    fileList.value = await listDocuments(kbId);
+    syncUploadProgress();
+  } catch (e) {
+    console.error('Failed to load documents', e);
+  } finally {
+    documentsFetching = false;
+    scheduleDocumentPolling();
+    if (pendingDocumentFetch) {
+      pendingDocumentFetch = false;
+      fetchDocuments();
+    }
+  }
+};
+
+const handleReprocess = async (record) => {
+  try {
+    await reprocessDocument(kbId, record.id);
+    message.success('已重新提交处理');
+    fetchDocuments();
+  } catch (e) {
+    console.error('Reprocess failed', e);
+  }
 };
 
 // 获取当前知识库信息
@@ -529,8 +570,9 @@ const processQueue = async () => {
       if (item) {
         item.status = 'done';
         item.percent = 100;
+        item.processing = true;
       }
-      message.success(`${file.name} 上传成功`);
+      message.success(`${file.name} 已上传，正在处理`);
       onSuccess(null, file);
       fetchDocuments();
     } catch (err) {
@@ -561,6 +603,7 @@ const customRequest = async (options) => {
     name: file.name,
     status: 'uploading',
     percent: 0,
+    processing: false,
     error: null
   };
 
@@ -594,11 +637,10 @@ const clearPreview = () => {
 
 const handlePreview = async (record) => {
   clearPreview();
-  downloadProgress.value = {visible: true, percent: 0, title: '正在加载预览...'};
-  startSimulatedProgress();
+  downloadProgress.value = {visible: true, title: '正在加载预览...'};
   try {
     const blob = await previewDocument(kbId, record.id);
-    finishSimulatedProgress();
+    downloadProgress.value.visible = false;
 
     const fileName = record.fileName ? record.fileName.toLowerCase() : '';
     previewTitle.value = record.fileName || '文件预览';
@@ -622,7 +664,6 @@ const handlePreview = async (record) => {
     console.error('Preview failed', e);
     message.error('预览失败');
     downloadProgress.value.visible = false;
-    if (progressTimer) clearInterval(progressTimer);
   }
 };
 
@@ -640,11 +681,10 @@ const handleDelete = async (record) => {
 
 // 4. 下载逻辑
 const handleDownload = async (record) => {
-  downloadProgress.value = {visible: true, percent: 0, title: '正在准备下载...'};
-  startSimulatedProgress();
+  downloadProgress.value = {visible: true, title: '正在准备下载...'};
   try {
     const blob = await previewDocument(kbId, record.id);
-    finishSimulatedProgress();
+    downloadProgress.value.visible = false;
 
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -659,7 +699,6 @@ const handleDownload = async (record) => {
     console.error('Download failed', e);
     message.error('下载失败');
     downloadProgress.value.visible = false;
-    if (progressTimer) clearInterval(progressTimer);
   }
 };
 
@@ -777,6 +816,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkIsMobile)
+  stopDocumentPolling()
+  clearTimeout(noticeTimer)
   clearPreview()
 })
 </script>
@@ -831,6 +872,22 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <a-alert
+        v-if="processingCount > 0"
+        type="info"
+        show-icon
+        class="kb-processing-alert"
+        :message="`${processingCount} 个文件正在处理，完成后即可提问`"
+        description="处理期间可以离开本页，状态会自动更新。"
+    />
+    <a-alert
+        v-else-if="processedNotice"
+        :type="processedNotice"
+        show-icon
+        class="kb-processing-alert"
+        :message="processedNotice === 'success' ? '文档处理完成，现在可以提问' : '部分文档处理失败，请查看失败原因并重试'"
+    />
+
     <!-- 搜索与面包屑 -->
     <div class="kb-toolbar">
       <a-breadcrumb>
@@ -884,8 +941,13 @@ onUnmounted(() => {
               向量化中
             </a-tag>
             <a-tag v-else-if="record.status === 'ready'" color="green">完成</a-tag>
-            <a-tag v-else-if="record.status === 'failed'" color="red">失败</a-tag>
+            <a-tooltip v-else-if="record.status === 'failed'" :title="record.errorMessage || '文档处理失败'">
+              <a-tag color="red">失败</a-tag>
+            </a-tooltip>
             <a-tag v-else color="default">{{ record.status }}</a-tag>
+            <div v-if="record.status === 'failed' && record.errorMessage" class="document-error-text" :title="record.errorMessage">
+              {{ record.errorMessage }}
+            </div>
           </template>
         </template>
         <template v-if="column.key === 'action'">
@@ -910,6 +972,7 @@ onUnmounted(() => {
                   <a-menu-item @click="handlePreview(record)">预览</a-menu-item>
                   <a-menu-item @click="handleDownload(record)">下载</a-menu-item>
                   <a-menu-item @click="handlePreviewChunks(record)">预览切片</a-menu-item>
+                  <a-menu-item v-if="record.status === 'failed'" @click="handleReprocess(record)">重试处理</a-menu-item>
                   <a-menu-item danger>
                     <a-popconfirm
                         title="确定要删除这个文件吗？"
@@ -930,6 +993,10 @@ onUnmounted(() => {
                   <a-divider type="vertical"/>
                   <a-button type="link" size="small" @click="handlePreviewChunks(record)">切片</a-button>
                   <a-divider type="vertical"/>
+                  <template v-if="record.status === 'failed'">
+                    <a-button type="link" size="small" danger @click="handleReprocess(record)">重试</a-button>
+                    <a-divider type="vertical"/>
+                  </template>
                   
                   <a-dropdown>
                     <a class="ant-dropdown-link" @click.prevent style="font-size: 12px">
@@ -1108,11 +1175,12 @@ onUnmounted(() => {
         </div>
         <a-progress
             :percent="Math.round((uploadProgressList.filter(item => item.status === 'done').length / uploadProgressList.length) * 100)"
-            :status="uploadProgressList.some(item => item.status === 'error') ? 'exception' : (uploadProgressList.filter(item => item.status === 'done').length === uploadProgressList.length ? 'success' : 'active')"
+            :status="uploadProgressList.some(item => item.status === 'error') ? 'exception' : (uploadProgressList.length > 0 && uploadProgressList.every(item => item.status === 'done' && !item.processing) ? 'success' : 'active')"
             :show-info="false"
         />
         <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #666;">
-          <span>✅ 成功: {{ uploadProgressList.filter(item => item.status === 'done').length }}</span>
+          <span>✅ 已上传: {{ uploadProgressList.filter(item => item.status === 'done').length }}</span>
+          <span v-if="uploadProgressList.some(item => item.processing)">⏳ 处理中: {{ uploadProgressList.filter(item => item.processing).length }}</span>
           <span>⏳ 进行中: {{ uploadProgressList.filter(item => item.status === 'uploading').length }}</span>
           <span v-if="uploadProgressList.filter(item => item.status === 'error').length > 0" style="color: #ff4d4f;">
             ❌ 失败: {{ uploadProgressList.filter(item => item.status === 'error').length }}
@@ -1127,7 +1195,9 @@ onUnmounted(() => {
               <a-list-item-meta :title="item.name">
                 <template #description>
                   <a-progress :percent="item.percent"
-                              :status="item.status === 'error' ? 'exception' : (item.status === 'done' ? 'success' : 'active')"/>
+                              :status="item.status === 'error' ? 'exception' : (item.status === 'done' && !item.processing ? 'success' : 'active')"/>
+                  <div v-if="item.status === 'done' && item.processing" style="color: #1890ff">已上传，正在处理</div>
+                  <div v-else-if="item.status === 'done'" style="color: #52c41a">处理完成</div>
                   <div v-if="item.status === 'error'" style="color: red">{{ item.error }}</div>
                 </template>
               </a-list-item-meta>
@@ -1151,9 +1221,9 @@ onUnmounted(() => {
         :centered="true"
     >
       <div style="padding: 24px 0; text-align: center;">
-        <a-progress :percent="downloadProgress.percent" status="active"/>
+        <a-spin size="large"/>
         <div style="margin-top: 16px; color: #666;">
-          正在使用魔法为你生成数据中...
+          正在处理，请稍候...
         </div>
       </div>
     </a-modal>
@@ -1231,6 +1301,21 @@ onUnmounted(() => {
 .kb-search-input {
   width: 280px;
   max-width: 100%;
+}
+
+.kb-processing-alert {
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.document-error-text {
+  max-width: 220px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #cf1322;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {

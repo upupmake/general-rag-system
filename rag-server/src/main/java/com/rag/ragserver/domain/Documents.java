@@ -54,6 +54,11 @@ public class Documents {
     private Object status;
 
     /**
+     * 处理失败原因
+     */
+    private String errorMessage;
+
+    /**
      * 文件内容校验值（用于去重）
      */
     private String checksum;
