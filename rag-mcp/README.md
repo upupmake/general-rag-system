@@ -13,7 +13,7 @@
 
 ## 工具
 
-服务提供 9 个工具。文件名模式只用于发现文件；限定检索范围、读取片段和扩展上下文均使用 `documentId`，不使用文件名代替文档 ID。
+服务提供 9 个工具。文件名模式只用于发现文件；限定检索范围、读取片段和扩展上下文均使用 `documentId`，不使用文件名代替文档 ID。建议检索流程：先 `list_knowledge_bases` 获取 `knowledge_base_id`；已知术语/错误码用关键词检索，探索性问题用语义检索；需要精读时用片段读取/上下文扩展；文件名不确定时先用文件查找。不要臆造 `documentId` 或 `chunkIndex`。
 
 ### `list_knowledge_bases`
 
@@ -36,14 +36,16 @@
 | 参数 | 类型 | 限制与默认值 |
 | --- | --- | --- |
 | `knowledge_base_id` | `integer` | 必填，知识库 ID |
-| `keywords` | `list[string]` | 必填，至少 1 个关键词 |
+| `keywords` | `list[string]` | 必填，1 到 20 个关键词 |
 | `match_mode` | `"AND"` 或 `"OR"` | 可选，默认 `"OR"` |
 | `top_k` | `integer` | 可选，1 到 50，默认 `15` |
-| `document_ids` | `list[integer]` 或 `null` | 可选；提供后仅在指定文档中检索 |
+| `document_ids` | `list[integer]` 或 `null` | 可选，最多 100 个；提供后仅在指定文档中检索 |
 
 ### `search_knowledge_base_by_semantics`
 
 先完成 Java 知识库授权，再调用内网 `rag-llm` 的 `POST /rag/retrieval/semantic`，执行多查询语义召回、关键词辅助召回和去重，按向量相似度返回结果。
+
+结果中的 `topScore`/`scoreThreshold` 用于判断弱相关，`truncated` 表示动态阈值保留数超过 `top_k`，`failedQueries` 表示部分 query 失败；`topScore` 明显低于 `scoreThreshold` 时应换查询角度或改用关键词检索。
 
 | 参数 | 类型 | 限制与默认值 |
 | --- | --- | --- |
@@ -58,9 +60,9 @@
 | 参数 | 类型 | 限制与默认值 |
 | --- | --- | --- |
 | `knowledge_base_id` | `integer` | 必填，知识库 ID |
-| `name_pattern` | `string` | 必填，长度至少 1；可使用 `%` 匹配任意字符 |
+| `name_pattern` | `string` | 必填，长度 1 到 256；可使用 `%` 匹配任意字符 |
 | `offset` | `integer` | 可选，从 0 开始，默认 `0` |
-| `limit` | `integer` | 可选，1 到 100，默认 `30` |
+| `limit` | `integer` | 可选，1 到 100，默认 `100` |
 
 该工具返回文件的 `documentId`、文件名和总片段数，供后续检索范围、片段读取或上下文扩展使用。
 

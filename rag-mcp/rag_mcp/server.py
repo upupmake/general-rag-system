@@ -61,8 +61,16 @@ class AccessKeyVerifier(TokenVerifier):
 mcp = FastMCP(
     "General RAG Retrieval",
     instructions=(
-        "提供知识库创建、检索以及个人私有知识库文件管理工具。可创建私有或公开知识库；"
-        "先调用 list_knowledge_bases 获取 knowledge_base_id，检索任务选择对应检索工具，可以多种工具组合进行检索；"
+        "提供知识库创建、检索以及个人私有知识库文件管理工具。可创建私有或公开知识库。"
+        "检索流程：先调用 list_knowledge_bases 获取 knowledge_base_id；"
+        "已知术语、错误码或原文短语用 search_knowledge_base_by_keywords，"
+        "探索性问题用 search_knowledge_base_by_semantics；"
+        "需要精读时用 read_knowledge_base_chunks 或 expand_knowledge_base_context；"
+        "文件名不确定时先用 find_knowledge_base_files。可以组合多种工具进行检索。"
+        "不要臆造 knowledge_base_id、documentId 或 chunkIndex，必须来自工具返回。"
+        "关键词结果关注 matchedTotal/truncated；语义结果关注 topScore/scoreThreshold/"
+        "truncated/failedQueries，topScore 明显低于 scoreThreshold 时结果可能弱相关，"
+        "应换查询角度或改用关键词检索。"
         "上传或删除文件仅支持调用者本人创建的个人私有知识库。"
     ),
     auth=AccessKeyVerifier(),
@@ -312,7 +320,7 @@ async def search_knowledge_base_by_keywords(
     knowledge_base_id: Annotated[int, Field(description="由 list_knowledge_bases 返回的知识库 ID。")],
     keywords: Annotated[
         list[str],
-        Field(description="用于精确匹配的关键词列表，至少提供一个术语、错误码或原文短语。", min_length=1),
+        Field(description="用于精确匹配的关键词列表，至少提供一个术语、错误码或原文短语，最多20个。", min_length=1, max_length=20),
         BeforeValidator(_coerce_list_arg),
     ],
     match_mode: Annotated[
@@ -322,11 +330,11 @@ async def search_knowledge_base_by_keywords(
     top_k: Annotated[int, Field(description="最多返回的匹配片段数，取值范围 1 到 50。", ge=1, le=50)] = 15,
     document_ids: Annotated[
         list[int] | None,
-        Field(description="可选的 documentId 列表；提供后仅在这些文档中检索。"),
+        Field(description="可选的 documentId 列表，最多100个；提供后仅在这些文档中检索。", max_length=100),
         BeforeValidator(_coerce_list_arg),
     ] = None,
 ) -> dict:
-    """使用明确术语、配置项、错误码或原文短语在知识库中执行关键词精确检索。"""
+    """使用明确术语、配置项、错误码或原文短语在知识库中执行关键词精确检索。结果中的 matchedTotal 是范围内命中总数，truncated 表示是否只返回了 top_k 的一部分；命中很多时用 AND、document_ids 或更具体的关键词收敛。"""
     request_summary = {"keywords": keywords, "matchMode": match_mode, "topK": top_k, "documentIds": document_ids}
 
     async def operation() -> dict:
@@ -347,7 +355,7 @@ async def search_knowledge_base_by_semantics(
     ],
     top_k: Annotated[int, Field(description="最多返回的相关片段数，取值范围 1 到 50。", ge=1, le=50)] = 10,
 ) -> dict:
-    """执行多查询语义召回、关键词辅助召回和去重，按向量相似度返回结果。"""
+    """执行多查询语义召回、关键词辅助召回和去重，按向量相似度返回结果。结果中的 topScore/scoreThreshold 用于判断弱相关，truncated 表示动态阈值保留数超过 top_k，failedQueries 表示部分 query 失败；topScore 明显低于 scoreThreshold 时应换查询角度或改用关键词检索。"""
     request_summary = {
         "queries": queries,
         "topK": top_k,
@@ -366,12 +374,12 @@ async def find_knowledge_base_files(
     knowledge_base_id: Annotated[int, Field(description="由 list_knowledge_bases 返回的知识库 ID。")],
     name_pattern: Annotated[
         str,
-        Field(description="文件名匹配模式，可使用 % 匹配任意字符，例如 %.md。", min_length=1),
+        Field(description="文件名匹配模式，可使用 % 匹配任意字符，例如 %.md；最多256个字符。", min_length=1, max_length=256),
     ],
     offset: Annotated[int, Field(description="分页起始偏移量，从 0 开始。", ge=0)] = 0,
     limit: Annotated[int, Field(description="本次最多返回的文件数，取值范围 1 到 100。", ge=1, le=100)] = 100,
 ) -> dict:
-    """按文件名模式查找知识库文件，只返回 documentId、文件名和总片段数。使用 % 作为通配符。"""
+    """按文件名模式查找知识库文件，只返回 documentId、文件名和总片段数。使用 % 作为通配符；结果较多时用 offset/limit 分页，后续用返回的 documentId 读取正文。"""
     request_summary = {"namePattern": name_pattern, "offset": offset, "limit": limit}
 
     async def operation() -> dict:
@@ -418,7 +426,7 @@ async def expand_knowledge_base_context(
         Field(description="中心片段前后各扩展的片段数，取值范围 0 到 9。", ge=0, le=9),
     ] = 2,
 ) -> dict:
-    """围绕一个已命中的文档片段读取前后上下文。"""
+    """围绕一个已命中的文档片段读取前后上下文；只适合补充局部上下文，不适合大范围通读。"""
     request_summary = {"chunkIndex": chunk_index, "windowSize": window_size}
 
     async def operation() -> dict:

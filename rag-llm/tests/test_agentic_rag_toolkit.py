@@ -143,6 +143,33 @@ def test_keyword_search_escapes_like_wildcards():
     assert "learning\\\\_rate" in milvus_calls[-1]["filter"]
 
 
+def test_keyword_search_count_applies_exclude_filter():
+    rows = [
+        _row(2, "alpha"),
+        _row(3, "alpha alpha"),
+    ]
+    store = FakeVectorStore(rows=rows, count=2)
+    toolkit = RetrievalToolkit(store)
+
+    result = asyncio.run(
+        toolkit._search_by_grep(keywords=["alpha"], top_k=1, exclude_pks={1})
+    )
+
+    count_calls = [
+        call for call in store.aclient.calls
+        if call.get("output_fields") == ["count(*)"]
+    ]
+    data_calls = [
+        call for call in store.aclient.calls
+        if call.get("output_fields") != ["count(*)"]
+    ]
+    assert "not (pk in [1])" in count_calls[-1]["filter"]
+    assert "not (pk in [1])" in data_calls[-1]["filter"]
+    assert result["matched_total"] == 2
+    assert result["total_hits"] == 1
+    assert result["truncated"] is True
+
+
 def test_keyword_search_builds_document_scope_and_and_mode():
     store = FakeVectorStore(rows=[], count=0)
     toolkit = RetrievalToolkit(store)
@@ -258,6 +285,10 @@ def test_tool_schema_bounds_and_chunk_range_validation():
     with pytest.raises(ValidationError):
         KeywordSearchInput(keywords=[])
     with pytest.raises(ValidationError):
+        KeywordSearchInput(keywords=["k"] * 21)
+    with pytest.raises(ValidationError):
+        KeywordSearchInput(keywords=["k"], document_ids=list(range(101)))
+    with pytest.raises(ValidationError):
         SemanticSearchInput(queries=[])
     with pytest.raises(ValidationError):
         SemanticSearchInput(queries=["q"] * 11)
@@ -265,6 +296,8 @@ def test_tool_schema_bounds_and_chunk_range_validation():
         SemanticSearchInput(queries=["q"], top_k=0)
     with pytest.raises(ValidationError):
         ReadFileChunksInput(document_id=1, start_chunk_index=5, end_chunk_index=4)
+    with pytest.raises(ValidationError):
+        ReadFileChunksInput(document_id=1, start_chunk_index=0, end_chunk_index=20)
     with pytest.raises(ValidationError):
         ExpandContextInput(document_id=1, chunk_index=0, window_size=10)
 

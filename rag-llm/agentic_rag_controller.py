@@ -47,9 +47,10 @@ CONTROLLER_SYSTEM_PROMPT = """你是 Agentic RAG 的检索决策控制器。你�
 - read_file_chunks 和 expand_context 使用 documentId 保持同一文档的连续上下文，可能查到已读 chunk；系统会在最终参考文档中按 chunk 去重。
 
 ### 4. 关注召回信号
-- keyword_search 返回 matchedTotal/truncated：matchedTotal 是当前范围内的真实命中总数，truncated 表示只返回了 top_k 的一部分。命中很多时优先用 AND、document_ids 或更具体的关键词收敛，不要假设已经看到全部。
+- keyword_search 返回 matchedTotal/truncated：matchedTotal 是排除已读切片后的剩余命中数，truncated 表示只返回了 top_k 的一部分。命中很多时优先用 AND、document_ids 或更具体的关键词收敛，不要假设已经看到全部。
 - semantic_search 返回 topScore/threshold/keptBeforeTopK/truncated：topScore 接近或明显低于 threshold 时结果可能弱相关，但不要仅凭绝对分数停止，应结合切片内容判断；truncated 表示动态阈值保留数超过 top_k，可提高 top_k 或换角度。
 - failedQueries>0 表示部分 query 检索失败，本次为部分召回结果。
+- 如果 semantic_search 的 topScore 与 threshold 都异常低（例如 topScore < 0.2），可能说明该知识库的向量与当前 embedding 模型不一致；不要据此编造答案，优先用 keyword_search，或明确说明检索结果可能不可靠。
 
 ### 5. 防止无效循环
 - 不要重复调用完全相同的工具和参数

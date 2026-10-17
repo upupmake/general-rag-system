@@ -28,8 +28,10 @@ class KeywordSearchInput(BaseModel):
     """keyword_search: 基于关键词精确匹配检索"""
     keywords: List[str] = Field(
         min_length=1,
+        max_length=20,
         description=(
             "关键词列表，必须是文档中可能出现的具体术语、函数名、配置项、错误码等。"
+            "最多20个。"
             "示例：['学籍管理', '注册流程', '休学复学', '转专业', '毕业要求', '学位授予'] "
             "或 ['def train_model', 'learning_rate', 'batch_size', 'optimizer', 'loss_function']"
         )
@@ -44,7 +46,8 @@ class KeywordSearchInput(BaseModel):
     top_k: int = Field(default=15, ge=1, le=50, description="返回结果数量上限，默认15条")
     document_ids: Optional[List[int]] = Field(
         default=None,
-        description="限定检索范围的 documentId 列表；为空则全库检索。"
+        max_length=100,
+        description="限定检索范围的 documentId 列表，最多100个；为空则全库检索。"
     )
 
 
@@ -66,6 +69,8 @@ class ReadFileChunksInput(BaseModel):
     def check_chunk_range(self):
         if self.end_chunk_index < self.start_chunk_index:
             raise ValueError("end_chunk_index 不能小于 start_chunk_index")
+        if self.end_chunk_index - self.start_chunk_index + 1 > 20:
+            raise ValueError("单次chunk范围不能超过20个")
         return self
 
 
@@ -351,7 +356,10 @@ class RetrievalToolkit:
             KEYWORD_CANDIDATE_MAX,
         )
 
-        matched_total = await self._count_matches(scope_expr)
+        # 统计「排除已读切片后」的剩余命中；否则 truncated 会在读完后仍为 True。
+        exclude_expr = self._build_exclude_pks_expr(exclude_pks)
+        count_expr = f"({scope_expr}) and {exclude_expr}" if exclude_expr else scope_expr
+        matched_total = await self._count_matches(count_expr)
         docs = await self._milvus_filter(
             filter_expr=scope_expr,
             limit=candidate_limit,
@@ -677,7 +685,7 @@ class RetrievalToolkit:
                 description=(
                     "基于关键词精确匹配检索正文内容，并按关键词覆盖率/词频/文件名做轻量相关性排序。"
                     "【适用场景】已知明确的术语、函数名、配置项、错误码等。"
-                    "【特点】精确匹配，无法处理同义词或近义词；返回 matchedTotal 和 truncated 表示范围内总命中数及是否截断。"
+                    "【特点】精确匹配，无法处理同义词或近义词；返回 matchedTotal（排除已读切片后的剩余命中数）和 truncated（是否只返回了 top_k 的一部分）。"
                     "【典型用法】搜索'学籍管理规定'、'def train_model'、'MySQL连接超时'等。"
                 ),
                 args_schema=KeywordSearchInput,

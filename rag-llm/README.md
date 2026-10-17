@@ -219,7 +219,7 @@ data: {"type":"usage","payload":{...}}
 ### 检索流程和约束
 
 - RAG Gateway 的 `use_rag` 决策只进入 Agentic RAG，不恢复传统一次性 RAG 分支。
-- 聊天入口默认最大检索轮次为 10，可通过 `options.maxRounds` 传入其他值。
+- 聊天入口默认最大检索轮次为 10，可通过 `options.maxRounds` 传入其他值；服务端会夹紧到 1~20。
 - 检索控制器固定为 `step-5-preview/stepfun`，`reasoning_effort` 为 `medium`。
 - 轮次结束条件包括：调用 `stop_search`、控制器没有工具调用、达到最大轮次、控制器调用失败，或控制器消息累计超过 256000 个 token。
 - 控制器 token 使用 `o200k_base` 编码计算。
@@ -228,12 +228,13 @@ data: {"type":"usage","payload":{...}}
 - 只有关键词检索和语义检索传递已命中的 chunk PK 以尽量避免重复；连续读取和上下文扩展不做排除过滤。
 - 同一轮内的多个工具调用按顺序串行执行，每个工具执行时取当前最新的已读 chunk 排除集合。
 - 检索失败（Milvus 异常、表达式错误等）以错误 ToolMessage 返回，与"没有检索到内容"区分；单个 query 失败时返回部分召回并在 ToolMessage 中标注失败数量。
-- `keyword_search` 会先 over-fetch 候选，再按关键词覆盖率、词频和文件名命中做轻量排序；ToolMessage 中的 `matchedTotal` 是范围内真实命中数，`truncated` 表示只返回了 `top_k` 的一部分。
+- `keyword_search` 会先 over-fetch 候选，再按关键词覆盖率、词频和文件名命中做轻量排序；Agentic 检索中 ToolMessage 的 `matchedTotal` 是排除已读切片后的剩余命中数，`truncated` 表示只返回了 `top_k` 的一部分。独立 `/retrieval/keywords` 不传排除集合，因此返回范围内总命中数。
 - `semantic_search` 会批量计算 query 向量，并在向量召回和关键词补召回之间复用同一向量；ToolMessage 返回 `topScore`、`threshold`、`keptBeforeTopK`、`truncated` 和 `failedQueries`。
 - 排除已读切片时，语义检索会按排除数量额外 over-fetch（上限 200），避免后几轮因排除集合过大而出现“无新增”。
 - 单个检索工具默认超时 30 秒，可通过 `RETRIEVAL_TOOL_TIMEOUT` 调整；控制器调用失败且尚无参考文档时，会兜底执行一次 `semantic_search([question])`。
 - Milvus 结果保留 `fileName`，用于展示和来源归因。
-- Agentic RAG 使用 `text-embedding-v4/qwen` 作为配置标识，但当前 Embedding 实例实际固定连接本地 `8890` 服务。
+- Agentic RAG 使用 `text-embedding-v4/qwen` 作为配置标识，但当前 Embedding 实例实际固定连接本地 `8890` 服务（`Qwen/Qwen3-Embedding-0.6B`）。
+- 2026-03-09 之前创建的 collection 可能仍保存旧 `text-embedding-v4` 向量；两者维度同为 1024/COSINE，不会报错，但语义检索会近似随机。可用 `scripts/audit_milvus_embeddings.py` 做只读审计；旧 collection 迁移必须使用 delete-insert，不能对 auto_id collection 使用 upsert。
 
 最终回答阶段使用主聊天请求中的模型生成流式答案，并把检索过程、引用文档和使用统计转换为聊天 SSE 事件。
 
@@ -290,6 +291,8 @@ data: {"type":"usage","payload":{...}}
 Milvus 客户端按用户和知识库获取，服务维护集合生命周期，并运行后台释放任务。检索和向量化都依赖 `MILVUS_URI`、`MILVUS_TOKEN` 以及相应知识库集合。
 
 老 collection 可能缺少 `documentId`、`fileName` 或 `text` 索引，导致关键词检索退化为全表扫描、`find_files` 的 `order_by` 变慢。可运行 `scripts/ensure_milvus_indexes.py` 检查；脚本默认 dry-run，只有加 `--apply` 才会创建 `STL_SORT` / `INVERTED` / `NGRAM` 索引。新建 collection 应确保这三类索引齐全。
+
+旧 collection 还可能出现 embedding 模型不一致：可用 `scripts/audit_milvus_embeddings.py` 抽样重算 self-cosine 并审计；迁移脚本默认 dry-run，真实写入需要 `--apply --yes --replace-mode delete-insert --allow-delete-insert`，并在 delete 后 flush + 等待再复检。
 
 ## 关键约束
 

@@ -198,7 +198,7 @@ class AgenticRAGService:
         if tool_name == "keyword_search":
             if matched_total is not None:
                 lines.append(
-                    f"范围内命中 {matched_total} 个切片，返回 {retrieved} 个"
+                    f"排除已读后剩余命中 {matched_total} 个切片，返回 {retrieved} 个"
                     + ("（已截断）" if truncated else "")
                 )
             else:
@@ -702,7 +702,9 @@ class AgenticRAGService:
 要求：
 1. 优先基于文档内容作答，文档是主要信息来源
 2. 如果文档不足以完整回答，结合对话历史进行推理或明确说明
-3. 文档中的信息为切片信息，可能语义并不连贯或存在错误，你需要抽取或推理相关信息"""
+3. 文档中的信息为切片信息，可能语义并不连贯或存在错误，你需要抽取或推理相关信息
+4. 如果参考内容与问题明显无关或不足以确认，明确说明无法从知识库确认，不要编造
+5. 引用文档内容时尽量标注来源文件名"""
 
         final_user_content = f"""# 知识库检索出的可参考的内容
 
