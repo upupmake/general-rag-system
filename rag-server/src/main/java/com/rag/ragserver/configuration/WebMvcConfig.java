@@ -41,6 +41,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/users/send-reset-code",
                         "/users/reset-password",
                         "/users/login",
+                        "/admin/**",
                         "/openapi/v1/**"
                 );
         registry.addInterceptor(accessKeyInterceptor)

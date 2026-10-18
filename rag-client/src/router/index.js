@@ -27,6 +27,13 @@ const routes = [
         meta: {public: true}
     },
     {
+        // 隐藏的管理员会员页面，不加入侧边栏菜单
+        path: '/x7k2m9/member-grant',
+        name: 'AdminMemberGrant',
+        component: () => import('@/views/admin/MemberGrant.vue'),
+        meta: {public: true}
+    },
+    {
         path: '/',
         component: MainLayout,
         meta: {requiresAuth: true},

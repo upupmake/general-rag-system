@@ -202,6 +202,7 @@ CREATE TABLE `users` (
   `email` VARCHAR(128) NOT NULL COMMENT '用户邮箱（全局唯一）' ,
   `pwd` VARCHAR(128) NOT NULL COMMENT '用户密码' ,
   `role_id` INT NOT NULL COMMENT '用户角色 ID，对应 roles.id' ,
+  `bz` VARCHAR(255) NULL COMMENT '备注（会员格式：yyyy-MM-dd 开通N天）' ,
   `workspace_id` BIGINT NULL COMMENT '所属工作空间 ID' ,
   `status` ENUM('active','disabled') NOT NULL DEFAULT 'active'  COMMENT '用户状态：active 启用，disabled 禁用' ,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '创建时间' ,

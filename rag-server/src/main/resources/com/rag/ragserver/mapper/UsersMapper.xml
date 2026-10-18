@@ -10,6 +10,7 @@
             <result property="email" column="email" />
             <result property="pwd" column="pwd" />
             <result property="roleId" column="role_id" />
+            <result property="bz" column="bz" />
             <result property="workspaceId" column="workspace_id" />
             <result property="status" column="status" />
             <result property="createdAt" column="created_at" />
@@ -18,7 +19,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,username,email,pwd,role_id,workspace_id,
+        id,username,email,pwd,role_id,bz,workspace_id,
         status,created_at,updated_at,is_deleted
     </sql>
 </mapper>
