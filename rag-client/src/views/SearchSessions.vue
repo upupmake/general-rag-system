@@ -1,5 +1,5 @@
 <script setup>
-import {ref, onMounted, nextTick, computed} from 'vue'
+import {ref, onMounted, nextTick} from 'vue'
 import {useRouter, onBeforeRouteLeave} from 'vue-router'
 import {message, theme} from 'ant-design-vue'
 import {DeleteOutlined, MessageOutlined, HistoryOutlined} from '@ant-design/icons-vue'
@@ -11,12 +11,10 @@ const {useToken} = theme
 const {token} = useToken()
 const router = useRouter()
 const searchStore = useSearchStore()
-const { keyword, results, offset, hasMore, scrollPosition } = storeToRefs(searchStore)
+const { keyword, results, offset, hasMore, hasSearched, scrollPosition } = storeToRefs(searchStore)
 
 // Search state
 const searchLoading = ref(false)
-
-const hasSearched = computed(() => !!keyword.value.trim() || results.value.length > 0)
 
 // Search logic
 const handleSearch = async () => {
@@ -26,6 +24,7 @@ const handleSearch = async () => {
     return
   }
   
+  searchStore.setHasSearched(true)
   searchLoading.value = true
   searchStore.setOffset(0)
   searchStore.setResults([])
@@ -120,7 +119,7 @@ onBeforeRouteLeave((to, from, next) => {
     <div class="search-results">
       <!-- 初始状态 -->
       <div v-if="!hasSearched && !searchLoading" class="search-empty">
-        <a-empty description="输入关键词开始搜索历史对话">
+        <a-empty :description="keyword.trim() ? '按回车或点击搜索按钮开始检索' : '输入关键词开始搜索历史对话'">
           <template #image>
             <span class="search-empty-icon"><history-outlined/></span>
           </template>

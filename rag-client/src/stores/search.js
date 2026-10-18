@@ -6,6 +6,7 @@ export const useSearchStore = defineStore('search', () => {
   const results = ref([])
   const offset = ref(0)
   const hasMore = ref(true)
+  const hasSearched = ref(false)
   const scrollPosition = ref(0)
 
   // Actions
@@ -44,6 +45,10 @@ export const useSearchStore = defineStore('search', () => {
   const setHasMore = (val) => {
     hasMore.value = val
   }
+
+  const setHasSearched = (val) => {
+    hasSearched.value = val
+  }
   
   const setScrollPosition = (val) => {
     scrollPosition.value = val
@@ -54,6 +59,7 @@ export const useSearchStore = defineStore('search', () => {
     results.value = []
     offset.value = 0
     hasMore.value = true
+    hasSearched.value = false
     scrollPosition.value = 0
   }
 
@@ -66,12 +72,14 @@ export const useSearchStore = defineStore('search', () => {
     results,
     offset,
     hasMore,
+    hasSearched,
     scrollPosition,
     setKeyword,
     setResults,
     appendResults,
     setOffset,
     setHasMore,
+    setHasSearched,
     setScrollPosition,
     clearState,
     removeItem
