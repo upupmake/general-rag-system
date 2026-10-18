@@ -395,6 +395,18 @@ const syncUploadProgress = () => {
   });
 };
 
+const duplicateFolderFromMessage = (message) => {
+  if (!message) return null;
+  const marker = '文件内容已存在:';
+  const markerIndex = message.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const fullPath = message.slice(markerIndex + marker.length).trim().replace(/\\/g, '/');
+  const parts = fullPath.split('/');
+  if (parts.length <= 1) return null;
+  parts.pop();
+  return parts;
+};
+
 const fetchDocuments = async () => {
   if (documentsFetching) {
     pendingDocumentFetch = true;
@@ -643,6 +655,11 @@ const processQueue = async () => {
       if (item) {
         item.status = 'error';
         item.error = err.message || '上传失败';
+      }
+      const duplicateFolder = duplicateFolderFromMessage(err.message);
+      if (duplicateFolder) {
+        currentPath.value = duplicateFolder;
+        searchKeyword.value = '';
       }
       onError(err);
       fetchDocuments();
