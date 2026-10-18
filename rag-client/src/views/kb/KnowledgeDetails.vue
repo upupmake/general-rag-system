@@ -263,6 +263,24 @@ const formatFileDate = (value) => {
   return dayjs(value).format('YYYY-MM-DD');
 };
 
+const hoveredFileNameId = ref(null);
+const truncatedFileNameId = ref(null);
+
+const handleFileNameEnter = (record, event) => {
+  const el = event.currentTarget;
+  hoveredFileNameId.value = record.id;
+  truncatedFileNameId.value = el.scrollWidth > el.clientWidth ? record.id : null;
+};
+
+const handleFileNameLeave = () => {
+  hoveredFileNameId.value = null;
+  truncatedFileNameId.value = null;
+};
+
+const isFileNameTooltipOpen = (record) => {
+  return hoveredFileNameId.value === record.id && truncatedFileNameId.value === record.id;
+};
+
 // Preview related refs
 const previewVisible = ref(false);
 const previewContent = ref('');
@@ -1061,13 +1079,28 @@ onUnmounted(() => {
           <file-outlined v-else class="kb-cell-icon"/>
         </template>
         <template v-if="column.key === 'fileName'">
-          <a-tooltip v-if="record.isFolder" :title="record.fileName">
-            <a class="kb-file-link kb-file-link-folder" @click="enterFolder(record.fileName)">
+          <a-tooltip
+              v-if="record.isFolder"
+              :title="record.fileName"
+              :open="isFileNameTooltipOpen(record)">
+            <a
+                class="kb-file-link kb-file-link-folder"
+                @click="enterFolder(record.fileName)"
+                @mouseenter="handleFileNameEnter(record, $event)"
+                @mouseleave="handleFileNameLeave">
               {{ record.fileName }}
             </a>
           </a-tooltip>
-          <a-tooltip v-else :title="record.fileName.split('/').pop()">
-            <span class="kb-file-name">{{ record.fileName.split('/').pop() }}</span>
+          <a-tooltip
+              v-else
+              :title="record.fileName.split('/').pop()"
+              :open="isFileNameTooltipOpen(record)">
+            <span
+                class="kb-file-name"
+                @mouseenter="handleFileNameEnter(record, $event)"
+                @mouseleave="handleFileNameLeave">
+              {{ record.fileName.split('/').pop() }}
+            </span>
           </a-tooltip>
         </template>
         <template v-if="column.key === 'fileSize'">
