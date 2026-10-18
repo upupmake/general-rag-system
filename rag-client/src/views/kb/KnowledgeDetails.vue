@@ -397,7 +397,7 @@ const syncUploadProgress = () => {
 
 const duplicateFolderFromMessage = (message) => {
   if (!message) return null;
-  const marker = '文件内容已存在:';
+  const marker = '同名文件已存在:';
   const markerIndex = message.indexOf(marker);
   if (markerIndex === -1) return null;
   const fullPath = message.slice(markerIndex + marker.length).trim().replace(/\\/g, '/');

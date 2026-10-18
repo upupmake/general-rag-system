@@ -127,17 +127,19 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
                     checksum = DigestUtils.md5DigestAsHex(is);
                 }
 
-                String folderPath = folderPathOf(originalFilename);
-                // 锁定同一知识库 + 内容范围的索引间隙，避免并发上传绕过目录级去重
-                List<Documents> candidates = this.list(new LambdaQueryWrapper<Documents>()
-                        .select(Documents::getId, Documents::getFileName)
-                        .eq(Documents::getKbId, kbId)
-                        .eq(Documents::getChecksum, checksum)
-                        .last("FOR UPDATE"));
-                Documents duplicate = findDuplicateInFolder(candidates, folderPath);
+                String normalizedFileName = normalizeFileName(originalFilename);
+                // 锁定同一知识库 + 文件路径的索引间隙，避免并发上传绕过同名校验
+                Documents duplicate = this.list(new LambdaQueryWrapper<Documents>()
+                                .select(Documents::getId, Documents::getFileName)
+                                .eq(Documents::getKbId, kbId)
+                                .eq(Documents::getFileName, normalizedFileName)
+                                .last("FOR UPDATE"))
+                        .stream()
+                        .findFirst()
+                        .orElse(null);
 
                 if (duplicate != null) {
-                    throw new BusinessException(400, "同一目录下文件内容已存在: " + duplicate.getFileName());
+                    throw new BusinessException(400, "同名文件已存在: " + duplicate.getFileName());
                 }
 
                 try (InputStream is = file.getInputStream()) {
@@ -147,7 +149,7 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
                 Documents document = new Documents();
                 document.setKbId(kbId);
                 document.setFilePath(objectName);
-                document.setFileName(originalFilename);
+                document.setFileName(normalizedFileName);
                 document.setMimeType(contentType);
                 document.setFileSize(size);
                 document.setUploaderId(userId);
@@ -157,7 +159,7 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
                 // document.setUpdatedAt(new Date());
                 this.save(document);
                 uploadedDocuments.add(document);
-                DocumentProcessMessage message = DocumentProcessMessage.builder().documentId(document.getId()).kbId(kbId).userId(userId).filePath(objectName).fileName(originalFilename).bucketName(minioConfig.getBucketName()).build();
+                DocumentProcessMessage message = DocumentProcessMessage.builder().documentId(document.getId()).kbId(kbId).userId(userId).filePath(objectName).fileName(normalizedFileName).bucketName(minioConfig.getBucketName()).build();
                 rabbitTemplate.convertAndSend("server.interact.llm.exchange", "rag.document.process.key", message, msg -> {
                     log.info("Document processing message sent: {}", msg);
                     return msg;
@@ -288,36 +290,15 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
         }
     }
 
-    static Documents findDuplicateInFolder(List<Documents> candidates, String folderPath) {
-        if (candidates == null) {
+    static String normalizeFileName(String fileName) {
+        if (fileName == null) {
             return null;
         }
-        for (Documents candidate : candidates) {
-            if (folderPath.equals(folderPathOf(candidate.getFileName()))) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
-    static String folderPathOf(String fileName) {
-        if (fileName == null || fileName.isEmpty()) {
-            return "";
-        }
         String normalized = fileName.replace('\\', '/').replaceAll("/{2,}", "/");
-        int end = normalized.length();
-        while (end > 0 && normalized.charAt(end - 1) == '/') {
-            end--;
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
         }
-        int start = 0;
-        while (start < end && normalized.charAt(start) == '/') {
-            start++;
-        }
-        int slash = normalized.lastIndexOf('/', end - 1);
-        if (slash < start) {
-            return "";
-        }
-        return normalized.substring(start, slash);
+        return normalized;
     }
 }
 
