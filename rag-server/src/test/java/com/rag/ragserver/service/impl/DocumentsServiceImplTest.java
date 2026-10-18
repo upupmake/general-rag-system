@@ -13,6 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -35,6 +38,30 @@ class DocumentsServiceImplTest {
                 rabbitTemplate,
                 mock(KnowledgeBasesService.class),
                 mock(DocumentChunksService.class)));
+    }
+
+    @Test
+    void folderPathOfNormalizesPaths() {
+        assertEquals("", DocumentsServiceImpl.folderPathOf(null));
+        assertEquals("", DocumentsServiceImpl.folderPathOf("file.docx"));
+        assertEquals("docs", DocumentsServiceImpl.folderPathOf("docs/file.docx"));
+        assertEquals("docs/2026", DocumentsServiceImpl.folderPathOf("docs/2026/file.docx"));
+        assertEquals("docs", DocumentsServiceImpl.folderPathOf("\\docs\\file.docx"));
+        assertEquals("docs", DocumentsServiceImpl.folderPathOf("/docs//file.docx"));
+        assertEquals("docs", DocumentsServiceImpl.folderPathOf("docs/file.docx/"));
+    }
+
+    @Test
+    void findDuplicateOnlyMatchesSameFolder() {
+        Documents root = documentNamed("paper.docx");
+        Documents docs = documentNamed("docs/paper.docx");
+        Documents archive = documentNamed("archive/paper.docx");
+        List<Documents> candidates = Arrays.asList(root, archive, docs);
+
+        assertSame(root, DocumentsServiceImpl.findDuplicateInFolder(candidates, ""));
+        assertSame(docs, DocumentsServiceImpl.findDuplicateInFolder(candidates, "docs"));
+        assertNull(DocumentsServiceImpl.findDuplicateInFolder(candidates, "other"));
+        assertNull(DocumentsServiceImpl.findDuplicateInFolder(null, "docs"));
     }
 
     @Test
@@ -101,6 +128,12 @@ class DocumentsServiceImplTest {
         document.setFileName("file.pdf");
         document.setStatus(status);
         document.setErrorMessage("old");
+        return document;
+    }
+
+    private Documents documentNamed(String fileName) {
+        Documents document = new Documents();
+        document.setFileName(fileName);
         return document;
     }
 }

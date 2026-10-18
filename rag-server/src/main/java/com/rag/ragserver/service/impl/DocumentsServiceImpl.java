@@ -127,12 +127,17 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
                     checksum = DigestUtils.md5DigestAsHex(is);
                 }
 
-                long count = this.count(new LambdaQueryWrapper<Documents>()
+                String folderPath = folderPathOf(originalFilename);
+                // 锁定同一知识库 + 内容范围的索引间隙，避免并发上传绕过目录级去重
+                List<Documents> candidates = this.list(new LambdaQueryWrapper<Documents>()
+                        .select(Documents::getId, Documents::getFileName)
                         .eq(Documents::getKbId, kbId)
-                        .eq(Documents::getChecksum, checksum));
+                        .eq(Documents::getChecksum, checksum)
+                        .last("FOR UPDATE"));
+                Documents duplicate = findDuplicateInFolder(candidates, folderPath);
 
-                if (count > 0) {
-                    throw new BusinessException(400, "文件内容已存在");
+                if (duplicate != null) {
+                    throw new BusinessException(400, "同一目录下文件内容已存在: " + duplicate.getFileName());
                 }
 
                 try (InputStream is = file.getInputStream()) {
@@ -281,6 +286,38 @@ public class DocumentsServiceImpl extends ServiceImpl<DocumentsMapper, Documents
             log.error("Failed to stream file content: {}", document.getFilePath(), e);
             throw new BusinessException(500, "文件预览失败");
         }
+    }
+
+    static Documents findDuplicateInFolder(List<Documents> candidates, String folderPath) {
+        if (candidates == null) {
+            return null;
+        }
+        for (Documents candidate : candidates) {
+            if (folderPath.equals(folderPathOf(candidate.getFileName()))) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    static String folderPathOf(String fileName) {
+        if (fileName == null || fileName.isEmpty()) {
+            return "";
+        }
+        String normalized = fileName.replace('\\', '/').replaceAll("/{2,}", "/");
+        int end = normalized.length();
+        while (end > 0 && normalized.charAt(end - 1) == '/') {
+            end--;
+        }
+        int start = 0;
+        while (start < end && normalized.charAt(start) == '/') {
+            start++;
+        }
+        int slash = normalized.lastIndexOf('/', end - 1);
+        if (slash < start) {
+            return "";
+        }
+        return normalized.substring(start, slash);
     }
 }
 

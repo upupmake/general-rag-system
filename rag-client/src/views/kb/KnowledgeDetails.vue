@@ -383,7 +383,8 @@ const syncUploadProgress = () => {
   uploadProgressList.value.forEach(item => {
     if (item.status !== 'done' || !item.processing) return;
     const file = fileList.value.find(doc =>
-        (doc.fileName || '').split('/').pop() === item.name);
+        (doc.fileName || '').replace(/\\/g, '/').replace(/ /g, '_') ===
+        (item.fullName || item.name).replace(/\\/g, '/').replace(/ /g, '_'));
     if (file?.status === 'ready') {
       item.processing = false;
     } else if (file?.status === 'failed') {
@@ -644,6 +645,7 @@ const processQueue = async () => {
         item.error = err.message || '上传失败';
       }
       onError(err);
+      fetchDocuments();
     } finally {
       concurrentUploads.value--;
       activeUploadsCount.value--;
@@ -657,11 +659,16 @@ const processQueue = async () => {
 
 const customRequest = async (options) => {
   const {file, onSuccess, onError} = options;
+  // Use webkitRelativePath if available (folder upload), otherwise fallback to name.
+  const prefix = currentPathString.value ? currentPathString.value + '/' : '';
+  const relativePath = file.webkitRelativePath || file.name;
+  const fullPath = prefix + relativePath;
 
   // Initialize file in progress list
   const fileItem = {
     uid: file.uid,
     name: file.name,
+    fullName: fullPath,
     status: 'uploading',
     percent: 0,
     processing: false,
@@ -675,11 +682,7 @@ const customRequest = async (options) => {
   uploading.value = true;
 
   const formData = new FormData();
-  // Use webkitRelativePath if available (folder upload), otherwise fallback to name.
   // We explicitly set the filename in formData to include the path.
-  const prefix = currentPathString.value ? currentPathString.value + '/' : '';
-  const relativePath = file.webkitRelativePath || file.name;
-  const fullPath = prefix + relativePath;
   formData.append('files', file, fullPath);
 
   // Add to queue and process

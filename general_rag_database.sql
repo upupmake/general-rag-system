@@ -300,7 +300,12 @@ CREATE INDEX `idx_documents_kb`
 ON `documents` (
   `kb_id` ASC
 );
-CREATE INDEX `idx_documents_status` 
+CREATE INDEX `idx_documents_kb_checksum`
+ON `documents` (
+  `kb_id` ASC,
+  `checksum` ASC
+);
+CREATE INDEX `idx_documents_status`
 ON `documents` (
   `status` ASC
 );
