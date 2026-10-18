@@ -283,7 +283,7 @@ data: {"type":"usage","payload":{...}}
 应用启动后消费 RabbitMQ 队列 `rag.document.process.queue`。任务包含文档、知识库、用户、MinIO 对象等信息，处理过程为：
 
 1. 从 MinIO 读取文件。
-2. 按扩展名解析 PDF、TXT、Markdown、JSON、代码、标记文本或图片。
+2. 按扩展名解析 PDF、Word(.docx)、TXT、Markdown、JSON、代码、标记文本或图片。
 3. 为每个 chunk 写入 `documentId`、`chunkIndex`、`maxChunkIndex` 和 `fileName` 元数据。
 4. 使用当前本地 Embedding 服务生成向量，并按最多 32 条一批写入 Milvus。
 5. 通过 RabbitMQ 发布处理成功或失败消息。

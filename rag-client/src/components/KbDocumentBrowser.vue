@@ -14,6 +14,7 @@ import {deleteDocument, listDocuments, previewDocument, reprocessDocument} from 
 import {findKbById} from '@/vars.js'
 import {useUserStore} from '@/stores/user.js'
 import md from '@/utils/markdown.js'
+import DocxPreview from '@/components/DocxPreview.vue'
 
 const props = defineProps({
   visible: Boolean,
@@ -31,6 +32,7 @@ const previewVisible = ref(false)
 const previewTitle = ref('')
 const previewType = ref('')
 const previewContent = ref('')
+const docxBlob = ref(null)
 const searchKeyword = ref('')
 const isMobile = ref(window.innerWidth <= 768)
 let pollTimer = null
@@ -159,6 +161,7 @@ const clearPreview = () => {
   }
   previewContent.value = ''
   previewType.value = ''
+  docxBlob.value = null
 }
 
 const previewFile = async (file) => {
@@ -174,6 +177,9 @@ const previewFile = async (file) => {
     } else if (/\.(jpeg|jpg|png|gif|bmp|webp)$/.test(fileName)) {
       previewType.value = 'image'
       previewContent.value = URL.createObjectURL(blob)
+    } else if (fileName.endsWith('.docx')) {
+      previewType.value = 'docx'
+      docxBlob.value = blob
     } else if (fileName.endsWith('.md')) {
       previewType.value = 'markdown'
       previewContent.value = await blob.text()
@@ -352,6 +358,7 @@ onBeforeUnmount(() => {
       <div v-else-if="previewType === 'image'" class="preview-image-wrap">
         <img :src="previewContent" class="preview-image" alt="文件预览"/>
       </div>
+      <DocxPreview v-else-if="previewType === 'docx' && docxBlob" :blob="docxBlob"/>
       <pre v-else class="preview-text">{{ previewContent }}</pre>
     </a-modal>
   </a-drawer>

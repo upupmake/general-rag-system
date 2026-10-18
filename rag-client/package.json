@@ -19,6 +19,7 @@
     "axios": "^1.13.2",
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.19",
+    "docx-preview": "^0.4.1",
     "github-markdown-css": "^5.8.1",
     "highlight.js": "^11.11.1",
     "markdown-it": "^14.1.0",

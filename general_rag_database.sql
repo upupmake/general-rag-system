@@ -95,7 +95,7 @@ CREATE TABLE `documents` (
   `kb_id` BIGINT NOT NULL COMMENT '所属知识库 ID' ,
   `file_path` VARCHAR(512) NOT NULL COMMENT 'MinIO 中的对象存储路径' ,
   `file_name` VARCHAR(255) NOT NULL COMMENT '原始文件名' ,
-  `mime_type` VARCHAR(64) NULL DEFAULT ''  COMMENT '文件 MIME 类型' ,
+  `mime_type` VARCHAR(255) NULL DEFAULT '' COMMENT '文件 MIME 类型' ,
   `file_size` BIGINT NOT NULL COMMENT '文件大小（字节）' ,
   `uploader_id` BIGINT NOT NULL COMMENT '上传者用户 ID' ,
   `status` ENUM('processing','ready','failed') NOT NULL DEFAULT 'processing'  COMMENT '处理状态：processing/ready/failed' ,

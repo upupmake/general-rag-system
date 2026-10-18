@@ -476,6 +476,35 @@ def pdf_split(
     )
 
 
+def docx_split(
+        file_path: str,
+        chunk_size: int = 1024,
+        chunk_overlap: int = 100,
+):
+    """提取 Word(.docx) 段落与表格文本后按纯文本切分。"""
+    from docx import Document as DocxDocument
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    document = DocxDocument(file_path)
+    blocks = []
+    for block in document.iter_inner_content():
+        if isinstance(block, Paragraph):
+            text = block.text.strip()
+            if text:
+                blocks.append(text)
+        elif isinstance(block, Table):
+            for row in block.rows:
+                cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+                if any(cells):
+                    blocks.append(" | ".join(cells))
+    return plain_text_split(
+        plain_text="\n".join(blocks),
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap
+    )
+
+
 async def image_split(
         file_input,
         chunk_size: int = 2048,
@@ -497,7 +526,7 @@ async def image_split(
 
     # 2. 获取配置
     model_info = {
-        'name': 'deepseek-v4-flash',
+        'name': 'deepseek-v4.1-flash',
         'provider': 'deepseek'
     }
     settings = _get_model_setting(model_info)

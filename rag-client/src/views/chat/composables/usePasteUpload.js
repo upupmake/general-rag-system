@@ -5,7 +5,7 @@ import {selectedKb, findKbById} from '@/vars.js'
 import {useUserStore} from '@/stores/user'
 
 // 文件类型校验 - 与 KnowledgeDetails.vue 的 acceptExtensions 保持一致
-const ACCEPT_EXTENSIONS = '.md,.txt,.pdf,.json,.py,.java,.js,.ts,.vue,.html,.xml,.yml,.sh,.rb,.css,.scss,.jpg,.jpeg,.png,.gif,.bmp,.webp'
+const ACCEPT_EXTENSIONS = '.md,.txt,.pdf,.docx,.json,.py,.java,.js,.ts,.vue,.html,.xml,.yml,.sh,.rb,.css,.scss,.jpg,.jpeg,.png,.gif,.bmp,.webp'
 const ALLOWED_EXTENSIONS = ACCEPT_EXTENSIONS.split(',')
 const MAX_FILE_SIZE_MB = 100
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024

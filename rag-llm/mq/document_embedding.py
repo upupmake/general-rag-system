@@ -130,6 +130,11 @@ class DocumentEmbeddingConsumer:
                     elif suffix.lower() == ".md":
                         with open(tmp_path, "r", encoding="utf-8") as f:
                             splits = await asyncio.to_thread(utils.markdown_split, f.read())
+                    elif suffix.lower() == ".docx":
+                        def split_docx():
+                            return [Document(page_content=t) for t in utils.docx_split(tmp_path)]
+
+                        splits = await asyncio.to_thread(split_docx)
                     elif suffix.lower() == ".json":
                         def split_json():
                             with open(tmp_path, "r", encoding="utf-8") as f:

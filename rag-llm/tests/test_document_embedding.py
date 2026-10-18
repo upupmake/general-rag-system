@@ -150,6 +150,7 @@ def _load_module_under_test():
     utils.pdf_split = lambda *args, **kwargs: []
     utils.plain_text_split = lambda text, *args, **kwargs: []
     utils.markdown_split = lambda *args, **kwargs: []
+    utils.docx_split = lambda *args, **kwargs: []
     utils.json_split = lambda *args, **kwargs: []
     utils.code_split = lambda *args, **kwargs: []
 
@@ -213,6 +214,7 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setattr(MODULE, "minio_client", minio)
     monkeypatch.setattr(MODULE.utils, "plain_text_split", lambda text, *args, **kwargs: [])
     monkeypatch.setattr(MODULE.utils, "markdown_split", lambda *args, **kwargs: [])
+    monkeypatch.setattr(MODULE.utils, "docx_split", lambda *args, **kwargs: [])
     monkeypatch.setattr(MODULE.utils, "pdf_split", lambda *args, **kwargs: [])
     monkeypatch.setattr(MODULE.utils, "json_split", lambda *args, **kwargs: [])
     monkeypatch.setattr(MODULE.utils, "code_split", lambda *args, **kwargs: [])
@@ -381,3 +383,37 @@ def test_image_uses_matching_mime_type(env, monkeypatch):
     assert captured["mime_type"] == "image/png"
     assert len(env["rabbit"].messages) == 1
     assert env["rabbit"].messages[0]["message"]["status"] == "success"
+
+
+def test_docx_uses_docx_split(env, monkeypatch):
+    captured = {}
+
+    def fake_docx_split(file_path, *args, **kwargs):
+        captured["path"] = file_path
+        return ["word chunk"]
+
+    monkeypatch.setattr(MODULE.utils, "docx_split", fake_docx_split)
+    store = FakeVectorStore()
+    monkeypatch.setattr(MODULE.MilvusClientManager, "store", store, raising=False)
+
+    message = FakeMessage(_body(filePath="docs/demo.DOCX", fileName="demo.DOCX"))
+
+    asyncio.run(MODULE.document_embedding_consumer.on_receive_message(message))
+
+    assert Path(captured["path"]).name == "demo.DOCX"
+    assert len(env["rabbit"].messages) == 1
+    payload = env["rabbit"].messages[0]["message"]
+    assert payload["status"] == "success"
+    assert payload["chunksCount"] == 1
+    assert store.added_batches[0][0].page_content == "word chunk"
+
+
+def test_legacy_doc_is_unsupported(env):
+    message = FakeMessage(_body(filePath="docs/demo.doc", fileName="demo.doc"))
+
+    asyncio.run(MODULE.document_embedding_consumer.on_receive_message(message))
+
+    assert len(env["rabbit"].messages) == 1
+    payload = env["rabbit"].messages[0]["message"]
+    assert payload["status"] == "failed"
+    assert "不支持的文件类型" in payload["message"]

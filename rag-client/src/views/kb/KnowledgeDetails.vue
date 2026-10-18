@@ -2,6 +2,7 @@
 import {onMounted, ref, computed, watch} from "vue";
 import {onUnmounted} from "vue";
 import md from "@/utils/markdown.js";
+import DocxPreview from "@/components/DocxPreview.vue";
 import dayjs from "dayjs";
 import {useRoute, useRouter} from "vue-router";
 import {message, theme} from "ant-design-vue";
@@ -267,6 +268,7 @@ const previewVisible = ref(false);
 const previewContent = ref('');
 const previewType = ref('');
 const previewTitle = ref('预览');
+const docxBlob = ref(null);
 
 // Invite related refs
 const inviteModalVisible = ref(false);
@@ -305,7 +307,7 @@ const systemPromptPlaceholder = `你是一个专业的AI助手。基于提供的
 2. 如果文档不足以完整回答，结合对话历史进行推理或明确说明
 3. 文档中的信息为切片信息，可能语义并不连贯或存在错误，你需要抽取或推理相关信息`;
 
-const acceptExtensions = ".md,.txt,.pdf,.json,.py,.java,.js,.ts,.vue,.html,.xml,.yml,.sh,.rb,.css,.scss,.jpg,.jpeg,.png,.gif,.bmp,.webp";
+const acceptExtensions = ".md,.txt,.pdf,.docx,.json,.py,.java,.js,.ts,.vue,.html,.xml,.yml,.sh,.rb,.css,.scss,.jpg,.jpeg,.png,.gif,.bmp,.webp";
 
 const invitedUsersColumns = [
   {title: '用户名', dataIndex: 'username', key: 'username'},
@@ -674,6 +676,7 @@ const clearPreview = () => {
   }
   previewContent.value = '';
   previewType.value = '';
+  docxBlob.value = null;
 };
 
 const handlePreview = async (record) => {
@@ -692,6 +695,9 @@ const handlePreview = async (record) => {
     } else if (fileName.match(/\.(jpeg|jpg|png|gif|bmp|webp)$/)) {
       previewType.value = 'image';
       previewContent.value = URL.createObjectURL(blob);
+    } else if (fileName.endsWith('.docx')) {
+      previewType.value = 'docx';
+      docxBlob.value = blob;
     } else if (fileName.endsWith('.md')) {
       previewType.value = 'markdown';
       previewContent.value = await blob.text();
@@ -1055,10 +1061,14 @@ onUnmounted(() => {
           <file-outlined v-else class="kb-cell-icon"/>
         </template>
         <template v-if="column.key === 'fileName'">
-          <a v-if="record.isFolder" class="kb-file-link kb-file-link-folder" @click="enterFolder(record.fileName)">
-            {{ record.fileName }}
-          </a>
-          <span v-else class="kb-file-name">{{ record.fileName.split('/').pop() }}</span>
+          <a-tooltip v-if="record.isFolder" :title="record.fileName">
+            <a class="kb-file-link kb-file-link-folder" @click="enterFolder(record.fileName)">
+              {{ record.fileName }}
+            </a>
+          </a-tooltip>
+          <a-tooltip v-else :title="record.fileName.split('/').pop()">
+            <span class="kb-file-name">{{ record.fileName.split('/').pop() }}</span>
+          </a-tooltip>
         </template>
         <template v-if="column.key === 'fileSize'">
           <span>{{ (record.fileSize / (1024 * 1024)).toFixed(2) }} MB</span>
@@ -1207,6 +1217,7 @@ onUnmounted(() => {
       <div v-else-if="previewType === 'image'" class="preview-image-wrap">
         <img :src="previewContent" class="preview-image" alt="文件预览"/>
       </div>
+      <DocxPreview v-else-if="previewType === 'docx' && docxBlob" :blob="docxBlob"/>
       <pre v-else class="preview-text">{{ previewContent }}</pre>
     </a-modal>
 
