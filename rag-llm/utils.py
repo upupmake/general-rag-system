@@ -377,7 +377,8 @@ def markdown_split(
         "\n\n", "\n",
         "。", "！", "？",
         ".", "!", "?",
-        "，", ",", " "
+        "，", ",", " ",
+        "",  # 兜底：无分隔符的超长文本按字符切，避免整篇变成一个超大块
     ]
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -429,7 +430,8 @@ def plain_text_split(
             "\n\n", "\n",
             "。", "！", "？",
             ".", "!", "?",
-            "，", ",", " "
+            "，", ",", " ",
+            "",  # 兜底：无分隔符的超长文本按字符切，避免整篇变成一个超大块
         ]
     if force_split:
         if "" not in separators:
@@ -441,6 +443,43 @@ def plain_text_split(
         add_start_index=add_start_index
     )
     return text_splitter.split_text(plain_text)
+
+
+MAX_CHUNK_CHARS = 4000
+
+
+def enforce_chunk_limit(documents, chunk_size: int = 1024, chunk_overlap: int = 100):
+    """兜底：切分器遇到没有任何分隔符的长文本会整块保留，
+    这里再按字符窗口切开，避免超过 embedding 模型上限（8192 token）。"""
+    result = []
+    step = max(1, chunk_size - chunk_overlap)
+    for doc in documents:
+        content = doc.page_content
+        if len(content) <= MAX_CHUNK_CHARS:
+            result.append(doc)
+            continue
+        for index, start in enumerate(range(0, len(content), step)):
+            result.append(Document(
+                page_content=content[start:start + chunk_size],
+                metadata={**doc.metadata, "subChunkIndex": index}
+            ))
+    return result
+
+
+def plain_text_fallback_split(file_path: str, chunk_size: int = 1024, chunk_overlap: int = 100):
+    """未知扩展名兜底：文本文件按纯文本切分，二进制文件抛 ValueError。"""
+    with open(file_path, "rb") as f:
+        raw = f.read()
+    if b"\x00" in raw[:8192]:
+        raise ValueError("二进制文件，无法按文本解析")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("gbk")
+        except UnicodeDecodeError as exc:
+            raise ValueError("文本解码失败，按二进制文件处理") from exc
+    return plain_text_split(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
 
 def pdf_split(

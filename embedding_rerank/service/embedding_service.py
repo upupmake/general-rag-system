@@ -230,11 +230,25 @@ async def create_embeddings(request: EmbeddingRequest):
 
         # 生成向量
         start_time = time.time()
-        outputs = embedding_model.embed(processed_texts)
+        # 超长文本截断到模型上限，避免请求失败后残留的输出污染下一个请求
+        outputs = embedding_model.embed(
+            processed_texts,
+            truncate_prompt_tokens=config.max_model_len,
+        )
         inference_time = time.time() - start_time
 
         # 提取向量
         embeddings = [output.outputs.embedding for output in outputs]
+
+        if len(embeddings) != len(processed_texts):
+            logger.error(
+                f"Embedding count mismatch: got {len(embeddings)} outputs "
+                f"for {len(processed_texts)} texts"
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"embedding count mismatch: {len(embeddings)}/{len(processed_texts)}",
+            )
 
         # 计算token使用量
         total_tokens = sum(count_tokens(text) for text in texts)

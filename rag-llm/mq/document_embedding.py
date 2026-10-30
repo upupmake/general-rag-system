@@ -165,10 +165,19 @@ class DocumentEmbeddingConsumer:
                             mime_type=IMAGE_MIME_TYPES[suffix.lower()],
                         )
                     else:
-                        raise ValueError(f"不支持的文件类型: {suffix or '未知'}")
+                        # 未知扩展名兜底：文本文件降级按纯文本切分，二进制文件仍判不支持
+                        def split_fallback():
+                            return [
+                                Document(page_content=t)
+                                for t in utils.plain_text_fallback_split(tmp_path)
+                            ]
+
+                        splits = await asyncio.to_thread(split_fallback)
 
                     if not splits:
                         raise ValueError("文档未解析出任何有效内容")
+
+                    splits = utils.enforce_chunk_limit(splits)
 
                     logger.info(f"Document {document_id} split into {len(splits)} chunks.")
                     for i, doc in enumerate(splits):

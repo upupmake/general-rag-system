@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import time
 from typing import Dict, Optional
 
@@ -8,6 +9,10 @@ from langchain_milvus import Milvus
 from pymilvus.client.types import LoadState
 
 logger = logging.getLogger(__name__)
+
+# 默认不主动释放 collection：多进程/多实例共享 Milvus 时，释放会让其他进程正在
+# 进行的查询报 "collection not loaded"。需要省内存时设 MILVUS_IDLE_RELEASE=1 开启。
+RELEASE_ENABLED = os.environ.get("MILVUS_IDLE_RELEASE", "0") == "1"
 
 
 class _MilvusWrapper:
@@ -118,6 +123,9 @@ class MilvusClientManager:
         """
         释放长时间未访问的 collection
         """
+        if not RELEASE_ENABLED:
+            return
+
         now = time.time()
         release_keys = []
 
@@ -149,11 +157,14 @@ class MilvusClientManager:
     @classmethod
     async def close_all(cls):
         """
-        服务关闭时释放所有 collection
+        服务关闭时清理本地缓存；默认不释放远程 collection（见 RELEASE_ENABLED）
         """
         async with cls._global_lock:
             items = list(cls._instances.items())
             cls._instances.clear()
+
+        if not RELEASE_ENABLED:
+            return
 
         for key, wrapper in items:
             async with wrapper.lock:
