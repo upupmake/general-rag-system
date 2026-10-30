@@ -30,6 +30,148 @@ from rag_mcp.config import MCP_AUDIT_PUBLISH_TIMEOUT, MCP_HOST, MCP_PORT
 
 logger = logging.getLogger(__name__)
 
+# 工具注解与输出结构：让 MCP 客户端能判断读写/破坏性，并拿到返回值的结构契约
+_READ_ONLY = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+_WRITE = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+    "openWorldHint": False,
+}
+_DESTRUCTIVE = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+
+_KB_ITEM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "id": {"type": ["integer", "null"]},
+        "name": {"type": ["string", "null"]},
+        "description": {"type": ["string", "null"]},
+        "visibility": {"type": ["string", "null"]},
+        "workspaceId": {"type": ["integer", "null"]},
+        "workspaceName": {"type": ["string", "null"]},
+        "accessSource": {"type": ["string", "null"]},
+    },
+    "additionalProperties": True,
+}
+_KB_LIST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "owned": {"type": "array", "items": _KB_ITEM_SCHEMA},
+        "workspaceShared": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": {"type": ["integer", "null"]},
+                    "workspaceName": {"type": ["string", "null"]},
+                    "knowledgeBases": {"type": "array", "items": _KB_ITEM_SCHEMA},
+                },
+                "additionalProperties": True,
+            },
+        },
+        "invited": {"type": "array", "items": _KB_ITEM_SCHEMA},
+        "public": {"type": "array", "items": _KB_ITEM_SCHEMA},
+    },
+    "additionalProperties": True,
+}
+_CHUNK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "chunkId": {"type": ["integer", "string", "null"]},
+        "documentId": {"type": ["integer", "null"]},
+        "fileName": {"type": ["string", "null"]},
+        "chunkIndex": {"type": ["integer", "null"]},
+        "totalChunks": {"type": ["integer", "null"]},
+        "content": {"type": ["string", "null"]},
+        "score": {"type": ["number", "null"]},
+        "scoreType": {"type": ["string", "null"]},
+    },
+    "additionalProperties": True,
+}
+_RETRIEVAL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "knowledgeBaseId": {"type": ["integer", "null"]},
+        "results": {"type": "array", "items": _CHUNK_SCHEMA},
+        "totalHits": {"type": ["integer", "null"]},
+        "matchedTotal": {"type": ["integer", "null"]},
+        "truncated": {"type": ["boolean", "null"]},
+        "keptBeforeTopK": {"type": ["integer", "null"]},
+        "topScore": {"type": ["number", "null"]},
+        "scoreThreshold": {"type": ["number", "null"]},
+        "failedQueries": {"type": ["integer", "null"]},
+    },
+    "additionalProperties": True,
+}
+_FILE_LIST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "knowledgeBaseId": {"type": ["integer", "null"]},
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "documentId": {"type": ["integer", "null"]},
+                    "fileName": {"type": ["string", "null"]},
+                    "totalChunks": {"type": ["integer", "null"]},
+                },
+                "additionalProperties": True,
+            },
+        },
+        "totalHits": {"type": ["integer", "null"]},
+    },
+    "additionalProperties": True,
+}
+_CREATE_KB_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "knowledgeBaseId": {"type": ["integer", "null"]},
+        "name": {"type": ["string", "null"]},
+        "description": {"type": ["string", "null"]},
+        "visibility": {"type": ["string", "null"]},
+    },
+    "additionalProperties": True,
+}
+_UPLOAD_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "knowledgeBaseId": {"type": ["integer", "null"]},
+        "documents": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "documentId": {"type": ["integer", "null"]},
+                    "fileName": {"type": ["string", "null"]},
+                    "status": {"type": ["integer", "string", "null"]},
+                },
+                "additionalProperties": True,
+            },
+        },
+    },
+    "additionalProperties": True,
+}
+_DELETE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "knowledgeBaseId": {"type": ["integer", "null"]},
+        "documentId": {"type": ["integer", "null"]},
+        "deleted": {"type": "boolean"},
+    },
+    "additionalProperties": True,
+}
+
 
 @asynccontextmanager
 async def _app_lifespan(_mcp: FastMCP):
@@ -72,6 +214,8 @@ mcp = FastMCP(
         "truncated/failedQueries，topScore 明显低于 scoreThreshold 时结果可能弱相关，"
         "应换查询角度或改用关键词检索。"
         "上传或删除文件仅支持调用者本人创建的个人私有知识库。"
+        "upload_private_knowledge_base_file 只接受 UTF-8 文本内容；PDF、docx、图片等二进制或大文件"
+        "不要在参数里用 base64 传递，应让调用方在本地用上传脚本直接 POST 到 OpenAPI 文档上传接口。"
     ),
     auth=AccessKeyVerifier(),
     lifespan=_app_lifespan,
@@ -270,7 +414,7 @@ async def _publish_audit_safely(message: dict[str, Any], tool_name: str) -> None
         logger.exception("Failed to publish MCP tool log: %s", tool_name)
 
 
-@mcp.tool
+@mcp.tool(annotations=_READ_ONLY, output_schema=_KB_LIST_SCHEMA)
 async def list_knowledge_bases() -> dict:
     """按个人创建、各工作空间共享、受邀请和公开分类列出当前用户可访问的知识库。"""
     return await _audit_tool(
@@ -280,7 +424,7 @@ async def list_knowledge_bases() -> dict:
     )
 
 
-@mcp.tool
+@mcp.tool(annotations=_WRITE, output_schema=_CREATE_KB_SCHEMA)
 async def create_knowledge_base(
     name: Annotated[str, Field(description="知识库名称，最多100个字符。", min_length=1, max_length=100)],
     visibility: Annotated[
@@ -315,7 +459,7 @@ async def create_knowledge_base(
     return await _audit_tool("create_knowledge_base", request_summary, operation)
 
 
-@mcp.tool
+@mcp.tool(annotations=_READ_ONLY, output_schema=_RETRIEVAL_SCHEMA)
 async def search_knowledge_base_by_keywords(
     knowledge_base_id: Annotated[int, Field(description="由 list_knowledge_bases 返回的知识库 ID。")],
     keywords: Annotated[
@@ -345,7 +489,7 @@ async def search_knowledge_base_by_keywords(
     return await _audit_tool("search_knowledge_base_by_keywords", request_summary, operation, knowledge_base_id)
 
 
-@mcp.tool
+@mcp.tool(annotations=_READ_ONLY, output_schema=_RETRIEVAL_SCHEMA)
 async def search_knowledge_base_by_semantics(
     knowledge_base_id: Annotated[int, Field(description="由 list_knowledge_bases 返回的知识库 ID。")],
     queries: Annotated[
@@ -369,7 +513,7 @@ async def search_knowledge_base_by_semantics(
     return await _audit_tool("search_knowledge_base_by_semantics", request_summary, operation, knowledge_base_id)
 
 
-@mcp.tool
+@mcp.tool(annotations=_READ_ONLY, output_schema=_FILE_LIST_SCHEMA)
 async def find_knowledge_base_files(
     knowledge_base_id: Annotated[int, Field(description="由 list_knowledge_bases 返回的知识库 ID。")],
     name_pattern: Annotated[
@@ -390,7 +534,7 @@ async def find_knowledge_base_files(
     return await _audit_tool("find_knowledge_base_files", request_summary, operation, knowledge_base_id)
 
 
-@mcp.tool
+@mcp.tool(annotations=_READ_ONLY, output_schema=_RETRIEVAL_SCHEMA)
 async def read_knowledge_base_chunks(
     knowledge_base_id: Annotated[int, Field(description="由 list_knowledge_bases 返回的知识库 ID。")],
     document_id: Annotated[int, Field(description="由 find_knowledge_base_files 或检索结果返回的 documentId。")],
@@ -416,7 +560,7 @@ async def read_knowledge_base_chunks(
     return await _audit_tool("read_knowledge_base_chunks", request_summary, operation, knowledge_base_id, document_id)
 
 
-@mcp.tool
+@mcp.tool(annotations=_READ_ONLY, output_schema=_RETRIEVAL_SCHEMA)
 async def expand_knowledge_base_context(
     knowledge_base_id: Annotated[int, Field(description="由 list_knowledge_bases 返回的知识库 ID。")],
     document_id: Annotated[int, Field(description="检索命中片段所属的 documentId。")],
@@ -441,13 +585,13 @@ async def expand_knowledge_base_context(
     return await _audit_tool("expand_knowledge_base_context", request_summary, operation, knowledge_base_id, document_id)
 
 
-@mcp.tool
+@mcp.tool(annotations=_WRITE, output_schema=_UPLOAD_SCHEMA)
 async def upload_private_knowledge_base_file(
     knowledge_base_id: Annotated[int, Field(description="必须是当前 Access Key 用户本人创建的个人私有知识库 ID。")],
     file_name: Annotated[str, Field(description="要上传的相对文件路径和名称，例如 docs/说明.md；仅支持文本文件（如 .txt、.md）和各类代码文件；不能是绝对路径，不能包含 . 或 .. 路径段。", min_length=1)],
-    content: Annotated[str, Field(description="文件的 UTF-8 文本内容。PDF 或其他类型文件请前往网页端上传。")],
+    content: Annotated[str, Field(description="文件的 UTF-8 文本内容。二进制文件或大文件改用本地上传脚本直传，不要传 base64。")],
 ) -> dict:
-    """向本人创建的个人私有知识库上传文本文件（如 txt、md）或各类代码文件；如需上传 PDF 或其他类型文件，请前往网页端操作。"""
+    """向本人创建的个人私有知识库上传 UTF-8 文本文件（如 txt、md）或代码文件。PDF、docx、图片等二进制文件或大文件不要转 base64 传入，应让调用方在本地用上传脚本直接 POST 到 OpenAPI 文档上传接口。"""
     request_summary = {"fileName": file_name, "contentLength": len(content)}
 
     async def operation() -> dict:
@@ -470,7 +614,7 @@ async def upload_private_knowledge_base_file(
     return await _audit_tool("upload_private_knowledge_base_file", request_summary, operation, knowledge_base_id)
 
 
-@mcp.tool
+@mcp.tool(annotations=_DESTRUCTIVE, output_schema=_DELETE_SCHEMA)
 async def delete_private_knowledge_base_file(
     knowledge_base_id: Annotated[int, Field(description="必须是当前 Access Key 用户本人创建的个人私有知识库 ID。")],
     document_id: Annotated[int, Field(description="要删除的文档 ID，必须属于指定知识库。")],

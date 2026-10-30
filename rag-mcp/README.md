@@ -98,7 +98,7 @@
 | `file_name` | `string` | 必填，长度至少 1；必须是安全相对路径，不能是绝对路径，不能包含 `.` 或 `..` 路径段或空字符 |
 | `content` | `string` | 必填，UTF-8 文本内容 |
 
-该工具适用于文本文件和代码文件，例如 `.txt`、`.md`；PDF 或其他类型文件请使用网页端上传。上传过程中使用临时文件，调用结束后会清理。
+该工具只接受 UTF-8 文本内容，适用于文本文件和代码文件，例如 `.txt`、`.md`。PDF、docx、图片等二进制或大文件不要转 base64 传进来，应在客户端用上传脚本直接 POST 到 Java 的文档上传接口（见 `skills/kb-operations/scripts/upload_kb_file.py`），字节从磁盘直达服务端，不经过模型上下文。上传过程中使用临时文件，调用结束后会清理。
 
 ### `delete_private_knowledge_base_file`
 
