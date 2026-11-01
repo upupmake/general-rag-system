@@ -111,7 +111,7 @@
 
 ## 配置
 
-配置集中在 `rag_mcp/config.py`，环境变量存在时覆盖代码默认值。生产环境应显式设置敏感配置，密码不会在本说明中展开。
+配置集中在 `rag_mcp/config.py`。首次运行复制 `.env.example` 为 `.env` 并填写 RabbitMQ 凭据；`config.py` 用 `python-dotenv` 加载同目录上级的 `.env`，进程环境变量优先。`.env` 不提交仓库，生产文件权限应为 600。
 
 | 环境变量 | 代码默认值 | 说明 |
 | --- | --- | --- |
@@ -121,8 +121,8 @@
 | `MCP_PORT` | `8858` | MCP 监听端口 |
 | `RABBITMQ_HOST` | `192.168.188.6` | 审计消息 RabbitMQ 地址 |
 | `RABBITMQ_PORT` | `5678` | RabbitMQ 端口 |
-| `RABBITMQ_USERNAME` | `make` | RabbitMQ 用户名 |
-| `RABBITMQ_PASSWORD` | 代码内默认值 | RabbitMQ 密码；生产环境应通过环境变量设置 |
+| `RABBITMQ_USERNAME` | 无（必填） | RabbitMQ 用户名 |
+| `RABBITMQ_PASSWORD` | 无（必填） | RabbitMQ 密码；缺失时服务启动失败 |
 | `MCP_AUDIT_EXCHANGE` | `rag.audit.exchange` | 审计 Direct 类型交换机名称 |
 | `MCP_AUDIT_ROUTING_KEY` | `rag.mcp.tool.log.v1` | 审计消息路由键 |
 | `MCP_AUDIT_PUBLISH_TIMEOUT` | `3` | 审计消息发布超时（秒）；超时只记录日志，不阻塞工具返回 |
@@ -137,6 +137,7 @@
 在 `rag-mcp` 目录执行：
 
 ```powershell
+copy .env.example .env  # 首次运行：填写 RabbitMQ 凭据，.env 不提交
 python -m pip install -r requirements.txt
 python -m rag_mcp.server
 ```

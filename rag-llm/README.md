@@ -28,6 +28,7 @@ rag-llm/
 ├── agentic_rag_toolkit.py        六个检索工具及 Milvus 查询
 ├── rag_gateway.py                判断聊天请求是否需要知识库检索
 ├── utils.py                      模型、Embedding、分块和流式处理工具
+├── .env.example                   RabbitMQ/MinIO/Milvus 凭据模板（复制为 .env）
 ├── model_config.json             运行时模型配置，不应提交敏感内容
 ├── mq/connection.py              RabbitMQ 连接和消费
 ├── mq/document_embedding.py      文档下载、解析、分块、向量化和入库
@@ -89,7 +90,7 @@ MILVUS_URI=<Milvus URI>
 MILVUS_TOKEN=<Milvus 令牌>
 ```
 
-`main.py` 在导入这些模块之前通过 `os.environ.setdefault` 设置本地默认值；部署环境显式设置的同名变量优先。不要把真实密码、访问密钥或令牌写入 README、提交到 Git 或复制到日志中。
+首次运行前复制 `.env.example` 为 `.env`，填入上述 RabbitMQ/MinIO/Milvus 凭据。`main.py` 启动时用 `python-dotenv` 从同目录 `.env` 加载变量，并保留非敏感连接地址默认值；进程环境中的同名变量优先。缺少必需凭据时启动直接失败。`.env` 不提交仓库，生产文件权限应为 600；不要把真实密码、访问密钥或令牌写入 README、提交到 Git 或复制到日志中。
 
 Agentic 检索工具的单次执行超时由 `RETRIEVAL_TOOL_TIMEOUT` 控制，默认 30 秒。
 

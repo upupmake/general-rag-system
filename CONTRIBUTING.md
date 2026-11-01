@@ -87,9 +87,10 @@
 general-rag-system/
 ├── rag-client/          # Vue 3 前端（端口: 5173）
 ├── rag-server/          # Spring Boot 后端（端口: 8080）
-├── rag-llm/             # Python FastAPI LLM 服务（端口: 8888）
-├── embedding_rerank/    # vLLM 本地向量化服务（可选）
-├── 1_general_rag.sql    # 数据库初始化 SQL
+├── rag-llm/             # Python FastAPI LLM 服务（端口: 8848）
+├── rag-mcp/             # FastMCP 服务（端口: 8858）
+├── embedding_rerank/    # vLLM 本地 Embedding/Rerank 服务
+├── general_rag_database.sql  # 数据库初始化 SQL
 └── docs/                # 文档
 ```
 
@@ -98,66 +99,51 @@ general-rag-system/
 **前端测试**
 ```bash
 cd rag-client
-npm run test  # 如果配置了测试
-npm run lint  # 代码检查
+npm run build
+node --test tests/*.test.js
 ```
 
 **后端测试**
-```bash
+```powershell
 cd rag-server
-mvn test
-mvn checkstyle:check  # 代码规范检查
+$env:JAVA_HOME = 'D:\JDK-11'
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+mvn -o test
 ```
 
 **Python 测试**
 ```bash
 cd rag-llm
-pytest  # 如果配置了测试
-flake8 .  # 代码规范检查
-black . --check  # 格式检查
+pytest tests -q
+
+cd ../rag-mcp
+pytest tests -q
 ```
 
 ## 代码规范
 
 ### JavaScript/Vue
 
-- 使用 ESLint 和 Prettier
 - 遵循 Vue 3 Composition API 风格
 - 组件命名使用 PascalCase（如 `ChatMessage.vue`）
-- 文件命名使用 kebab-case（如 `chat-message.vue`）
+- 组件文件使用 PascalCase（如 `SessionList.vue`）
 - 优先使用 `<script setup>` 语法
-
-```bash
-cd rag-client
-npm run lint
-npm run lint:fix  # 自动修复
-```
+- 本仓库未配置 ESLint/Prettier；提交前以 `npm run build` 和 Node 测试为准
 
 ### Java
 
 - 遵循阿里巴巴 Java 开发手册
-- 使用 Maven Checkstyle 插件
 - 类命名使用 PascalCase，方法使用 camelCase
+- 使用 Lombok 构造器注入（`@RequiredArgsConstructor`）与 `@Slf4j`
 - **重要**：修改 Mapper 接口时，必须同步更新 XML 文件
   - XML 位置：`src/main/resources/com/rag/ragserver/mapper/`
-
-```bash
-cd rag-server
-mvn checkstyle:check
-mvn spotless:check  # 如果配置了 Spotless
-```
+- 本仓库未配置 Checkstyle/Spotless；提交前以 `mvn -o test` 为准
 
 ### Python
 
 - 遵循 PEP 8 规范
-- 使用 black 格式化代码
 - 使用 type hints
-
-```bash
-cd rag-llm
-black .
-flake8 .
-```
+- 本仓库未配置 black/flake8；提交前以对应模块的 `pytest` 为准
 
 ## 提交规范
 

@@ -62,7 +62,7 @@ const {getChatSession} = await import('../src/views/chat/composables/chatSession
 const {events} = await import('../src/events.js')
 const kbApi = await import('../src/api/kbApi.js')
 const chatApi = await import('../src/api/chatApi.js')
-const {loadChatResources, models, kbs, selectedModel, selectedKb, contextMultiplier} = await import('../src/vars.js')
+const {loadChatResources, models, kbs, selectedModel, selectedKb} = await import('../src/vars.js')
 let scopes = []
 let serial = 0
 
@@ -115,7 +115,6 @@ beforeEach(() => {
     kbs.value = {private: [], shared: [], public: [], invited: []}
     selectedModel.value = null
     selectedKb.value = null
-    contextMultiplier.value = null
     scopes = []
     fixtures.calls = []
     fixtures.streams = []

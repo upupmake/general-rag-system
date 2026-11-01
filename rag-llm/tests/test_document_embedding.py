@@ -149,10 +149,12 @@ def _load_module_under_test():
     utils = types.ModuleType("utils")
     utils.pdf_split = lambda *args, **kwargs: []
     utils.plain_text_split = lambda text, *args, **kwargs: []
+    utils.plain_text_fallback_split = lambda *args, **kwargs: []
     utils.markdown_split = lambda *args, **kwargs: []
     utils.docx_split = lambda *args, **kwargs: []
     utils.json_split = lambda *args, **kwargs: []
     utils.code_split = lambda *args, **kwargs: []
+    utils.enforce_chunk_limit = lambda documents, *args, **kwargs: documents
 
     async def image_split(*args, **kwargs):
         return []
@@ -246,20 +248,24 @@ def _body(**overrides):
     return json.dumps(data).encode("utf-8")
 
 
-def test_unsupported_file_type_reports_failure(env):
+def test_unknown_text_extension_uses_fallback_split(env, monkeypatch):
+    monkeypatch.setattr(
+        MODULE.utils,
+        "plain_text_fallback_split",
+        lambda *args, **kwargs: ["fallback chunk"],
+    )
+    store = FakeVectorStore()
+    monkeypatch.setattr(MODULE.MilvusClientManager, "store", store, raising=False)
+
     message = FakeMessage(_body(filePath="docs/demo.csv", fileName="demo.csv"))
 
     asyncio.run(MODULE.document_embedding_consumer.on_receive_message(message))
 
     assert len(env["rabbit"].messages) == 1
     payload = env["rabbit"].messages[0]["message"]
-    assert payload["status"] == "failed"
-    assert "不支持的文件类型" in payload["message"]
-    assert message.process_kwargs == {
-        "requeue": True,
-        "reject_on_redelivered": True,
-    }
-    assert message.process_context.exited
+    assert payload["status"] == "success"
+    assert payload["chunksCount"] == 1
+    assert store.added_batches[0][0].page_content == "fallback chunk"
 
 
 def test_empty_splits_reports_failure(env):
@@ -408,7 +414,15 @@ def test_docx_uses_docx_split(env, monkeypatch):
     assert store.added_batches[0][0].page_content == "word chunk"
 
 
-def test_legacy_doc_is_unsupported(env):
+def test_binary_unknown_extension_reports_failure(env, monkeypatch):
+    def reject_binary(*args, **kwargs):
+        raise ValueError("二进制文件，无法按文本解析")
+
+    monkeypatch.setattr(
+        MODULE.utils,
+        "plain_text_fallback_split",
+        reject_binary,
+    )
     message = FakeMessage(_body(filePath="docs/demo.doc", fileName="demo.doc"))
 
     asyncio.run(MODULE.document_embedding_consumer.on_receive_message(message))
@@ -416,4 +430,4 @@ def test_legacy_doc_is_unsupported(env):
     assert len(env["rabbit"].messages) == 1
     payload = env["rabbit"].messages[0]["message"]
     assert payload["status"] == "failed"
-    assert "不支持的文件类型" in payload["message"]
+    assert "二进制文件" in payload["message"]

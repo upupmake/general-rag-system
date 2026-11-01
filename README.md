@@ -42,7 +42,7 @@ General RAG System 是一个**企业级 Agentic RAG 知识库问答系统**。�
 
 **文档管理**
 - 文件上传请求限制为 100MB，解析 PDF、纯文本、Markdown、JSON、常见代码与标记文件及图片
-- 文档以 `kbId + MD5 checksum` 去重；文件名空格转 `_`，反斜杠转 `/`
+- 文档以 `kbId + 规范化后的完整文件路径` 去重；文件名空格转 `_`，反斜杠转 `/`
 - 按文件类型解析和分块，批量向量化后写入 Milvus
 
 **安全机制**
@@ -128,7 +128,7 @@ general-rag-system/
 网页或 OpenAPI 上传
         │
         ▼
-rag-server：权限校验、MD5 去重、MinIO 保存、写入 processing 状态
+rag-server：权限校验、路径去重、MinIO 保存、写入 processing 状态
         │ RabbitMQ: rag.document.process.key
         ▼
 rag-llm：下载文件、按扩展名解析与分块、调用 Embedding
@@ -137,7 +137,7 @@ rag-llm：下载文件、按扩展名解析与分块、调用 Embedding
         └──► RabbitMQ：回传成功或失败以及 chunk 信息
 ```
 
-上传以知识库为去重边界，使用 `kbId + MD5 checksum` 判断重复内容。文件名先把反斜杠转换为 `/`，再把空格转换为 `_`。Java 服务负责业务记录与对象存储，Python 服务负责异步解析、向量化和状态回传。
+上传以知识库为去重边界，使用 `kbId + 规范化后的完整文件路径` 判断重复内容；同内容不同路径允许上传。文件名先把反斜杠转换为 `/`，再把空格转换为 `_`。Java 服务负责业务记录与对象存储，Python 服务负责异步解析、向量化和状态回传。
 
 ### 权限与外部访问
 
@@ -159,13 +159,13 @@ rag-llm：下载文件、按扩展名解析与分块、调用 Embedding
 - 当前 Embedding 执行路径：本地 `Qwen/Qwen3-Embedding-0.6B` 服务；配置标识为 `text-embedding-v4/qwen`。
 - Rerank：检索链路不再调用，排序直接使用 Milvus 向量相似度分数。
 
-`model_config.json` 每次使用时从磁盘读取，不使用进程内缓存。官方聊天 LLM 默认超时 60 秒；候选回退只允许发生在流开始之前，已经输出有效内容后不会切换候选。特定 OpenAI 兼容 Gemini 路径通过 `ainvoke` 完成非流式调用。
+`model_config.json` 按文件 mtime/size 缓存，文件变化后下一次调用自动重读。官方聊天 LLM 默认超时 60 秒；候选回退只允许发生在流开始之前，已经输出有效内容后不会切换候选。特定 OpenAI 兼容 Gemini 路径通过 `ainvoke` 完成非流式调用。
 
 ## 快速开始
 
 ### 运行前准备
 
-完整系统依赖 MySQL、Redis、RabbitMQ、MinIO 和 Milvus。数据库结构脚本为根目录的 `general_rag_database.sql`。各服务的地址和凭据需要按部署环境修改；不要直接复用仓库中的开发环境值。
+完整系统依赖 MySQL、Redis、RabbitMQ、MinIO 和 Milvus。数据库结构脚本为根目录的 `general_rag_database.sql`。各服务的地址和凭据需要按部署环境修改；不要直接复用仓库中的开发环境值。`rag-llm` 的 RabbitMQ/MinIO/Milvus 凭据从 `rag-llm/.env` 读取（可复制 `rag-llm/.env.example` 后填写），该文件不提交仓库。
 
 后端必须使用 Java 11。当前项目约定的本机 JDK 路径是 `D:\JDK-11`，JDK 21 会触发当前 Lombok 与编译器组合的 `JCTree$JCImport.qualid` 错误。
 
@@ -175,8 +175,8 @@ rag-llm：下载文件、按扩展名解析与分块、调用 Embedding
 
 - `rag-client/src/consts.js`：Java API 基础地址。
 - `rag-server/src/main/resources/application-*.yml`：MySQL、Redis、RabbitMQ、MinIO、Milvus、邮件、JWT 和 `rag-llm` 地址。
-- `rag-llm/main.py`：当前入口在导入服务前直接设置 RabbitMQ、MinIO、Milvus 连接值；部署时必须修改该入口或先改造为不覆盖外部配置。
-- `rag-llm/model_config.json`：聊天模型候选配置；每次使用时重新从磁盘读取。
+- `rag-llm/main.py` 与 `rag-llm/.env`：入口从同目录 `.env` 加载 RabbitMQ/MinIO/Milvus 凭据；非敏感连接地址保留默认值，并允许环境变量覆盖。
+- `rag-llm/model_config.json`：聊天模型候选配置；按 mtime/size 缓存，文件变化后下一次调用重读。
 - `rag-mcp/rag_mcp/config.py` 或同名环境变量：Java OpenAPI、内网 `rag-llm`、监听地址和审计消息配置。
 - `embedding_rerank/config/*.py`：本地 Embedding/Rerank 模型和服务参数；当前实现直接读取类属性。
 
